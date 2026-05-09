@@ -1,0 +1,31 @@
+/* Custom DataTables Styles */
+div.dataTables_wrapper div.dataTables_length select {
+    padding-right: 25px !important;
+    padding-left: 8px !important;
+    background-position: calc(100% - 8px) center !important;
+    min-width: 65px !important;
+}
+
+@media (max-width: 768px) {
+    div.dataTables_wrapper div.dataTables_filter {
+        width: 100% !important;
+        text-align: left !important;
+    }
+    
+    div.dataTables_wrapper div.dataTables_filter input {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    div.dataTables_wrapper div.dataTables_length,
+    div.dataTables_wrapper div.dataTables_filter {
+        text-align: left !important;
+        margin-bottom: 10px;
+    }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+    div.dataTables_wrapper div.dataTables_filter input {
+        width: 250px !important;
+    }
+}

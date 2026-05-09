@@ -1,0 +1,6 @@
+@include('Dashboard.Layouts.header')
+@include('Dashboard.Layouts.topbar')
+@include('Dashboard.Layouts.sidebar')
+@yield('content')
+@include('Dashboard.Layouts.footer')
+@stack('scripts')

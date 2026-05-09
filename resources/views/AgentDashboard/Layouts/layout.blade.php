@@ -1,0 +1,6 @@
+@include('AgentDashboard.Layouts.header')
+@include('AgentDashboard.Layouts.topbar')
+@include('AgentDashboard.Layouts.sidebar')
+@yield('content')
+@include('AgentDashboard.Layouts.footer')
+@stack('scripts')
