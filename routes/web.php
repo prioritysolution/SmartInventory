@@ -23,11 +23,11 @@ Route::middleware('check.session')->group(function () {
   Route::get('/Logout', [ProcessLogin::class, 'logout'])->name('logout');
 
   //product master
-  Route::get('/product-master', [MasterSetup::class, 'index'])->name('product-master');
-  Route::post('/product-master/save', [MasterSetup::class, 'store'])->name('product-master.store');
-  Route::get('/product-master/subcategories/{categoryId}', [MasterSetup::class, 'getSubCategories'])->name('product-master.subcategories');
-  Route::get('/product-master/search', [MasterSetup::class, 'searchItem'])->name('product-master.search');
-  Route::get('/product-master/details/{id}', [MasterSetup::class, 'getItemDetails'])->name('product-master.details');
+  // Route::get('/product-master', [MasterSetup::class, 'index'])->name('product-master');
+  // Route::post('/product-master/save', [MasterSetup::class, 'store'])->name('product-master.store');
+  // Route::get('/product-master/subcategories/{categoryId}', [MasterSetup::class, 'getSubCategories'])->name('product-master.subcategories');
+  // Route::get('/product-master/search', [MasterSetup::class, 'searchItem'])->name('product-master.search');
+  // Route::get('/product-master/details/{id}', [MasterSetup::class, 'getItemDetails'])->name('product-master.details');
 
   //agent profile
   Route::get('/agent-profile', [MasterSetup::class, 'indexAgent'])->name('agent-profile');
