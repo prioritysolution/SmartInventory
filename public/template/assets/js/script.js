@@ -137,11 +137,11 @@ Template Name: Kanakku - Bootstrap Admin Template
 	}
 
 	// Select 2	
-	if ($('.select2').length > 0) {
+	if ($.fn.select2 && $('.select2').length > 0) {
 	 	$(".select2").select2();
 	}
 	
-	if ($('.select').length > 0) {
+	if ($.fn.select2 && $('.select').length > 0) {
 		$('.select').select2({
 			minimumResultsForSearch: -1,
 			width: '100%'

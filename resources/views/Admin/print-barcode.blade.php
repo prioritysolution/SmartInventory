@@ -228,7 +228,7 @@
                         <td>${i + 1}</td>
                         <td>${row.Prod_ShortNm}</td>
                         <td><span class="badge bg-secondary">${row.Prod_Code}</span></td>
-                        <td>${row.InOut_Date ?? ''}</td>
+                        <td>${siDate.toDisplay(row.InOut_Date)}</td>
                         <td>
                             <button class="btn btn-sm btn-success btn-print"
                                 data-code="${row.Barcode}"
@@ -291,7 +291,7 @@
                             rows += `<tr>
                         <td>${i + 1}</td>
                         <td>${row.Invoice_No ?? ''}</td>
-                        <td>${row.Invoice_Date ?? ''}</td>
+                        <td>${siDate.toDisplay(row.Invoice_Date)}</td>
                         <td>${row.Party_Name ?? ''}</td>
                         <td>
                             <button class="btn btn-sm btn-info btn-view-items" data-trading="${row.Trading_Id}">
@@ -442,7 +442,7 @@
             function renderPreview(product) {
                 const format = $('#barcodeFormat').val();
                 const packDateLine = product.packdate && product.packdate.trim() !== '' ?
-                    `<div class="prod-code">pack.date:${product.packdate}</div>` :
+                    `<div class="prod-code">pack.date:${siDate.toDisplay(product.packdate)}</div>` :
                     '';
 
                 $('#labelPreview').html(`
@@ -502,7 +502,7 @@
 
                 // Step 2: build labels array, pad start with empty if odd
                 const packDateLine = selectedProduct.packdate && selectedProduct.packdate.trim() !== '' ?
-                    `<div class="code">pack.date:${selectedProduct.packdate}</div>` :
+                    `<div class="code">pack.date:${siDate.toDisplay(selectedProduct.packdate)}</div>` :
                     '';
 
                 const singleLabel = `

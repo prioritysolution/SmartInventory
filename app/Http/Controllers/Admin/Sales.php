@@ -14,31 +14,33 @@ class Sales extends Controller
     {
         $branchId = session('branch_id');
         Config::set('database.connections.coops.database', session('org_schema'));
-        $agents = DB::connection('coops')->select('CALL USP_GET_AGENT_LIST(?)', [$branchId]);
-        return view('Admin.agent-indent', compact('agents'));
+        DB::connection('coops')->reconnect();
+        $pdo  = DB::connection('coops')->getPdo();
+        $stmt = $pdo->prepare('CALL USP_GET_AGENT_LIST(?, ?, ?, ?)');
+        $stmt->execute([$branchId, '', 1, 0]);
+        $agents = $stmt->fetchAll(\PDO::FETCH_OBJ);
+        $stmt->closeCursor();
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        return view('Admin.agent-indent', compact('agents', 'categories'))
+            ->with('pageTitle', 'Agent Indent');
     }
 
     public function getProductInfo(Request $request)
     {
         try {
-            $barcode = $request->input('barcode');
-            $date = $request->input('date');
-
-            Config::set('database.connections.coops.database', session('org_schema'));
-
-            $result = DB::connection('coops')->select('CALL USP_GET_PROD_INFO(?, ?)', [$barcode, $date]);
+            $result = $this->resolveProductInfo($request->input('barcode'), $request->input('date'));
+            Log::channel('trading')->info('Product Info Result: ', ['data' => $result]);
 
             if (!empty($result)) {
                 return response()->json([
                     'success' => true,
                     'data' => $result[0]
                 ]);
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid Code Entered !!'
-                ]);
             }
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid Code Entered !!'
+            ]);
         } catch (\Exception $e) {
             Log::error('Agent Indent Product Info Error: ' . $e->getMessage());
             return response()->json([
@@ -46,6 +48,32 @@ class Sales extends Controller
                 'message' => 'Error fetching product details'
             ], 500);
         }
+    }
+
+    private function resolveProductInfo($code, $date)
+    {
+        Config::set('database.connections.coops.database', session('org_schema'));
+        $code = trim((string) $code);
+        $result = [];
+
+        if ($code !== '' && ctype_digit($code)) {
+            $result = DB::connection('coops')->select('CALL USP_GET_PROD_INFO(?, ?)', [$code, $date]);
+        }
+
+        if (empty($result) && $code !== '') {
+            $items = DB::connection('coops')->select('CALL USP_GET_ITEM_LIST(?, ?, ?)', [0, 0, $code]);
+            if (!empty($items)) {
+                $match = collect($items)->first(function ($item) use ($code) {
+                    return strcasecmp((string) $item->Prod_Code, $code) === 0;
+                }) ?? $items[0];
+                $result = DB::connection('coops')->select('CALL USP_GET_PROD_INFO_BY_ITEM(?, ?)', [
+                    $match->Prod_Id,
+                    $date
+                ]);
+            }
+        }
+
+        return $result;
     }
     public function getPendingIndents(Request $request)
     {
@@ -98,7 +126,7 @@ class Sales extends Controller
             foreach ($request->items as $item) {
                 $conn->insert('INSERT INTO tempitem (indent_id, item_id, prod_id, unit_id, qnty) VALUES (?, ?, ?, ?, ?)', [
                     $indentId,
-                    $item['prod_id'],  
+                    $item['prod_id'],
                     $item['prod_id'],
                     $item['unit_id'],
                     $item['quantity']
@@ -110,8 +138,8 @@ class Sales extends Controller
                 $request->input('agent_id'),
                 $request->input('indent_date'),
                 session('branch_id'),
-                session('year_id'),  
-                $request->input('indent_type'), 
+                session('year_id'),
+                $request->input('indent_type'),
                 1 // pMode
             ]);
 
@@ -134,33 +162,36 @@ class Sales extends Controller
     {
         $branchId = session('branch_id');
         Config::set('database.connections.coops.database', session('org_schema'));
-        $agents = DB::connection('coops')->select('CALL USP_GET_AGENT_LIST(?)', [$branchId]);
-        return view('Admin.agent-return', compact('agents'));
+        DB::connection('coops')->reconnect();
+        $pdo  = DB::connection('coops')->getPdo();
+        $stmt = $pdo->prepare('CALL USP_GET_AGENT_LIST(?, ?, ?, ?)');
+        $stmt->execute([$branchId, '', 1, 0]);
+        $agents = $stmt->fetchAll(\PDO::FETCH_OBJ);
+        $stmt->closeCursor();
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        return view('Admin.agent-return', compact('agents', 'categories'))
+            ->with('pageTitle', 'Agent Return');
     }
+
+
 
     public function AgentReturngetProductInfo(Request $request)
     {
         try {
-            $barcode = $request->input('barcode');
-            $date = $request->input('date');
-
-            Config::set('database.connections.coops.database', session('org_schema'));
-
-            $result = DB::connection('coops')->select('CALL USP_GET_PROD_INFO(?, ?)', [$barcode, $date]);
+            $result = $this->resolveProductInfo($request->input('barcode'), $request->input('date'));
 
             if (!empty($result)) {
                 return response()->json([
                     'success' => true,
                     'data' => $result[0]
                 ]);
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid Code Entered !!'
-                ]);
             }
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid Code Entered !!'
+            ]);
         } catch (\Exception $e) {
-            Log::error('Agent Indent Product Info Error: ' . $e->getMessage());
+            Log::error('Agent Return Product Info Error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching product details'
@@ -184,30 +215,33 @@ class Sales extends Controller
         $conn->beginTransaction();
 
         try {
-            // Create temporary table
             $conn->statement('DROP TEMPORARY TABLE IF EXISTS tempitem');
             $conn->statement('CREATE TEMPORARY TABLE tempitem (
                 id INT PRIMARY KEY AUTO_INCREMENT,
+                indent_id INT,
+                item_id INT,
                 prod_id INT,
                 unit_id INT,
-                qnty SMALLINT
+                qnty DECIMAL(10,2)
             )');
 
-            // Insert items into temporary table
             foreach ($request->items as $item) {
-                $conn->insert('INSERT INTO tempitem (prod_id, unit_id, qnty) VALUES (?, ?, ?)', [
+                $conn->insert('INSERT INTO tempitem (indent_id, item_id, prod_id, unit_id, qnty) VALUES (?, ?, ?, ?, ?)', [
+                    0,
+                    $item['prod_id'],
                     $item['prod_id'],
                     $item['unit_id'],
                     $item['quantity']
                 ]);
             }
 
-            // Call stored procedure to save agent indent
-            $result = $conn->select('CALL USP_ADD_EDIT_AGENT_INDENT(?, ?, ?, ?)', [
+            $result = $conn->select('CALL USP_ADD_EDIT_AGENT_INDENT(?, ?, ?, ?, ?, ?)', [
                 $request->input('agent_id'),
                 $request->input('indent_date'),
                 session('branch_id'),
-                1 // Mode 1 for insert
+                session('year_id'),
+                2,
+                1
             ]);
 
             if (!empty($result) && $result[0]->Error_No < 0) {
@@ -216,11 +250,11 @@ class Sales extends Controller
             }
 
             $conn->commit();
-            return response()->json(['message' => $result[0]->Message ?? 'Agent indent saved successfully']);
+            return response()->json(['message' => $result[0]->Message ?? 'Agent return saved successfully']);
         } catch (\Exception $e) {
             $conn->rollBack();
-            Log::error('Agent Indent Save Error: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to save agent indent'], 500);
+            Log::error('Agent Return Save Error: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to save agent return'], 500);
         }
     }
 
@@ -232,8 +266,51 @@ class Sales extends Controller
         $branchId = session('branch_id');
         Config::set('database.connections.coops.database', session('org_schema'));
         $customers  = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?)', [2, $branchId]);
-        return view('Admin.counter-sale', compact('customers'))
+        $banks      = DB::connection('coops')->select('CALL USP_GET_BANK_LEDGER()');
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        return view('Admin.counter-sale', compact('customers', 'banks', 'categories'))
             ->with('pageTitle', 'Counter Sale');
+    }
+
+    public function getSaleSubCats(Request $request)
+    {
+        Config::set('database.connections.coops.database', session('org_schema'));
+        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?, ?)', [
+            session('org_id'),
+            $request->input('cat_id', 0)
+        ]);
+        return response()->json($subs);
+    }
+
+    public function getSaleItems(Request $request)
+    {
+        Config::set('database.connections.coops.database', session('org_schema'));
+        $items = DB::connection('coops')->select('CALL USP_GET_ITEM_LIST(?, ?, ?)', [
+            (int) $request->input('cat_id', 0),
+            (int) $request->input('sub_cat_id', 0),
+            (string) ($request->input('code') ?? '')
+        ]);
+        return response()->json($items);
+    }
+
+    public function getSaleItemByProd(Request $request)
+    {
+        try {
+            $prodId = (int) $request->input('prod_id', 0);
+            $date = $request->input('sale_date');
+            if ($prodId <= 0 || !$date) {
+                return response()->json(['error' => 'Product and sale date are required'], 400);
+            }
+            Config::set('database.connections.coops.database', session('org_schema'));
+            $result = DB::connection('coops')->select('CALL USP_GET_PROD_INFO_BY_ITEM(?, ?)', [$prodId, $date]);
+            if (!empty($result)) {
+                return response()->json($result[0]);
+            }
+            return response()->json(['error' => 'Item not found'], 404);
+        } catch (\Exception $e) {
+            Log::error('Counter Sale Item Info Error: ' . $e->getMessage());
+            return response()->json(['error' => 'Error fetching product details'], 500);
+        }
     }
 
     public function getItemByBarcode(Request $request)
@@ -296,6 +373,7 @@ class Sales extends Controller
             'net_amt'      => 'nullable|numeric',
             'items.*.quantity' => 'required|numeric|max:99999999.99|min:0.01',
             'items.*.rate'     => 'required|numeric|max:99999999.99|min:0',
+            'vouch_id' => 'nullable|integer',
         ]);
 
         $yearStart = session('year_start');
@@ -334,21 +412,21 @@ class Sales extends Controller
             foreach ($request->items as $item) {
                 $conn->insert('INSERT INTO temppurchase VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                     $item['item_id'],
-                    $item['hsn_code'],   // hsn_code
-                    $item['quantity'],                 // qnty
-                    $item['rate'],                     // rate
-                    $item['unit_id'],                  // unit
-                    $item['total_amount'],             // tot_amt
-                    $item['sale_mrp'],    // sale_mrp
-                    $item['discount_percent'],   // disc_perc
-                    $item['discount_amount'],   // disc_amt
-                    $item['taxable_amount'],           // tax_amt
-                    $item['sgst_rate'],   // sgst_perc
-                    $item['sgst_amount'],   // sgst_amt
-                    $item['cgst_rate'],   // cgst_perc
-                    $item['cgst_amount'],   // cgst_amt
-                    $item['net_amount'],               // net_amt
-                    !empty($item['item_sale_date']) ? $item['item_sale_date'] : null, // Pack_Date
+                    $item['hsn_code'],
+                    $item['quantity'],
+                    $item['rate'],
+                    $item['unit_id'],
+                    $item['total_amount'],
+                    $item['sale_mrp'],
+                    $item['discount_percent'],
+                    $item['discount_amount'],
+                    $item['taxable_amount'],
+                    $item['sgst_rate'],
+                    $item['sgst_amount'],
+                    $item['cgst_rate'],
+                    $item['cgst_amount'],
+                    $item['net_amount'],
+                    !empty($item['item_sale_date']) ? $item['item_sale_date'] : null,
                 ]);
             }
 
@@ -367,21 +445,24 @@ class Sales extends Controller
             $saleId = intval($request->input('sale_id', 0));
             $mode = $saleId > 0 ? 2 : 1;
 
-            $result = $conn->select('CALL USP_ADD_EDIT_SALE(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
-                $saleId,                                     // pSale_Id (0 = new)
-                session('branch_id'),                        // pBranch_Id
-                $request->input('sale_date'),                // pSale_Date
-                $request->input('sale_no', null),            // pSale_No (manual sale number or null)
-                $request->input('party_id'),                 // pParty_Id
-                $totAmt,                                     // pTot_Amt
-                $discAmt,                                    // pDisc_Amt
-                $taxableAmt,                                 // pTaxble_Amt
-                $totGst,                                     // pTot_Gst
-                $roundOff,                                   // pRound_Amt
-                $netAmt,                                     // pNet_Amt
-                session('user_id'),                          // pUser_Id
-                session('year_id'),                          // pFin_Id
-                $mode,                                       // pMode (1=Insert, 2=Update)
+            $result = $conn->select('CALL USP_ADD_EDIT_SALE(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+                $saleId,
+                intval($request->input('vouch_id', 0)),
+                session('branch_id'),
+                $request->input('sale_date'),
+                $request->input('sale_no', null),
+                $request->input('party_id'),
+                $totAmt,
+                $discAmt,
+                $taxableAmt,
+                $totGst,
+                $roundOff,
+                $netAmt,
+                intval($request->input('trans_mode')),
+                intval($request->input('bank_id', 0)),
+                session('user_id'),
+                session('year_id'),
+                $mode,
             ]);
 
             if (!empty($result) && $result[0]->Error_No < 0) {
@@ -437,8 +518,10 @@ class Sales extends Controller
         $branchId = session('branch_id');
         Config::set('database.connections.coops.database', session('org_schema'));
         $customers  = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?)', [2, $branchId]);
-        return view('Admin.sale-return', compact('customers'))
-            ->with('pageTitle', ' Sale Return');
+        $banks      = DB::connection('coops')->select('CALL USP_GET_BANK_LEDGER()');
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        return view('Admin.sale-return', compact('customers', 'banks', 'categories'))
+            ->with('pageTitle', ' Counter Sale Return');
     }
 
     public function getItemByBarcodeReturn(Request $request)
@@ -547,21 +630,21 @@ class Sales extends Controller
             $saleId = intval($request->input('sale_id', 0));
             $mode = $saleId > 0 ? 2 : 1;
 
-            // Call USP_ADD_EDIT_SALE_RETURN with the exact parameters it expects (13 parameters)
-            $result = $conn->select('CALL USP_ADD_EDIT_SALE_RETURN(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
-                $saleId,                                     // pSale_Id (0 = new)
-                session('branch_id'),                        // pBranch_Id
-                $request->input('sale_date'),                // pSale_Date
-                $request->input('party_id'),                 // pParty_Id
-                $totAmt,                                     // pTot_Amt
-                $discAmt,                                    // pDisc_Amt
-                $taxableAmt,                                 // pTaxble_Amt
-                $totGst,                                     // pTot_Gst
-                $roundOff,                                   // pRound_Amt
-                $netAmt,                                     // pNet_Amt
-                session('user_id'),                          // pUser_Id
-                session('year_id'),                          // pFin_Id
-                $mode,                                       // pMode (1=Insert, 2=Update)
+            $result = $conn->select('CALL USP_ADD_EDIT_SALE_RETURN(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+                $saleId,
+                session('branch_id'),
+                $request->input('sale_date'),
+                $request->input('party_id'),
+                $totAmt,
+                $discAmt,
+                $taxableAmt,
+                $totGst,
+                $roundOff,
+                $netAmt,
+                session('user_id'),
+                session('year_id'),
+                $mode,
+                $request->input('sale_no'),
             ]);
 
             if (!empty($result) && $result[0]->Error_No < 0) {
@@ -626,5 +709,35 @@ class Sales extends Controller
             Log::error('Sale Return Details Error: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load sale return details'], 500);
         }
+    }
+
+    public function searchForReturn(Request $request)
+    {
+        Config::set('database.connections.coops.database', session('org_schema'));
+
+        $results = DB::connection('coops')->select('CALL USP_SEARCH_SALE_FOR_RETURN(?, ?, ?, ?)', [
+            $request->input('from_date'),
+            $request->input('to_date'),
+            $request->input('party_id') ?: 0,
+            session('branch_id'),
+        ]);
+
+        return response()->json($results);
+    }
+
+    public function returnableDetails($id)
+    {
+        Config::set('database.connections.coops.database', session('org_schema'));
+
+        $result = DB::connection('coops')->select('CALL USP_GET_SALE_RETURNABLE_DTLS(?)', [$id]);
+
+        if (empty($result)) {
+            return response()->json(['error' => 'Record not found'], 404);
+        }
+
+        $row = $result[0];
+        $row->Item_Details = json_decode($row->Item_Details, true);
+
+        return response()->json($row);
     }
 }

@@ -11,6 +11,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+         $middleware->web(append: [
+            \App\Http\Middleware\NormalizeDateFormat::class,
+         ]);
          $middleware->alias([
             'check.session' => \App\Http\Middleware\CheckSession::class,
             'guest.session' => \App\Http\Middleware\RedirectIfAuthenticated::class,

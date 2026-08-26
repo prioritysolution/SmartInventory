@@ -2,11 +2,19 @@
 
 @push('style')
     <style>
-   @media (min-width: 1200px) {
-    .modal-xl-custom {
-        max-width: 1400px;
-    }
-      }
+        @media (min-width: 1200px) {
+            .modal-xl-custom {
+                max-width: 1400px;
+            }
+        }
+
+        #itemPickerTable tbody tr {
+            cursor: pointer;
+        }
+
+        #itemPickerTable tbody tr:hover {
+            background-color: #e8f4ff;
+        }
     </style>
 @endpush
 
@@ -92,8 +100,67 @@
                 </div>
             </div>
         </div>
+        </div>
     </div>
 </div>
+
+{{-- Item Picker Modal --}}
+<div class="modal fade" id="itemPickerModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-xl-custom">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Select Item</h5>
+                <button type="button" class="close" data-bs-dismiss="modal">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">Category</label>
+                        <select class="form-control form-control-sm" id="modalCateId">
+                            <option value="0">-- All Categories --</option>
+                            @foreach ($categories ?? [] as $cat)
+                                <option value="{{ $cat->Prd_CateId }}">{{ $cat->Prd_CateNm }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">Sub Category</label>
+                        <select class="form-control form-control-sm" id="modalSubCateId">
+                            <option value="0">-- All Sub Categories --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">Product Name / Code</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" id="modalSearchInput" placeholder="Search...">
+                            <button class="btn btn-primary" type="button" id="modalSearchBtn">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div id="itemPickerLoader" class="text-center py-3" style="display:none;">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 mb-0">Loading items...</p>
+                </div>
+                <div id="itemPickerTableWrap" style="display:none;">
+                    <table id="itemPickerTable" class="table table-bordered table-hover table-sm w-100">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Sl</th>
+                                <th>Item Code</th>
+                                <th>Item Name</th>
+                                <th>Unit</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 {{-- Search Modal --}}
@@ -158,17 +225,97 @@
     let itemList    = [];
     let reqSearchDT = null;
     let selectedRow = null;
+    let itemPickerDT = null;
 
     $(document).ready(function () {
 
-        $('#itemSearchBtn').on('click', function () {
-            const keyword = $('#itemSearch').val().trim();
-            if (!keyword) { Swal.fire('Error', 'Enter item name to search', 'error'); return; }
-            fetchItems(keyword);
+        $('#itemSearchBtn').on('click', function (e) {
+            e.preventDefault();
+            const code = $('#itemSearch').val().trim();
+            if (!code) {
+                openItemPickerModal([], '');
+                return;
+            }
+            $.get(baseUrl + '/agent/requisition/items', {
+                code: code,
+                cat_id: 0,
+                sub_cat_id: 0
+            }, function (data) {
+                openItemPickerModal(data, code);
+            }).fail(function () {
+                Swal.fire('Error', 'Failed to load items', 'error');
+            });
+        });
+
+        $('#modalCateId').on('change', function () {
+            const catId = parseInt($(this).val()) || 0;
+            $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
+            if (!catId) return;
+            $.get(baseUrl + '/agent/requisition/subcats', { cat_id: catId }, function (subs) {
+                subs.forEach(s => {
+                    $('#modalSubCateId').append(
+                        `<option value="${s.Prd_SubCateId}">${s.Prd_SubCateNm}</option>`
+                    );
+                });
+            });
+        });
+
+        $('#modalSearchBtn').on('click', function () {
+            const catId = parseInt($('#modalCateId').val()) || 0;
+            const subCatId = parseInt($('#modalSubCateId').val()) || 0;
+            const code = $('#modalSearchInput').val().trim();
+            $('#itemPickerLoader').show();
+            $('#itemPickerTableWrap').hide();
+            if (itemPickerDT) {
+                itemPickerDT.destroy();
+                itemPickerDT = null;
+            }
+            $('#itemPickerTable tbody').html('');
+            $.get(baseUrl + '/agent/requisition/items', {
+                cat_id: catId,
+                sub_cat_id: subCatId,
+                code: code
+            }, function (data) {
+                renderItemPickerTable(data);
+            }).fail(function () {
+                $('#itemPickerLoader').hide();
+                Swal.fire('Error', 'Failed to load items', 'error');
+            });
+        });
+
+        $('#modalSearchInput').on('keypress', function (e) {
+            if (e.which === 13) $('#modalSearchBtn').trigger('click');
+        });
+
+        $('#itemPickerModal').on('hidden.bs.modal', function () {
+            $('#modalCateId').val('0');
+            $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
+            $('#modalSearchInput').val('');
+            $('#itemPickerLoader').hide();
+            $('#itemPickerTableWrap').hide();
+            if (itemPickerDT) {
+                itemPickerDT.destroy();
+                itemPickerDT = null;
+            }
+            $('#itemPickerTable tbody').html('');
+        });
+
+        $(document).on('click', '#itemPickerTable tbody tr', function () {
+            const prodId = $(this).data('id');
+            if (!prodId) return;
+            $('#itemSearch').val($(this).data('name') || '');
+            $('#selectedItemId').val(prodId);
+            $('#selectedUnitId').val($(this).data('unit') || '');
+            $('#selectedUnitName').val($(this).data('unitname') || '');
+            $('#itemPickerModal').modal('hide');
+            $('#itemQty').focus();
         });
 
         $('#itemSearch').on('keypress', function (e) {
-            if (e.which === 13) $('#itemSearchBtn').trigger('click');
+            if (e.which === 13) {
+                e.preventDefault();
+                $('#itemSearchBtn').trigger('click');
+            }
         });
 
         $('#itemSearch').on('input', function () {
@@ -213,7 +360,7 @@
                     html += `<tr>
                         <td>${idx + 1}</td>
                         <td>${row.Indent_No}</td>
-                        <td>${row.Indent_Date}</td>
+                        <td>${siDate.toDisplay(row.Indent_Date)}</td>
                         <td>${row.Remarks ?? ''}</td>
                         <td class="text-center">
                            <button class="btn btn-sm btn-warning viewReq" data-row="${rowData}">Edit</button>
@@ -258,6 +405,68 @@ $('#reqSearchModal').on('hidden.bs.modal', function () {
 });
 
     });
+
+    function openItemPickerModal(data, code) {
+        $('#itemPickerLoader').hide();
+        $('#itemPickerTableWrap').hide();
+        if (itemPickerDT) {
+            itemPickerDT.destroy();
+            itemPickerDT = null;
+        }
+        $('#itemPickerTable tbody').html('');
+        $('#modalCateId').val('0');
+        $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
+        $('#modalSearchInput').val(code || '');
+        $('#itemPickerModal').modal('show');
+        if (data.length > 0) {
+            $('#itemPickerLoader').show();
+            renderItemPickerTable(data);
+        }
+    }
+
+    function renderItemPickerTable(data) {
+        setTimeout(function () {
+            $('#itemPickerLoader').hide();
+            if (!data.length) {
+                $('#itemPickerTable tbody').html(
+                    '<tr><td colspan="4" class="text-center text-muted">No items found</td></tr>');
+                $('#itemPickerTableWrap').show();
+                return;
+            }
+            $.each(data, function (i, item) {
+                $('#itemPickerTable tbody').append(
+                    `<tr data-id="${item.Prod_Id}"
+                 data-code="${item.Prod_Code}"
+                 data-name="${item.Prod_ShortNm}"
+                 data-unit="${item.Unit_Id}"
+                 data-unitname="${item.Unit_Name}">
+                <td>${i + 1}</td>
+                <td>${item.Prod_Code}</td>
+                <td>${item.Prod_ShortNm}</td>
+                <td>${item.Unit_Name}</td>
+            </tr>`
+                );
+            });
+            if (itemPickerDT) {
+                itemPickerDT.destroy();
+                itemPickerDT = null;
+            }
+            $('#itemPickerTableWrap').show();
+            itemPickerDT = $('#itemPickerTable').DataTable({
+                pageLength: 10,
+                lengthMenu: [10, 25, 50],
+                ordering: true,
+                language: {
+                    search: '',
+                    searchPlaceholder: 'Search items...',
+                    paginate: {
+                        next: '<i class="fa fa-angle-right"></i>',
+                        previous: '<i class="fa fa-angle-left"></i>'
+                    }
+                }
+            });
+        }, 0);
+    }
 
     function fetchItems(keyword) {
         $.get(baseUrl + '/agent/requisition/search-item', { keyword }, function (data) {

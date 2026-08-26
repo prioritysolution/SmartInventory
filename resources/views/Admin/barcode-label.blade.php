@@ -133,7 +133,7 @@ $(document).ready(function () {
                         <td>${i + 1}</td>
                         <td>${row.Prod_ShortNm}</td>
                         <td><span class="badge bg-secondary">${row.Prod_Code}</span></td>
-                        <td>${row.InOut_Date ?? ''}</td>
+                        <td>${siDate.toDisplay(row.InOut_Date)}</td>
                         <td>
                             <button class="btn btn-sm btn-primary btn-generate"
                                 data-stock="${row.Stock_Id}"
@@ -184,7 +184,7 @@ $(document).ready(function () {
                     rows += `<tr>
                         <td>${i + 1}</td>
                         <td>${row.Invoice_No ?? ''}</td>
-                        <td>${row.Invoice_Date ?? ''}</td>
+                        <td>${siDate.toDisplay(row.Invoice_Date)}</td>
                         <td>${row.Party_Name ?? ''}</td>
                         <td>
                             <button class="btn btn-sm btn-info btn-view-items" data-trading="${row.Trading_Id}">

@@ -76,23 +76,11 @@
                             </select>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label class="form-label">MRP<span class="text-danger">*</span></label>
-                            <input type="number" step="0.01" class="form-control" id="mrp" autocomplete="off">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Discount (%)</label>
-                            <input type="number" step="0.01" class="form-control" id="discount" max="100"
+                            <label class="form-label">Sale Margin (%)</label>
+                            <input type="number" step="0.01" class="form-control" id="sale_margin" min="0" max="100"
                                 autocomplete="off">
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Sale Price<span class="text-danger">*</span></label>
-                            <input type="number" step="0.01" class="form-control" id="sale_price" autocomplete="off">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Agent Commision</label>
-                            <input type="number" step="0.01" class="form-control" id="agent_comm"
-                                autocomplete="off">
-                        </div>
+
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Reorder Quantity</label>
                             <input type="number" class="form-control" id="reorder_qnty" autocomplete="off">
@@ -194,10 +182,7 @@
                             $('#print_name').val(data.Prod_PrintNm);
                             $('#unit').val(data.Unit_Id).trigger('change');
                             $('#hsn').val(data.Gst_Id).trigger('change');
-                            $('#mrp').val(data.MRP);
-                            $('#discount').val(data.Discount);
-                            $('#sale_price').val(data.Sale_Rate);
-                            $('#agent_comm').val(data.Sales_Comm);
+                            $('#sale_margin').val(data.Sale_Margin);
                             $('#reorder_qnty').val(data.ReOrder_Qty);
                             $('#prod_life').val(data.Prod_Life);
                             // Load subcategories then set value
@@ -227,6 +212,7 @@
             }
 
             $('#saveBtn').on('click', function() {
+
                 if (!validateForm()) return;
 
                 const isUpdate = !!$('#product_id').val();
@@ -236,7 +222,7 @@
                     url: '/product-master/save',
                     type: 'POST',
                     data: {
-                        product_id: $('#product_id').val() || '',
+                        product_id: $('#product_id').val(),
                         product_code: $('#product_code').val().trim(),
                         product_name: $('#product_name').val().trim(),
                         print_name: $('#print_name').val().trim(),
@@ -244,10 +230,7 @@
                         category: $('#category').val(),
                         sub_category: $('#sub_category').val(),
                         hsn: $('#hsn').val(),
-                        mrp: $('#mrp').val(),
-                        discount: $('#discount').val(),
-                        sale_price: $('#sale_price').val(),
-                        agent_comm: $('#agent_comm').val(),
+                        sale_margin: $('#sale_margin').val(),
                         reorder_qnty: $('#reorder_qnty').val(),
                         prod_life: $('#prod_life').val(),
                         mode: isUpdate ? 2 : 1,
@@ -282,25 +265,20 @@
                     $('#prodLifeDiv').hide();
                     $('#prod_life').val('');
                 }
-                $('#sub_category').html('<option value="">Select Sub Category</option>').trigger('change');
+                $('#sub_category').html('<option value="">Select Sub Category</option>').trigger(
+                    'change.select2');
                 if (!categoryId) return;
                 $.get(`/product-master/subcategories/${categoryId}`, function(data) {
+                    $('#sub_category').html('<option value="">Select Sub Category</option>');
                     data.forEach(item => {
                         $('#sub_category').append(
                             `<option value="${item.Prd_SubCateId}">${item.Prd_SubCateNm}</option>`
                         );
                     });
-                    $('#sub_category').trigger('change');
+                    $('#sub_category').trigger('change.select2');
                 });
             });
-        });
-        $('#mrp, #discount').on('input', function() {
-            const mrp = parseFloat($('#mrp').val()) || 0;
-            const discPct = parseFloat($('#discount').val()) || 0;
-            if (mrp > 0) {
-                const salePrice = mrp - (mrp * discPct / 100);
-                $('#sale_price').val(salePrice.toFixed(2));
-            }
+
         });
 
         function validateForm() {
@@ -328,15 +306,6 @@
                 Swal.fire('Validation Error', 'Please select Sub Category', 'error');
                 return false;
             }
-            if (!$('#mrp').val()) {
-                Swal.fire('Validation Error', 'MRP is required', 'error');
-                return false;
-            }
-            if (!$('#sale_price').val()) {
-                Swal.fire('Validation Error', 'Sale Price is required', 'error');
-                return false;
-            }
-            return true;
             if ($('#prodLifeDiv').is(':visible') && $('#prod_life').val() !== '') {
                 const life = parseInt($('#prod_life').val());
                 if (life < 0 || life > 200) {
@@ -344,17 +313,15 @@
                     return false;
                 }
             }
-
+            return true;
         }
 
         function clearForm() {
             $('#product_id').val('');
             $('#searchItem').val('');
-            $('#product_code, #product_name, #print_name, #mrp, #discount, #sale_price, #agent_comm, #reorder_qnty,#prod_life')
-                .val(
-                    '');
+            $('#product_code, #product_name, #print_name, #sale_margin, #reorder_qnty, #prod_life').val('');
             $('#unit, #category, #hsn').val('').trigger('change');
-            $('#sub_category').html('<option value="">Select Sub Category</option>').trigger('change');
+            $('#sub_category').html('<option value="">Select Sub Category</option>');
             $('#saveBtn').text('Save');
         }
     </script>

@@ -429,7 +429,7 @@
                     <strong style="font-size:15px;">Sale Invoice</strong>
                 </div>
                 <p><strong>Invoice No:</strong> ${billData.Invoice_No || ''}</p>
-                <p><strong>Date:</strong> ${billData.Invoice_Date || ''}</p>
+                <p><strong>Date:</strong> ${siDate.toDisplay(billData.Invoice_Date)}</p>
                 <p><strong>Customer:</strong> ${billData.Cust_Name || ''}</p>
                 <table style="width:100%;border-collapse:collapse;font-size:11px;margin:8px 0;">
                     <thead>

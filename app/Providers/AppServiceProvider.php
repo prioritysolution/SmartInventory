@@ -9,6 +9,11 @@ use Illuminate\Support\Facades\Config;
 
 class AppServiceProvider extends ServiceProvider
 {
+    public function register(): void
+    {
+        require_once app_path('Support/helpers.php');
+    }
+
     public function boot(): void
     {
         View::composer('Dashboard.Layouts.sidebar', function ($view) {
@@ -23,15 +28,32 @@ class AppServiceProvider extends ServiceProvider
             DB::purge('coops');
 
             $menuData = DB::connection('coops')->select("CALL USP_GET_SIDEBAR_MENUE(?)", [session('user_group_id')]);
+            $menuIcons = [
+                1 => 'isax isax-setting-2',
+                2 => 'isax isax-box-add',
+                3 => 'isax isax-shop',
+                4 => 'isax isax-layer',
+                5 => 'isax isax-wallet-3',
+                6 => 'isax isax-scan',
+                7 => 'isax isax-profile-2user',
+                8 => 'isax isax-chart-2',
+                9 => 'isax isax-document-text',
+            ];
             $menu = [];
             foreach ($menuData as $item) {
-                if ($item->Child_Id === null) {
-                    $menu[$item->Parraint_Id] = (object)['name' => $item->Parraint_Name, 'children' => []];
+                $isParent = $item->Child_Id === null || $item->Child_Id === '';
+                if ($isParent) {
+                    $menu[$item->Parraint_Id] = (object)[
+                        'name' => $item->Parraint_Name,
+                        'icon' => data_get($item, 'Parraint_Icon') ?: ($menuIcons[$item->Parraint_Id] ?? 'isax isax-box'),
+                        'children' => [],
+                    ];
                 }
             }
-            
+
             foreach ($menuData as $item) {
-                if ($item->Child_Id !== null && isset($menu[$item->Parraint_Id])) {
+                $isParent = $item->Child_Id === null || $item->Child_Id === '';
+                if (!$isParent && isset($menu[$item->Parraint_Id])) {
                     $menu[$item->Parraint_Id]->children[] = (object)[
                         'id' => $item->Child_Id,
                         'name' => $item->Child_Name,

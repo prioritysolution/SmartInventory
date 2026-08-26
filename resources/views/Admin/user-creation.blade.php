@@ -201,7 +201,7 @@
                 mobile:    $('#mobile').val(),
                 mail:      $('#mail').val(),
                 password:  $('#password').val() || null,
-                grp_id:    $('#grpId').val()
+                grp_id:    $('#grpId').val()                            
             };
 
             if (userId) {

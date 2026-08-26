@@ -13,6 +13,7 @@ class ProcessLogin extends Controller
 {
     public function index_login()
     {
+    
         return view('Auth.login');
     }
 
@@ -27,7 +28,7 @@ class ProcessLogin extends Controller
             'pUser_Name.max' => 'User Name must not exceed 100 characters',
             'pUser_Pass.min' => 'Password must be at least 3 characters',
         ]);
-
+        
         try {
             $sql = DB::select("SELECT UDF_GET_ORG_SCHEMA(?) as db", [$request->pOrg_Code]);
 
@@ -67,9 +68,10 @@ class ProcessLogin extends Controller
                 'year_id'     =>  $userData->Year_Id,      
                 'year_desc'   =>  $userData->Year_Desc,    
                 'year_start'  =>  $userData->Year_Start,   
-                'year_end'    =>  $userData->Year_End,     
+                'year_end'    =>  $userData->Year_End,  
+                'gst_have'   =>   $userData->Gst_Have,
+                'gst_type'   =>   $userData->Gst_Type,
             ]);
-
             return response()->json(['status' => 'success', 'data' => 'Login successful']);
         } catch (Exception $e) {
             return response()->json(['status' => 'error', 'data' => $e->getMessage()]);
@@ -82,8 +84,25 @@ class ProcessLogin extends Controller
         if (!session()->has('user_id')) {
             return redirect()->route('login-index');
         }
-        return view('Dashboard.dashboard');
+
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+
+        $branchId = session('branch_id');
+        $yearId   = session('year_id');
+
+        $stats = DB::connection('coops')->select('CALL USP_GET_DASHBOARD_STATS(?, ?)', [$branchId, $yearId]);
+        $stats = !empty($stats) ? $stats[0] : null;
+
+        $chartData = DB::connection('coops')->select('CALL USP_GET_MONTHLY_PURCHASE_SALE(?, ?)', [$branchId, $yearId]);
+
+        $reorderAlerts = DB::connection('coops')->select('CALL USP_GET_REORDER_ALERTS(?, ?)', [$branchId, $yearId]);
+
+        return view('Dashboard.dashboard', compact(
+            'stats', 'chartData', 'reorderAlerts'
+        ));
     }
+
 
 
 

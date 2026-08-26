@@ -11,10 +11,37 @@ class AgentRequisition extends Controller
 {
     public function index()
     {
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
         return view('Agent.requisition', [
             'year_start' => session('year_start'),
             'year_end'   => session('year_end'),
+            'categories' => $categories,
         ]);
+    }
+
+    public function getSubCats(Request $request)
+    {
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?, ?)', [
+            session('org_id'),
+            $request->input('cat_id', 0)
+        ]);
+        return response()->json($subs);
+    }
+
+    public function getItems(Request $request)
+    {
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+        $items = DB::connection('coops')->select('CALL USP_GET_ITEM_LIST(?, ?, ?)', [
+            (int) $request->input('cat_id', 0),
+            (int) $request->input('sub_cat_id', 0),
+            (string) ($request->input('code') ?? '')
+        ]);
+        return response()->json($items);
     }
 
     public function searchItem(Request $request)

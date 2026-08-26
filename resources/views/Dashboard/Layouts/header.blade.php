@@ -1,17 +1,16 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-IN">
 
 <head>
 
     <!-- Meta Tags -->
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Admin Dashboard | Kanakku</title>
+    <title>@yield('title', 'Smart Inventory')</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <meta name="description" content="Kanakku Admin Dashboard">
-    <meta name="keywords" content="admin, invoice, dashboard">
-    <meta name="author" content="Dreams Technologies">
+    <meta name="description" content="Smart Inventory Dashboard">
+    <meta name="keywords" content="inventory, sales, purchase, dashboard">
 
     <!-- Favicon -->
     <link rel="shortcut icon" type="image/x-icon" href="{{ asset('template/assets/img/favicon.png') }}">
@@ -65,6 +64,86 @@
 
         .page-wrapper .content {
             padding-top: 8px !important;
+        }
+
+        .header {
+            height: 104px !important;
+        }
+
+        .page-wrapper {
+            padding-top: 104px !important;
+        }
+
+        .sidebar .sidebar-logo.custom-logo-fix {
+            height: 104px !important;
+            width: 276px;
+            padding: 6px 36px 6px 8px !important;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            background-color: #f7f8f9;
+        }
+
+        .sidebar [data-simplebar],
+        .sidebar .slimScrollDiv {
+            top: 104px !important;
+            height: calc(100% - 104px) !important;
+        }
+
+        .sidebar .sidebar-inner {
+            margin-top: 0 !important;
+        }
+
+        .custom-logo-fix .logo-normal img,
+        .custom-logo-fix .dark-logo img {
+            max-height: 96px;
+            max-width: 258px;
+            width: 258px;
+            height: auto;
+            object-fit: contain;
+            object-position: left center;
+            display: block;
+            margin-left: 0;
+            background-color: #f7f8f9;
+        }
+
+        .custom-logo-fix .logo-small img,
+        .custom-logo-fix .dark-small img {
+            max-height: 56px;
+            max-width: 80px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            display: block;
+            background-color: #f7f8f9;
+        }
+
+        .header-left .logo img,
+        .header-left .dark-logo img {
+            max-height: 88px;
+            width: 255px;
+            height: auto;
+            object-fit: contain;
+            display: block;
+            background-color: #f7f8f9;
+        }
+
+        @media (max-width: 991.98px) {
+            .header-left .logo img,
+            .header-left .dark-logo img {
+                width: 220px !important;
+                max-height: 64px;
+                height: auto;
+            }
+        }
+
+        .sidebar .sidebar-menu > ul > li > a > i {
+            font-size: 18px;
+            min-width: 22px;
+            flex-shrink: 0;
+            line-height: 1.2;
+            margin-top: 2px;
         }
     </style>
 

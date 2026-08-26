@@ -20,6 +20,14 @@
             box-shadow: 0 0 0 .2rem rgba(13, 110, 253, .25);
         }
 
+        #itemPickerTable tbody tr {
+            cursor: pointer;
+        }
+
+        #itemPickerTable tbody tr:hover {
+            background-color: #e8f4ff;
+        }
+
         .section-card {
             border: 1px solid #dee2e6;
             border-radius: 8px;
@@ -31,6 +39,20 @@
             font-weight: 600;
             margin-bottom: 12px;
             color: #495057;
+        }
+
+        .top-entry-row > [class*="col-"] {
+            display: flex;
+        }
+
+        .top-entry-row .section-card {
+            width: 100%;
+        }
+
+        .item-entry .form-label {
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 4px;
         }
         @media (min-width: 1200px) {
     .modal-xl-custom {
@@ -46,7 +68,7 @@
         <div class="content container-fluid">
 
            <div class="d-flex justify-content-between align-items-center ps-2 mb-3">
-    <h6 class="mb-0">Sale Return</h6>
+    <h6 class="mb-0">Counter Sale Return</h6>
     <button type="button" class="btn btn-outline-secondary btn-sm" id="searchSaleReturnBtn" style="width: 100px;">
         <svg aria-hidden="true" class="me-2" width="18" height="18" viewBox="0 0 18 18">
             <path d="m18 16.5-5.14-5.18h-.35a7 7 0 1 0-1.19 1.19v.35L16.5 18zM12 7A5 5 0 1 1 2 7a5 5 0 0 1 10 0"></path>
@@ -55,26 +77,49 @@
 </div>
 
 
-            <div class="row mb-3">
+            <div class="row mb-3 top-entry-row">
 
                 {{-- LEFT BOX: Sale Info --}}
                 <div class="col-md-6">
                     <div class="section-card h-100">
-                        <h6>Sale Info</h6>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0">Sale Info</h6>
+                        </div>
+
                         <div class="mb-3">
                             <label class="form-label">Sale Date<span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="saleDate" min="{{ session('year_start') }}"
-                                 max="{{ min(date('Y-m-d'), session('year_end')) }}">
+                                max="{{ min(date('Y-m-d'), session('year_end')) }}" value="{{ date('Y-m-d') }}">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Select Customer<span class="text-danger">*</span></label>
-                            <select class="form-select" id="partyId">
-                                <option value="">-- Select Customer --</option>
-                                @foreach ($customers as $customer)
-                                    <option value="{{ $customer->Party_Id }}">
-                                        {{ $customer->Party_Name }}-{{ $customer->Party_Code }}</option>
-                                @endforeach
-                            </select>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <label class="form-label mb-1" id="customerLabel">Select Customer<span
+                                        class="text-danger">*</span></label>
+                                <div class="d-flex align-items-center">
+                                    <div class="form-check form-check-inline mb-1">
+                                        <input class="form-check-input" type="radio" name="saleType" id="saleInternal"
+                                            value="internal" checked>
+                                        <label class="form-check-label" for="saleInternal">Internal</label>
+                                    </div>
+                                    <div class="form-check form-check-inline mb-1 me-0">
+                                        <input class="form-check-input" type="radio" name="saleType" id="saleOutside"
+                                            value="outside">
+                                        <label class="form-check-label" for="saleOutside">Outside</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="customerDiv">
+                                <select class="form-select" id="partyId">
+                                    <option value="">-- Select Customer --</option>
+                                    @foreach ($customers as $customer)
+                                        <option value="{{ $customer->Party_Id }}">
+                                            {{ $customer->Party_Name }}-{{ $customer->Party_Code }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div id="cashDiv" style="display:none;">
+                                <input type="text" class="form-control calc-label" value="Cash">
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Sale No</label>
@@ -108,6 +153,9 @@
                                 <label class="form-label">Select Bank</label>
                                 <select class="form-select" id="bankAccountId">
                                     <option value="">-- Select Bank --</option>
+                                    @foreach ($banks as $bank)
+                                        <option value="{{ $bank->Account_Id }}">{{ $bank->Ledger_Name ?? $bank->Account_Desc }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                             <div class="col-md-4 mb-3" id="bankRemarksDiv" style="display:none;">
@@ -121,90 +169,101 @@
 
                 {{-- RIGHT BOX: Item Section --}}
                 <div class="col-md-6">
-                    <div class="section-card h-100">
-                        <h6>Item Section</h6>
-
-                        {{-- Barcode Row --}}
-                        <div class="row mb-3">
-                            <div class="col-md-6">
+                    <div class="section-card item-entry h-100">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0">Item Section</h6>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="findSaleBtn">
+                                <i class="fa-solid fa-file-invoice me-1"></i> Find Sale
+                            </button>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label"><i class="isax isax-scan"></i> Scan Barcode</label>
                                 <div class="input-group">
                                     <input type="text" class="form-control" id="barcodeInput"
                                         placeholder="Scan or type barcode & press Enter" autocomplete="off">
+                                    <button class="btn btn-primary" type="button" id="productSearchBtn">
+                                        <i class="fa-solid fa-magnifying-glass"></i>
+                                    </button>
                                 </div>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Item Selected</label>
                                 <input type="text" class="form-control calc-label" id="itemSelected" readonly
                                     placeholder="Scan barcode to select item">
                                 <input type="hidden" id="selectedItemId">
                                 <input type="hidden" id="selectedHsnCode">
                                 <input type="hidden" id="unitId">
+                                <input type="hidden" id="saleMrp">
+                                <input type="hidden" id="maxReturnQty">
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Unit</label>
                                 <input type="text" class="form-control calc-label" id="unitDisplay" readonly>
                             </div>
                         </div>
-
-                        {{-- Calc Fields --}}
                         <div class="row">
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Qty<span class="text-danger">*</span></label>
                                 <input type="number" class="form-control" id="quantity" step="0.01" min="0.01"
                                     autocomplete="off">
                             </div>
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Rate<span class="text-danger">*</span></label>
                                 <input type="number" class="form-control" id="rate" step="0.01" min="0"
                                     autocomplete="off" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Total Amt</label>
                                 <input type="text" class="form-control calc-label" id="totalAmount" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Disc %</label>
                                 <input type="number" class="form-control" id="discountPercent" step="0.01"
                                     max="100" min="0" autocomplete="off" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Disc Amt</label>
                                 <input type="text" class="form-control calc-label" id="discountAmount" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Taxable Amt</label>
                                 <input type="text" class="form-control calc-label" id="taxableAmount" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3 gst-col">
                                 <label class="form-label">CGST Rate</label>
                                 <input type="text" class="form-control calc-label" id="cgstRate" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3 gst-col">
                                 <label class="form-label">CGST Amt</label>
                                 <input type="text" class="form-control calc-label" id="cgstAmount" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3 gst-col">
                                 <label class="form-label">SGST Rate</label>
                                 <input type="text" class="form-control calc-label" id="sgstRate" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3 gst-col">
                                 <label class="form-label">SGST Amt</label>
                                 <input type="text" class="form-control calc-label" id="sgstAmount" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3 gst-col">
                                 <label class="form-label">Total GST</label>
                                 <input type="text" class="form-control calc-label" id="totalGst" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Net Amt</label>
                                 <input type="text" class="form-control calc-label" id="netAmount" readonly>
                             </div>
                         </div>
-
-                        <div class="row align-items-end mt-1">
-                            <div class="col-md-3 mb-0">
-                                <label class="form-label">&nbsp;</label>
+                        <div class="row align-items-end">
+                            <div class="col-md-4 mb-3 ms-md-auto">
+                                <label class="form-label d-none d-md-block">&nbsp;</label>
                                 <button type="button" class="btn btn-success w-100 d-block" id="addItemBtn">+ Add
                                     Item</button>
                             </div>
@@ -234,11 +293,11 @@
                                         <th>Disc %</th>
                                         <th>Disc Amt</th>
                                         <th>Taxable Amt</th>
-                                        <th>CGST Rate</th>
-                                        <th>CGST Amt</th>
-                                        <th>SGST Rate</th>
-                                        <th>SGST Amt</th>
-                                        <th>Total GST</th>
+                                        <th class="gst-col">CGST Rate</th>
+                                        <th class="gst-col">CGST Amt</th>
+                                        <th class="gst-col">SGST Rate</th>
+                                        <th class="gst-col">SGST Amt</th>
+                                        <th class="gst-col">Total GST</th>
                                         <th>Net Amt</th>
                                         <th>Action</th>
                                     </tr>
@@ -304,12 +363,70 @@
         </div>
     </div>
 
+    {{-- Item Picker Modal --}}
+    <div class="modal fade" id="itemPickerModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-xl modal-xl-custom">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="itemPickerTitle">Select Item</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 mb-3" id="modalFilterRow">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Category</label>
+                            <select class="form-select form-select-sm" id="modalCateId">
+                                <option value="0">-- All Categories --</option>
+                                @foreach ($categories as $cat)
+                                    <option value="{{ $cat->Prd_CateId }}">{{ $cat->Prd_CateNm }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Sub Category</label>
+                            <select class="form-select form-select-sm" id="modalSubCateId">
+                                <option value="0">-- All Sub Categories --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Product Name / Code</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" id="modalSearchInput"
+                                    placeholder="Search...">
+                                <button class="btn btn-primary" type="button" id="modalSearchBtn">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="itemPickerLoader" class="text-center py-3" style="display:none;">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2 mb-0">Loading items...</p>
+                    </div>
+                    <div id="itemPickerTableWrap" style="display:none;">
+                        <table id="itemPickerTable" class="table table-bordered table-hover table-sm w-100">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Sl</th>
+                                    <th>Item Code</th>
+                                    <th>Item Name</th>
+                                    <th>Unit</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {{-- Sale Return Search Modal --}}
 <div class="modal fade" id="saleReturnSearchModal" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-lg modal-xl-custom">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Search Sale Return</h5>
+                <h5 class="modal-title">Search Counter Sale Return</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -352,8 +469,103 @@
     </div>
 </div>
 
+    {{-- Find Sale (by customer / date) --}}
+    <div class="modal fade" id="findSaleModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg modal-xl-custom">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Find Sale</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label">From Date</label>
+                            <input type="date" class="form-control" id="findFromDate"
+                                min="{{ session('year_start') }}" max="{{ session('year_end') }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">To Date</label>
+                            <input type="date" class="form-control" id="findToDate"
+                                min="{{ session('year_start') }}" max="{{ session('year_end') }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Customer (optional)</label>
+                            <select class="form-select" id="findPartyId">
+                                <option value="0">-- All / Outside --</option>
+                                @foreach ($customers as $customer)
+                                    <option value="{{ $customer->Party_Id }}">
+                                        {{ $customer->Party_Name }}-{{ $customer->Party_Code }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="button" class="btn btn-primary w-100" id="findSaleGo">Search</button>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table id="findSaleTable" class="table table-bordered table-sm w-100">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Sl</th>
+                                    <th>Invoice No</th>
+                                    <th>Ref No</th>
+                                    <th>Invoice Date</th>
+                                    <th>Customer</th>
+                                    <th>Net Amount</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="findSaleBody">
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted">Use filters above to search</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-
+    {{-- Sale product details --}}
+    <div class="modal fade" id="saleItemsModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-xl modal-xl-custom">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="saleItemsTitle">Sale Items</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive">
+                        <table id="saleItemsTable" class="table table-bordered table-sm w-100">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Sl</th>
+                                    <th>Item Name</th>
+                                    <th>Sold</th>
+                                    <th>Returned</th>
+                                    <th>Remaining</th>
+                                    <th>Unit</th>
+                                    <th>Rate</th>
+                                    <th>Disc %</th>
+                                    <th>Taxable</th>
+                                    <th>GST</th>
+                                    <th>Net Amt</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="saleItemsBody">
+                                <tr>
+                                    <td colspan="12" class="text-center text-muted">No items</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
 @endsection
 
@@ -362,9 +574,18 @@
     <script>
         const SESSION_YEAR_START = "{{ session('year_start') }}";
         const SESSION_YEAR_END = "{{ session('year_end') }}";
+        const GST_TYPE = {{ session('gst_type', 1) }};
         let itemsArray = [];
         let currentSaleId = 0;
         let saleReturnSearchDT = null;
+        let itemPickerDT = null;
+        let allItemsData = [];
+        let findSaleDT = null;
+        let saleItemsDT = null;
+        let skipFindSaleReset = false;
+        let reopenFindSale = true;
+        let findSaleHeader = null;
+        let findSaleItems = [];
 
         $(document).ready(function() {
 
@@ -372,10 +593,32 @@
                 placeholder: '-- Select Customer --',
                 allowClear: true
             });
+
+            $('input[name="saleType"]').on('change', function() {
+                if ($(this).val() === 'outside') {
+                    $('#customerDiv').hide();
+                    $('#cashDiv').show();
+                    $('#partyId').val('').trigger('change');
+                } else {
+                    $('#customerDiv').show();
+                    $('#cashDiv').hide();
+                    $('#partyId').val('').trigger('change');
+                }
+            });
             $('#bankAccountId').select2({
                 placeholder: '-- Select Bank --',
                 allowClear: true
             });
+            $('#findPartyId').select2({
+                placeholder: '-- All / Outside --',
+                allowClear: true,
+                dropdownParent: $('#findSaleModal')
+            });
+            if (GST_TYPE == 2) {
+                $('#cgstRate, #cgstAmount, #sgstRate, #sgstAmount, #totalGst').closest('.gst-col').hide();
+                $('th:contains("CGST"), th:contains("SGST"), th:contains("Total GST")').hide();
+                $('#totalGSTAmount').closest('tr').hide();
+            }
 
             // Sale Return Search functionality
             $('#searchSaleReturnBtn').on('click', function() {
@@ -411,7 +654,7 @@
                         html += `<tr>
                             <td>${i + 1}</td>
                             <td>${row.Invoice_No}</td>
-                            <td>${row.Invoice_Date}</td>
+                            <td>${siDate.toDisplay(row.Invoice_Date)}</td>
                             <td>${row.Net_Amt}</td>
                             <td><button class="btn btn-sm btn-primary viewSaleReturn" data-id="${row.Sale_Id}">Edit</button></td>
                         </tr>`;
@@ -506,6 +749,144 @@
                 $('#saleReturnSearchBody').html('<tr><td colspan="5" class="text-center text-muted">Use filters above to search</td></tr>');
                 $('#searchFromDate, #searchToDate').val('');
             });
+
+            $('#findSaleBtn').on('click', function() {
+                const party = $('#partyId').val();
+                if (party) {
+                    $('#findPartyId').val(party).trigger('change');
+                }
+                $('#findSaleModal').modal('show');
+            });
+
+            $('#findSaleGo').on('click', function() {
+                const fromDate = $('#findFromDate').val();
+                const toDate = $('#findToDate').val();
+                const partyId = $('#findPartyId').val() || 0;
+                if (!fromDate || !toDate) {
+                    Swal.fire('Error', 'Please select From Date and To Date', 'error');
+                    return;
+                }
+                if (findSaleDT) {
+                    findSaleDT.destroy();
+                    findSaleDT = null;
+                }
+                $('#findSaleBody').html(
+                    '<tr><td colspan="7" class="text-center">Loading...</td></tr>');
+                $.get("{{ url('sale-return/find-sale') }}", {
+                    from_date: fromDate,
+                    to_date: toDate,
+                    party_id: partyId
+                }, function(data) {
+                    let html = '';
+                    if (!data.length) {
+                        $('#findSaleBody').html(
+                            '<tr><td colspan="7" class="text-center text-muted">No records found</td></tr>'
+                        );
+                        return;
+                    }
+                    data.forEach((row, i) => {
+                        html += `<tr>
+                            <td>${i + 1}</td>
+                            <td>${row.Invoice_No ?? ''}</td>
+                            <td>${row.Ref_No ?? ''}</td>
+                            <td>${siDate.toDisplay(row.Invoice_Date)}</td>
+                            <td>${row.Party_Name ?? 'Outside / Cash'}</td>
+                            <td>${row.Net_Amt ?? ''}</td>
+                            <td><button type="button" class="btn btn-sm btn-primary viewSaleItems" data-id="${row.Sale_Id}">Details</button></td>
+                        </tr>`;
+                    });
+                    $('#findSaleBody').html(html);
+                    findSaleDT = $('#findSaleTable').DataTable({
+                        pageLength: 10,
+                        ordering: true,
+                        sDom: 'fBtlpi',
+                        language: {
+                            search: '',
+                            searchPlaceholder: 'Search...',
+                            sLengthMenu: 'Row Per Page _MENU_ Entries',
+                            info: '_START_ - _END_ of _TOTAL_ items',
+                            paginate: {
+                                next: '<i class="isax isax-arrow-right-1"></i>',
+                                previous: '<i class="isax isax-arrow-left"></i>'
+                            }
+                        }
+                    });
+                }).fail(function() {
+                    Swal.fire('Error', 'Failed to load sales', 'error');
+                    $('#findSaleBody').html(
+                        '<tr><td colspan="7" class="text-center text-danger">Failed to load</td></tr>'
+                    );
+                });
+            });
+
+            $(document).on('click', '.viewSaleItems', function() {
+                const saleId = $(this).data('id');
+                reopenFindSale = true;
+                $.get("{{ url('sale-return/find-sale-details') }}/" + saleId, function(data) {
+                    findSaleHeader = {
+                        Sale_Id: data.Sale_Id,
+                        Party_Id: data.Party_Id,
+                        Invoice_No: data.Invoice_No,
+                        Ref_No: data.Ref_No,
+                        Invoice_Date: data.Invoice_Date
+                    };
+                    findSaleItems = data.Item_Details || [];
+                    if (typeof findSaleItems === 'string') {
+                        findSaleItems = JSON.parse(findSaleItems || '[]');
+                    }
+                    if (!Array.isArray(findSaleItems)) {
+                        findSaleItems = [];
+                    }
+                    $('#saleItemsTitle').text('Sale Items' + (data.Invoice_No ? ' - ' + data.Invoice_No : ''));
+                    renderSaleItemsTable(findSaleItems);
+                    skipFindSaleReset = true;
+                    $('#findSaleModal').one('hidden.bs.modal', function() {
+                        $('#saleItemsModal').modal('show');
+                    });
+                    $('#findSaleModal').modal('hide');
+                }).fail(function() {
+                    Swal.fire('Error', 'Failed to load sale items', 'error');
+                });
+            });
+
+            $(document).on('click', '.addReturnItem', function() {
+                const idx = $(this).data('index');
+                const item = findSaleItems[idx];
+                if (!item) return;
+                if (!populateReturnFromSale(item, findSaleHeader)) return;
+                reopenFindSale = false;
+                $('#saleItemsModal').modal('hide');
+            });
+
+            $('#findSaleModal').on('hidden.bs.modal', function() {
+                if (skipFindSaleReset) {
+                    skipFindSaleReset = false;
+                    return;
+                }
+                if (findSaleDT) {
+                    findSaleDT.destroy();
+                    findSaleDT = null;
+                }
+                $('#findSaleBody').html(
+                    '<tr><td colspan="7" class="text-center text-muted">Use filters above to search</td></tr>'
+                );
+                $('#findFromDate, #findToDate').val('');
+                $('#findPartyId').val('0').trigger('change');
+            });
+
+            $('#saleItemsModal').on('hidden.bs.modal', function() {
+                if (saleItemsDT) {
+                    saleItemsDT.destroy();
+                    saleItemsDT = null;
+                }
+                $('#saleItemsBody').html(
+                    '<tr><td colspan="12" class="text-center text-muted">No items</td></tr>'
+                );
+                if (reopenFindSale) {
+                    $('#findSaleModal').modal('show');
+                }
+                reopenFindSale = true;
+            });
             // ── Barcode Scanner ──────────────────────────────────────────
             $('#barcodeInput').on('keydown', function(e) {
                 if (e.key === 'Enter') {
@@ -542,7 +923,7 @@
         $('#saleDate').focus();
         return;
     }
-                $.get("{{ route('counter-sale.barcode') }}", {
+              $.get("{{ route('sale-return.barcode') }}", {
                         barcode: barcode,
                         sale_date: saleDate
                     })
@@ -551,10 +932,161 @@
                         $('#barcodeInput').focus();
                     })
                     .fail(function() {
-                        Swal.fire('Not Found', 'No item found for barcode: ' + barcode, 'warning');
-                        $('#barcodeInput').select();
+                        $.get("{{ route('sale-return.items') }}", {
+                            code: barcode,
+                            cat_id: 0,
+                            sub_cat_id: 0
+                        }, function(data) {
+                            if (data.length > 0) {
+                                openItemPickerModal(data, true, barcode);
+                            } else {
+                                Swal.fire('Not Found', 'No item found for barcode: ' + barcode, 'warning');
+                                $('#barcodeInput').select();
+                            }
+                        }).fail(function() {
+                            Swal.fire('Not Found', 'No item found for barcode: ' + barcode, 'warning');
+                            $('#barcodeInput').select();
+                        });
                     });
             }
+
+            function ensureSaleDate() {
+                const saleDate = $('#saleDate').val();
+                if (!saleDate) {
+                    Swal.fire('Error', 'Please select sale date first', 'error');
+                    $('#saleDate').focus();
+                    return false;
+                }
+                const saleDateObj = new Date(saleDate);
+                const yearStartObj = new Date('{{ session("year_start") }}');
+                const yearEndObj = new Date('{{ session("year_end") }}');
+                const today = new Date();
+                if (saleDateObj > today) {
+                    Swal.fire('Error', 'Sale Date cannot be After Today', 'error');
+                    $('#saleDate').focus();
+                    return false;
+                }
+                if (saleDateObj < yearStartObj || saleDateObj > yearEndObj) {
+                    Swal.fire('Error', 'Sale Date must be between {{ session("year_start") }} and {{ session("year_end") }}', 'error');
+                    $('#saleDate').focus();
+                    return false;
+                }
+                return true;
+            }
+
+            $('#productSearchBtn').on('click', function(e) {
+                e.preventDefault();
+                if (!ensureSaleDate()) return;
+                const code = $('#barcodeInput').val().trim();
+                if (!code) {
+                    openItemPickerModal([], false, '');
+                    return;
+                }
+                $.get("{{ route('sale-return.items') }}", {
+                    code: code,
+                    cat_id: 0,
+                    sub_cat_id: 0
+                }, function(data) {
+                    openItemPickerModal(data, true, code);
+                }).fail(function() {
+                    Swal.fire('Error', 'Failed to load items', 'error');
+                });
+            });
+
+            $('#modalCateId').on('change', function() {
+                const catId = parseInt($(this).val()) || 0;
+                $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
+                if (!catId) return;
+                $.get("{{ route('sale-return.subcats') }}", {
+                    cat_id: catId
+                }, function(subs) {
+                    subs.forEach(s => {
+                        $('#modalSubCateId').append(
+                            `<option value="${s.Prd_SubCateId}">${s.Prd_SubCateNm}</option>`
+                        );
+                    });
+                });
+            });
+
+            $('#modalSearchBtn').on('click', function() {
+                const catId = parseInt($('#modalCateId').val()) || 0;
+                const subCatId = parseInt($('#modalSubCateId').val()) || 0;
+                const code = $('#modalSearchInput').val().trim();
+                $('#itemPickerLoader').show();
+                $('#itemPickerTableWrap').hide();
+                if (itemPickerDT) {
+                    itemPickerDT.destroy();
+                    itemPickerDT = null;
+                }
+                $('#itemPickerTable tbody').html('');
+                $.get("{{ route('sale-return.items') }}", {
+                    cat_id: catId,
+                    sub_cat_id: subCatId,
+                    code: code
+                }, function(data) {
+                    renderItemPickerTable(data, false);
+                }).fail(function() {
+                    $('#itemPickerLoader').hide();
+                    Swal.fire('Error', 'Failed to load items', 'error');
+                });
+            });
+
+            $('#modalSearchInput').on('keypress', function(e) {
+                if (e.which === 13) $('#modalSearchBtn').trigger('click');
+            });
+
+            $('#itemPickerModal').on('hidden.bs.modal', function() {
+                $('#modalCateId').val('0');
+                $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
+                $('#modalSearchInput').val('');
+                $('#itemPickerLoader').hide();
+                $('#itemPickerTableWrap').hide();
+                if (itemPickerDT) {
+                    itemPickerDT.destroy();
+                    itemPickerDT = null;
+                }
+                $('#itemPickerTable tbody').html('');
+            });
+
+            function openItemPickerModal(data, isCodeSearch, code) {
+                $('#itemPickerTitle').text('Select Item');
+                $('#itemPickerLoader').hide();
+                $('#itemPickerTableWrap').hide();
+                if (itemPickerDT) {
+                    itemPickerDT.destroy();
+                    itemPickerDT = null;
+                }
+                $('#itemPickerTable tbody').html('');
+                allItemsData = data;
+                $('#modalFilterRow').show();
+                $('#modalCateId').val('0');
+                $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
+                $('#modalSearchInput').val(code || '');
+                $('#itemPickerModal').modal('show');
+                if (data.length > 0) {
+                    $('#itemPickerLoader').show();
+                    renderItemPickerTable(data, isCodeSearch);
+                }
+            }
+
+            $(document).on('click', '#itemPickerTable tbody tr', function() {
+                const $row = $(this);
+                const prodId = $row.data('id');
+                if (!prodId) return;
+                if (!ensureSaleDate()) return;
+                $.get("{{ route('sale-return.item-info') }}", {
+                    prod_id: prodId,
+                    sale_date: $('#saleDate').val()
+                }).done(function(item) {
+                    $('#itemPickerModal').modal('hide');
+                    populateItemFields(item);
+                    if ($row.data('hsn')) {
+                        $('#selectedHsnCode').val($row.data('hsn'));
+                    }
+                }).fail(function(xhr) {
+                    Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load item details', 'error');
+                });
+            });
 
 
             $('#quantity').on('input', calculateAmounts);
@@ -607,7 +1139,8 @@
                     sgst_amount: $('#sgstAmount').val(),
                     total_gst: $('#totalGst').val(),
                     net_amount: $('#netAmount').val(),
-                    sale_mrp: $('#saleMrp').val() || 0,
+                    sale_mrp: $('#saleMrp').val() || $('#rate').val() || 0,
+                    max_return_qty: $('#maxReturnQty').val() || '',
                 });
                 renderItemsTable();
                 clearItemSelection();
@@ -635,6 +1168,7 @@
     $('#discountPercent').val(item.discount_percent);
     $('#cgstRate').val(item.cgst_rate);
     $('#sgstRate').val(item.sgst_rate);
+    $('#maxReturnQty').val(item.max_return_qty || '');
     
     // Calculate amounts
     calculateAmounts();
@@ -654,7 +1188,8 @@
                     Swal.fire('Error', 'Sale Date is required', 'error');
                     return;
                 }
-                if (!$('#partyId').val()) {
+                const isOutside = $('input[name="saleType"]:checked').val() === 'outside';
+                if (!isOutside && !$('#partyId').val()) {
                     Swal.fire('Error', 'Please select a Customer', 'error');
                     return;
                 }
@@ -678,7 +1213,7 @@
                          sale_id: currentSaleId,
                         sale_date: $('#saleDate').val(),
                         sale_no: $('#saleNo').val(),
-                        party_id: $('#partyId').val(),
+                        party_id: isOutside ? 0 : $('#partyId').val(),
                         trans_mode: $('input[name="transMode"]:checked').val(),
                         ref_vouch_no: $('#refVoucherNo').val(),
                         bank_id: $('#bankAccountId').val(),
@@ -707,6 +1242,56 @@
 
         // ── Helper Functions ──────────────────────────────────────────────
 
+        function renderItemPickerTable(data, isCodeSearch) {
+            setTimeout(function() {
+                $('#itemPickerLoader').hide();
+                if (!data.length) {
+                    $('#itemPickerTable tbody').html(
+                        '<tr><td colspan="4" class="text-center text-muted">No items found</td></tr>');
+                    $('#itemPickerTableWrap').show();
+                    return;
+                }
+                $.each(data, function(i, item) {
+                    const gst = item.GST_Data ? (typeof item.GST_Data === 'string' ? JSON.parse(item.GST_Data) : item.GST_Data) : {};
+                    $('#itemPickerTable tbody').append(
+                        `<tr data-id="${item.Prod_Id}"
+                     data-name="${item.Prod_ShortNm}"
+                     data-unit="${item.Unit_Id}"
+                     data-unitname="${item.Unit_Name}"
+                     data-hsn="${item.Gst_Id ?? 0}"
+                     data-cgst="${gst.CGST ?? 0}"
+                     data-sgst="${gst.SGST ?? 0}">
+                    <td>${i + 1}</td>
+                    <td>${item.Prod_Code}</td>
+                    <td>${item.Prod_ShortNm}</td>
+                    <td>${item.Unit_Name}</td>
+                </tr>`
+                    );
+                });
+                if (itemPickerDT) {
+                    itemPickerDT.destroy();
+                    itemPickerDT = null;
+                }
+                $('#itemPickerTableWrap').show();
+                itemPickerDT = $('#itemPickerTable').DataTable({
+                    pageLength: 10,
+                    lengthMenu: [10, 25, 50],
+                    ordering: true,
+                    sDom: 'fBtlpi',
+                    language: {
+                        search: '',
+                        searchPlaceholder: 'Search items...',
+                        sLengthMenu: 'Row Per Page _MENU_ Entries',
+                        info: '_START_ - _END_ of _TOTAL_ items',
+                        paginate: {
+                            next: '<i class="isax isax-arrow-right-1"></i>',
+                            previous: '<i class="isax isax-arrow-left"></i>'
+                        }
+                    }
+                });
+            }, 0);
+        }
+
         function populateItemFields(item) {
             const productId = item.Prod_Id;
             const existingItem = itemsArray.find(existingItem => existingItem.item_id == productId);
@@ -730,10 +1315,12 @@
             $('#itemSelected').val(item.Prod_ShortNm);
             $('#unitId').val(item.Unit_Id);
             $('#unitDisplay').val(item.Unit_Name);
-            $('#rate').val(item.MRP);
+            const stockMrp = parseFloat(item.MRP ?? item.Rate) || 0;
+            $('#rate').val(stockMrp > 0 ? stockMrp.toFixed(2) : '');
+            $('#saleMrp').val(stockMrp > 0 ? stockMrp.toFixed(2) : '0');
             $('#discountPercent').val(item.Discount || 0);
-            $('#cgstRate').val(cgst);
-            $('#sgstRate').val(sgst);
+            $('#cgstRate').val(GST_TYPE == 2 ? 0 : cgst);
+            $('#sgstRate').val(GST_TYPE == 2 ? 0 : sgst);
             $('#quantity').val(1);
 
             calculateAmounts();
@@ -807,7 +1394,12 @@
                 Swal.fire('Error', 'Quantity must be greater than 0', 'error');
                 return false;
             }
-            if (qty > availableQty) {
+            const maxReturnQty = parseFloat($('#maxReturnQty').val());
+            if (!isNaN(maxReturnQty) && maxReturnQty > 0 && qty > maxReturnQty) {
+                Swal.fire('Error', `Return quantity cannot exceed remaining sold qty (${maxReturnQty})`, 'error');
+                return false;
+            }
+            if (!isNaN(availableQty) && qty > availableQty) {
                 Swal.fire('Error', `You cannot sell this product as available quantity = ${availableQty}`, 'error');
                 return false;
             }
@@ -843,9 +1435,9 @@
             <td>${index + 1}</td><td>${item.item_name}</td><td>${item.quantity}</td>
             <td>${item.unit_name}</td><td>${item.rate}</td><td>${item.total_amount}</td>
             <td>${item.discount_percent}</td><td>${item.discount_amount}</td><td>${item.taxable_amount}</td>
-            <td>${item.cgst_rate}</td><td>${item.cgst_amount}</td>
-            <td>${item.sgst_rate}</td><td>${item.sgst_amount}</td>
-            <td>${item.total_gst}</td><td>${item.net_amount}</td>
+            <td class="gst-col">${item.cgst_rate}</td><td class="gst-col">${item.cgst_amount}</td>
+            <td class="gst-col">${item.sgst_rate}</td><td class="gst-col">${item.sgst_amount}</td>
+            <td class="gst-col">${item.total_gst}</td><td>${item.net_amount}</td>
            <td style="white-space:nowrap; min-width:130px;">
     <button class="btn btn-primary btn-sm editItem me-1" data-index="${index}">Edit</button>
     <button class="btn btn-danger btn-sm removeItem" data-index="${index}">Delete</button>
@@ -857,6 +1449,9 @@
             });
 
             $('#itemsTableBody').html(html);
+            if (GST_TYPE == 2) {
+                $('.gst-col').hide();
+            }
             $('#summaryTotalAmount').val(totalAmt.toFixed(2));
             $('#totalGSTAmount').val(totalGST.toFixed(2));
 
@@ -895,13 +1490,121 @@
             $('#selectedItemId, #selectedHsnCode, #unitId').val('');
             $('#itemSelected, #unitDisplay, #saleMrp').val('');
             $('#cgstRate, #sgstRate').val('');
+            $('#maxReturnQty').val('');
             clearItemCalc();
+        }
+
+        function escapeHtml(str) {
+            return $('<div>').text(str == null ? '' : String(str)).html();
+        }
+
+        function renderSaleItemsTable(items) {
+            if (saleItemsDT) {
+                saleItemsDT.destroy();
+                saleItemsDT = null;
+            }
+            if (!items.length) {
+                $('#saleItemsBody').html(
+                    '<tr><td colspan="12" class="text-center text-muted">No items found</td></tr>'
+                );
+                return;
+            }
+            let html = '';
+            items.forEach((item, i) => {
+                const gst = (parseFloat(item.CGST_Amt) || 0) + (parseFloat(item.SGST_Amt) || 0);
+                const sold = item.Sold_Qty ?? item.qnty ?? '';
+                const returned = item.Returned_Qty ?? 0;
+                const remaining = item.Remaining_Qty ?? item.qnty ?? '';
+                const canReturn = parseFloat(remaining) > 0;
+                html += `<tr>
+                    <td>${i + 1}</td>
+                    <td>${escapeHtml(item.Prod_Name)}</td>
+                    <td>${sold}</td>
+                    <td>${returned}</td>
+                    <td>${remaining}</td>
+                    <td>${escapeHtml(item.Unit_Name)}</td>
+                    <td>${item.Item_Rate ?? ''}</td>
+                    <td>${item.Disc_Prcnt ?? 0}</td>
+                    <td>${item.Taxable_Amt ?? ''}</td>
+                    <td>${gst.toFixed(2)}</td>
+                    <td>${item.Net_Amt ?? ''}</td>
+                    <td>${canReturn
+                        ? `<button type="button" class="btn btn-sm btn-success addReturnItem" data-index="${i}">Add Return</button>`
+                        : '<span class="text-muted">Returned</span>'}</td>
+                </tr>`;
+            });
+            $('#saleItemsBody').html(html);
+            saleItemsDT = $('#saleItemsTable').DataTable({
+                pageLength: 10,
+                ordering: true,
+                sDom: 'fBtlpi',
+                language: {
+                    search: '',
+                    searchPlaceholder: 'Search items...',
+                    sLengthMenu: 'Row Per Page _MENU_ Entries',
+                    info: '_START_ - _END_ of _TOTAL_ items',
+                    paginate: {
+                        next: '<i class="isax isax-arrow-right-1"></i>',
+                        previous: '<i class="isax isax-arrow-left"></i>'
+                    }
+                }
+            });
+        }
+
+        function populateReturnFromSale(item, header) {
+            const existing = itemsArray.find(x => String(x.item_id) === String(item.Prod_Id));
+            if (existing) {
+                Swal.fire('Product Already Added',
+                    `${item.Prod_Name} is already in the return list`,
+                    'warning');
+                return false;
+            }
+            const remaining = parseFloat(item.Remaining_Qty ?? item.qnty) || 0;
+            if (remaining <= 0) {
+                Swal.fire('Already Returned', 'No remaining quantity for this item', 'warning');
+                return false;
+            }
+            if (header && parseInt(header.Party_Id, 10) > 0) {
+                $('#saleInternal').prop('checked', true);
+                $('#customerDiv').show();
+                $('#cashDiv').hide();
+                $('#partyId').val(header.Party_Id).trigger('change');
+            } else if (header) {
+                $('#saleOutside').prop('checked', true);
+                $('#customerDiv').hide();
+                $('#cashDiv').show();
+                $('#partyId').val('').trigger('change');
+            }
+            if (header && !$('#saleNo').val()) {
+                $('#saleNo').val(header.Invoice_No || header.Ref_No || '');
+            }
+            clearItemSelection();
+            $('#selectedItemId').val(item.Prod_Id);
+            $('#selectedHsnCode').val(item.hsn_code || 0);
+            $('#itemSelected').val(item.Prod_Name);
+            $('#unitId').val(item.Unit_Id);
+            $('#unitDisplay').val(item.Unit_Name);
+            $('#quantity').val(remaining);
+            $('#maxReturnQty').val(remaining);
+            $('#rate').val(item.Item_Rate);
+            $('#discountPercent').val(item.Disc_Prcnt || 0);
+            $('#saleMrp').val(item.MRP || item.Item_Rate || 0);
+            if (GST_TYPE == 2) {
+                $('#cgstRate, #sgstRate').val(0);
+            } else {
+                $('#cgstRate').val(item.CGST_Prcnt || 0);
+                $('#sgstRate').val(item.SGST_Prcnt || 0);
+            }
+            calculateAmounts();
+            $('#quantity').focus();
+            return true;
         }
 
         function resetForm() {
             itemsArray = [];
             currentSaleId = 0;
-            $('#saleDate, #saleNo, #refVoucherNo, #bankRemarks').val('');
+            $('#saleNo, #refVoucherNo, #bankRemarks').val('');
+            $('#saleDate').val('{{ date('Y-m-d') }}');
             $('#partyId, #bankAccountId').val('').trigger('change');
             $('#bankSelectDiv, #bankRemarksDiv').hide();
             $('#transCash').prop('checked', true);
@@ -913,6 +1616,9 @@
             $('#saleDate').prop('disabled', false);
             clearItemSelection();
             $('#barcodeInput').focus();
+            $('#saleInternal').prop('checked', true);
+            $('#customerDiv').show();
+            $('#cashDiv').hide();
         }
     </script>
 @endpush

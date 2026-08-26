@@ -6,7 +6,7 @@
 <script src="{{asset('template/assets/js/bootstrap.bundle.min.js')}}"></script> 
 
 <!-- Daterangepicker JS -->
-<script src="{{asset('template/assets/js/moment.min.js')}}"></script>
+<script src="{{asset('template/assets/js/moment.js')}}"></script>
 <script src="{{asset('template/assets/plugins/daterangepicker/daterangepicker.js')}}"></script>
 
 <!-- Simplebar JS -->
@@ -34,3 +34,4 @@
 
 <!-- Custom JS -->
 <script src="{{asset('template/assets/js/script.js')}}"></script>
+<script src="{{asset('template/assets/js/date-format.js')}}?v=11"></script>

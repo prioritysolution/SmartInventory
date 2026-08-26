@@ -17,9 +17,22 @@
 
             <div class="card">
                 <div class="card-body">
+                    <!-- Search + Page size -->
+                    <div class="d-flex justify-content-end align-items-center mb-3">
+                        <form method="GET" action="{{ route('agent-profile') }}" class="d-flex gap-2">
+                            <input type="text" class="form-control form-control-sm" name="search"
+                                value="{{ request('search') }}" placeholder="Search agent..." style="width:250px;">
+                            <button class="btn btn-primary btn-sm">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                            </button>
+                            @if (request('search'))
+                                <a href="{{ route('agent-profile') }}" class="btn btn-secondary btn-sm">Clear</a>
+                            @endif
+                        </form>
+                    </div>
 
                     <div class="table-responsive">
-                        <table id="agentTable" class="table table-nowrap datatable">
+                        <table class="table table-nowrap table-bordered">
                             <thead class="thead-light">
                                 <tr>
                                     <th>Sl</th>
@@ -30,48 +43,61 @@
                                     <th class="text-center">Action</th>
                                 </tr>
                             </thead>
-
-                            <tbody>
+                            <tbody id="agentTableBody">
                                 @foreach ($agents as $key => $agent)
                                     <tr>
-                                        <td>{{ $key + 1 }}</td>
+                                        <td>{{ ($page - 1) * $pageSize + $key + 1 }}</td>
                                         <td>{{ $agent->Agent_Code }}</td>
                                         <td>{{ $agent->Agent_Name }}</td>
                                         <td>{{ $agent->Address }}</td>
                                         <td>{{ $agent->Contact_No }}</td>
-
                                         <td class="text-center">
-
                                             <button class="btn btn-primary btn-sm editRow" data-id="{{ $agent->Agent_Id }}"
                                                 data-code="{{ $agent->Agent_Code }}" data-name="{{ $agent->Agent_Name }}"
-                                                data-address="{{ $agent->Address }}" data-mobile="{{ $agent->Contact_No }}"
-                                                data-join="{{ $agent->Join_Date }}" data-limit="{{ $agent->Stock_Limit }}"
-                                                data-password="">
-                                                Edit
-                                            </button>
-
-                                            {{-- <button class="btn btn-danger btn-sm deleteRow"
-                                    data-id="{{ $agent->Agent_Id }}">
-                                    Delete
-                                </button> --}}
-
+                                                data-address="{{ $agent->Address }}"
+                                                data-mobile="{{ $agent->Contact_No }}" data-join="{{ $agent->Join_Date }}"
+                                                data-limit="{{ $agent->Stock_Limit }}" data-password="">Edit</button>
                                         </td>
-
                                     </tr>
                                 @endforeach
                             </tbody>
-
                         </table>
+                    </div>
+
+                    <!-- Pagination info + controls -->
+                    <div class="d-flex justify-content-between align-items-center mt-3">
+                        <small class="text-muted">
+                            Showing {{ ($page - 1) * $pageSize + 1 }} to {{ min($page * $pageSize, $total) }} of
+                            {{ $total }} entries
+                        </small>
+                        @if ($lastPage > 1)
+                            <ul class="pagination pagination-sm mb-0">
+                                <li class="page-item {{ $page == 1 ? 'disabled' : '' }}">
+                                    <a class="page-link"
+                                        href="{{ request()->fullUrlWithQuery(['page' => $page - 1]) }}">Previous</a>
+                                </li>
+                                @for ($i = 1; $i <= $lastPage; $i++)
+                                    @if ($i == 1 || $i == $lastPage || abs($i - $page) <= 2)
+                                        <li class="page-item {{ $page == $i ? 'active' : '' }}">
+                                            <a class="page-link"
+                                                href="{{ request()->fullUrlWithQuery(['page' => $i]) }}">{{ $i }}</a>
+                                        </li>
+                                    @elseif(abs($i - $page) == 3)
+                                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                                    @endif
+                                @endfor
+                                <li class="page-item {{ $page == $lastPage ? 'disabled' : '' }}">
+                                    <a class="page-link"
+                                        href="{{ request()->fullUrlWithQuery(['page' => $page + 1]) }}">Next</a>
+                                </li>
+                            </ul>
+                        @endif
                     </div>
 
                 </div>
             </div>
-
         </div>
     </div>
-
-
-
     <!-- Agent Modal -->
     <div class="modal fade" id="agentModal" tabindex="-1">
         <div class="modal-dialog modal-xl" style="max-width: 95%;">
@@ -82,53 +108,58 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
 
-                <div class="modal-body">
-
+                <div class="modal-body p-4">
                     <input type="hidden" id="agentId">
+               <div class="row g-3 px-2">
 
-                    <div class="row g-4">
-
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Agent Code<span class="text-danger">*</span></label>
-                            <input type="text" class="form-control form-control-lg" id="agentCode" maxlength="4"
-                                oninput="this.value = this.value.replace(/[^0-9]/g, '')" autocomplete="off">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Agent Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control form-control-lg" id="agentName" autocomplete="off"
+                                placeholder="Enter agent name">
                         </div>
 
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Agent Name<span class="text-danger">*</span></label>
-                            <input type="text" class="form-control form-control-lg" id="agentName" autocomplete="off">
-                        </div>
-
-                        <div class="col-md-12 mb-3">
-                            <label class="form-label">Address<span class="text-danger">*</span></label>
-                            <textarea class="form-control form-control-lg" id="address" rows="2" autocomplete="off"></textarea>
-                        </div>
-
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Mobile No<span class="text-danger">*</span></label>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Mobile No <span class="text-danger">*</span></label>
                             <input type="text" class="form-control form-control-lg" id="mobile" maxlength="10"
-                                oninput="this.value = this.value.replace(/[^0-9]/g, '')" autocomplete="off">
+                                oninput="this.value = this.value.replace(/[^0-9]/g, '')" autocomplete="off"
+                                placeholder="10-digit mobile number">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Joining Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control form-control-lg" id="joinDate"
+                                max="{{ date('Y-m-d') }}" value="{{ date('Y-m-d') }}" autocomplete="off">
+                        </div>
+
+                        <div class="col-md-6">
+                           <label class="form-label fw-semibold">Stock Limit (₹)</label>
+                            <input type="number" step="0.01" class="form-control form-control-lg" id="stockLimit"
+                                max="99999999.99" autocomplete="off" placeholder="0.00">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Password</label>
+                            <div class="position-relative">
+                                <input type="password" class="form-control form-control-lg" id="password"
+                                    autocomplete="off" placeholder="Password"
+                                    style="padding-right: 45px;">
+                                <i class="fa fa-eye" id="eyeIcon"
+                                    style="position:absolute; right:14px; top:50%; transform:translateY(-50%); cursor:pointer; color:#6c757d; font-size:1.1rem;"></i>
+                            </div>
                         </div>
 
 
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Joining Date<span class="text-danger">*</span></label>
-                            <input type="date" class="form-control form-control-lg" id="joinDate" max="{{ date('Y-m-d') }}" autocomplete="off">
-                        </div>
 
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Stock Limit</label>
-                            <input type="number" step="0.01" class="form-control form-control-lg" id="stockLimit" autocomplete="off">
-                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label fw-semibold">Address <span class="text-danger">*</span></label>
+                           <textarea class="form-control form-control-lg" id="address" rows="5" autocomplete="off"
+    placeholder="Enter full address" style="height:130px; font-size:1rem;"></textarea>
 
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Password</label>
-                            <input type="text" class="form-control form-control-lg" id="password" autocomplete="off">
                         </div>
 
                     </div>
-
                 </div>
+
 
                 <div class="modal-footer">
                     <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -144,78 +175,35 @@
 @push('scripts')
     <script>
         $(document).ready(function() {
-
-             $('#agentTable').DataTable();// Simple alert
-            // Swal.fire('Title', 'Message', 'success' | 'error' | 'warning' | 'info')
-
-            // // With callback (used after save)
-            // Swal.fire('Success', res.message, 'success').then(() => resetForm())
-
-
-            $(document).on('click', '.deleteRow', function() {
-
-                let agentId = $(this).data('id');
-
-                Swal.fire({
-                    title: 'Are you sure?',
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonText: 'Yes delete it'
-                }).then((result) => {
-
-                    if (result.isConfirmed) {
-
-                        $.ajax({
-                            url: `/agent-profile/${agentId}`,
-                            type: 'POST',
-                            data: {
-                                _token: "{{ csrf_token() }}",
-                                _method: 'DELETE'
-                            },
-                            success: function() {
-
-                                Swal.fire('Deleted', 'Agent removed', 'success')
-                                    .then(() => location.reload());
-
-                            }
-                        })
-
-                    }
-
-                })
-
+            $('#eyeIcon').on('click', function() {
+                let input = $('#password');
+                if (input.attr('type') === 'password') {
+                    input.attr('type', 'text');
+                    $(this).removeClass('fa-eye').addClass('fa-eye-slash');
+                } else {
+                    input.attr('type', 'password');
+                    $(this).removeClass('fa-eye-slash').addClass('fa-eye');
+                }
             });
-
             $(document).on('click', '.editRow', function() {
-
                 $('#agentId').val($(this).data('id'));
-                $('#agentCode').val($(this).data('code'));
                 $('#agentName').val($(this).data('name'));
                 $('#address').val($(this).data('address'));
                 $('#mobile').val($(this).data('mobile'));
                 $('#joinDate').val($(this).data('join'));
                 $('#stockLimit').val($(this).data('limit'));
-
                 $('#modalTitle').text('Edit Agent');
-                $('#saveAgent').text('Update');
-
+                $('#saveAgent').text('Update').prop('disabled', false);
                 $('#agentModal').modal('show');
-
             });
 
-
             $('#saveAgent').click(function() {
-
                 if (!validateForm()) return;
-
                 $(this).prop('disabled', true).text('Saving...');
-
                 let agentId = $('#agentId').val();
                 let url = agentId ? `/agent-profile/${agentId}` : "{{ route('agent-profile.store') }}";
-
                 let data = {
                     _token: "{{ csrf_token() }}",
-                    agent_code: $('#agentCode').val(),
                     agent_name: $('#agentName').val(),
                     address: $('#address').val(),
                     mobile: $('#mobile').val(),
@@ -223,62 +211,47 @@
                     stock_limit: $('#stockLimit').val(),
                     password: $('#password').val() || null
                 };
-
                 if (agentId) data._method = 'PUT';
-
                 $.ajax({
                     url: url,
                     type: 'POST',
                     data: data,
-                    success: function(res) {
+                    success: res => {
                         $('#agentModal').modal('hide');
-                        Swal.fire('Success', res.message, 'success')
-                            .then(() => location.reload());
+                        Swal.fire('Success', res.message, 'success').then(() => location
+                            .reload());
                     },
-                    error: function(xhr) {
+                    error: xhr => {
                         $('#saveAgent').prop('disabled', false).text(agentId ? 'Update' :
                             'Save');
-
-                        if (xhr.status === 422) {
-                            let errors = xhr.responseJSON?.errors;
-                            if (errors) {
-                                // Show only the first error
-                                let firstError = Object.values(errors)[0][0];
-                                Swal.fire('Validation Error', firstError, 'error');
-                            }
-                        } else {
-                            let message = xhr.responseJSON?.message || 'Failed to save agent';
-                            Swal.fire('Error', message, 'error');
-                        }
+                        let msg = xhr.responseJSON?.errors ?
+                            Object.values(xhr.responseJSON.errors)[0][0] :
+                            (xhr.responseJSON?.message || 'Failed to save agent');
+                        Swal.fire('Validation Error', msg, 'error');
                     }
-
                 });
             });
 
+            $('#agentModal').on('hidden.bs.modal', function() {
+                $('#agentId, #agentName, #address, #mobile, #stockLimit, #password').val('');
+                $('#joinDate').val('{{ date('Y-m-d') }}');
+                $('#modalTitle').text('Add New Agent');
+                $('#saveAgent').text('Save').prop('disabled', false);
+                $('#password').attr('type', 'password');
+                $('#eyeIcon').removeClass('fa-eye-slash').addClass('fa-eye');
+            });
 
         });
 
         function validateForm() {
-
-            if (!$('#agentCode').val()) {
-                Swal.fire('Validation Error', 'Agent Code required', 'error');
-                return false;
-            }
-
-            if (!/^\d+$/.test($('#agentCode').val())) {
-                Swal.fire('Validation Error', 'Agent Code must be numeric', 'error');
-                return false;
-            }
             if (!$('#agentName').val()) {
                 Swal.fire('Validation Error', 'Agent Name required', 'error');
                 return false;
             }
-
             if (!$('#address').val()) {
                 Swal.fire('Validation Error', 'Address required', 'error');
                 return false;
             }
-
             if (!$('#mobile').val()) {
                 Swal.fire('Validation Error', 'Mobile required', 'error');
                 return false;
@@ -291,31 +264,19 @@
                 Swal.fire('Validation Error', 'Joining date required', 'error');
                 return false;
             }
-
-            if ($('#stockLimit').val() > 99999) {
-                Swal.fire('Validation Error', 'Stock limit must not exceed 99999', 'error');
+            if ($('#stockLimit').val() && $('#stockLimit').val() > 99999999.99) {
+                Swal.fire('Validation Error', 'Stock limit must not exceed 99,999,999.99', 'error');
                 return false;
             }
             return true;
-
         }
 
         function openAddModal() {
-
-            $('#agentId').val('');
-            $('#agentCode').val('');
-            $('#agentName').val('');
-            $('#address').val('');
-            $('#mobile').val('');
-            $('#joinDate').val('');
-            $('#stockLimit').val('');
-            $('#password').val('');
-
+            $('#agentId, #agentName, #address, #mobile, #stockLimit, #password').val('');
+            $('#joinDate').val('{{ date('Y-m-d') }}');
             $('#modalTitle').text('Add New Agent');
-            $('#saveAgent').text('Save');
-
+            $('#saveAgent').text('Save').prop('disabled', false);
             $('#agentModal').modal('show');
-
         }
     </script>
 @endpush

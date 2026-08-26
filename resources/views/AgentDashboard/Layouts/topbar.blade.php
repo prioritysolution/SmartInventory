@@ -1,11 +1,11 @@
 <div class="header">
 
     <div class="header-left active">
-        <a href="index.html" class="logo">
-            <img src="{{ asset('agenttemplate/assets/img/logo.png') }}" alt="">
+        <a href="{{ route('agent.dashboard') }}" class="logo">
+            <img src="{{ asset('template/assets/img/smart-inventory-logo.png') }}" alt="Smart Inventory" style="width:240px;max-height:72px;height:auto;object-fit:contain;background-color:#f7f8f9;">
         </a>
-        <a href="index.html" class="logo-small">
-            <img src="{{ asset('agenttemplate/assets/img/logo-small.png') }}" alt="">
+        <a href="{{ route('agent.dashboard') }}" class="logo-small">
+            <img src="{{ asset('template/assets/img/smart-inventory-logo.png') }}" alt="Smart Inventory" style="width:180px;max-height:56px;height:auto;object-fit:contain;background-color:#f7f8f9;">
         </a>
         <a id="toggle_btn" href="javascript:void(0);">
         </a>
@@ -178,8 +178,8 @@
                                 src="{{ asset('agenttemplate/assets/img/profiles/avator1.jpg') }}" alt="">
                             <span class="status online"></span></span>
                         <div class="profilesets">
-                            <h6>John Doe</h6>
-                            <h5>Agent</h5>
+                            <h6>{{ session('agent_name', 'Agent') }}</h6>
+                            <h5>{{ session('branch_name', 'Agent') }}</h5>
                         </div>
                     </div>
                     <hr class="m-0">

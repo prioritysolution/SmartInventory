@@ -5,17 +5,25 @@
 
               <!-- Start Logo -->
               <div class="sidebar-logo custom-logo-fix">
-                  <a href="{{ route('user-dashboard') }}" class="logo logo-normal">
+                  {{-- <a href="{{ route('user-dashboard') }}" class="logo logo-normal">
                       <img src="{{ asset('template/assets/img/logo.svg') }}" alt="Logo">
                   </a>
                   <a href="{{ route('user-dashboard') }}" class="logo-small">
                       <img src="{{ asset('template/assets/img/logo-small.svg') }}" alt="Logo">
+                  </a> --}}
+
+                  <a href="{{ route('user-dashboard') }}" class="logo logo-normal">
+                      <img src="{{ asset('template/assets/img/smart-inventory-logo.png') }}" alt="Smart Inventory">
                   </a>
+                  <a href="{{ route('user-dashboard') }}" class="logo-small">
+                      <img src="{{ asset('template/assets/img/smart-inventory-logo.png') }}" alt="Smart Inventory">
+                  </a>
+
                   <a href="{{ route('user-dashboard') }}" class="dark-logo">
-                      <img src="{{ asset('template/assets/img/logo-white.svg') }}" alt="Logo">
+                      <img src="{{ asset('template/assets/img/smart-inventory-logo.png') }}" alt="Smart Inventory">
                   </a>
                   <a href="{{ route('user-dashboard') }}" class="dark-small">
-                      <img src="{{ asset('template/assets/img/logo-small-white.svg') }}" alt="Logo">
+                      <img src="{{ asset('template/assets/img/smart-inventory-logo.png') }}" alt="Smart Inventory">
                   </a>
 
                   <!-- Sidebar Hover Menu Toggle Button -->
@@ -41,12 +49,19 @@
                   <div id="sidebar-menu" class="sidebar-menu">
                       <ul>
                           <li class="menu-title"><span>Main Menu</span></li>
-                          @foreach ($menu as $parentId => $parent)
+                          <li>
+                              <a href="{{ route('user-dashboard') }}"
+                                  style="display: flex; align-items: center; gap: 10px;">
+                                  <i class="isax isax-home-2"></i>
+                                  <span>Dashboard</span>
+                              </a>
+                          </li>
+                          @foreach ($menu ?? [] as $parentId => $parent)
                               @if (count($parent->children) > 0)
                                   <li class="submenu">
                                       <a href="javascript:void(0);"
                                           style="display: flex; align-items: center; gap: 10px;">
-                                          <i class="isax isax-box"></i>
+                                          <i class="{{ $parent->icon ?: 'isax isax-box' }}"></i>
                                           <span>{{ $parent->name }}</span>
                                           <span class="menu-arrow"></span>
                                       </a>
@@ -64,7 +79,7 @@
                                   <li>
                                       <a href="{{ $parent->route ?? 'javascript:void(0);' }}"
                                           style="display: flex; align-items: center; gap: 10px;">
-                                          <i class="isax isax-box"></i>
+                                          <i class="{{ $parent->icon ?: 'isax isax-box' }}"></i>
                                           <span>{{ $parent->name }}</span>
                                       </a>
                                   </li>

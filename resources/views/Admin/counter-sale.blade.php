@@ -15,134 +15,189 @@
                 max-width: 1400px;
             }
         }
-            .calc-label {
-                background-color: #f8f9fa;
-                font-weight: 500;
-            }
 
-            #barcodeInput:focus {
-                border-color: #0d6efd;
-                box-shadow: 0 0 0 .2rem rgba(13, 110, 253, .25);
-            }
+        .calc-label {
+            background-color: #f8f9fa;
+            font-weight: 500;
+        }
 
-            .section-card {
-                border: 1px solid #dee2e6;
-                border-radius: 8px;
-                padding: 16px;
-                background: #fff;
-            }
+        #barcodeInput:focus {
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 .2rem rgba(13, 110, 253, .25);
+        }
 
-            .section-card h6 {
-                font-weight: 600;
-                margin-bottom: 12px;
-                color: #495057;
-            }
+        #itemPickerTable tbody tr {
+            cursor: pointer;
+        }
 
-            /* @media print {
-            body * {
-                visibility: hidden;
-            }
-            #billContent, #billContent * {
-                visibility: visible;
-            }
-            #billContent {
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
-            }
-            .modal-header, .modal-footer {
-                display: none !important;
-            }
-        } */
+        #itemPickerTable tbody tr:hover {
+            background-color: #e8f4ff;
+        }
+
+        .section-card {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 16px;
+            background: #fff;
+        }
+
+        .section-card h6 {
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #495057;
+        }
+
+        .top-entry-row > [class*="col-"] {
+            display: flex;
+        }
+
+        .top-entry-row .section-card {
+            width: 100%;
+        }
+
+        .item-entry .form-label {
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        /* @media print {
+                                    body * {
+                                        visibility: hidden;
+                                    }
+                                    #billContent, #billContent * {
+                                        visibility: visible;
+                                    }
+                                    #billContent {
+                                        position: absolute;
+                                        left: 0;
+                                        top: 0;
+                                        width: 100%;
+                                    }
+                                    .modal-header, .modal-footer {
+                                        display: none !important;
+                                    }
+                                } */
 
 
-            .bill-container {
-                font-family: Arial, sans-serif;
-                font-size: 12px;
-                line-height: 1.4;
-                max-width: 350px;
-                margin: 0 auto;
-            }
+        .bill-container {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 14px;
+            line-height: 1.4;
+            max-width: 420px;
+            margin: 0 auto;
+            color: #000;
+            word-wrap: break-word;
+        }
 
-            .bill-header {
-                text-align: center;
-                border-bottom: 2px solid #000;
-                padding-bottom: 10px;
-                margin-bottom: 10px;
-            }
+        .bill-header {
+            text-align: center;
+            padding-bottom: 4px;
+        }
 
-            .bill-header h3 {
-                margin: 0;
-                font-size: 16px;
-                font-weight: bold;
-            }
+        .bill-header h3 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: bold;
+            text-transform: uppercase;
+            line-height: 1.3;
+        }
 
-            .bill-header p {
-                margin: 5px 0 0 0;
-                font-size: 12px;
-            }
+        .bill-header p {
+            margin: 4px 0 0 0;
+            font-size: 13px;
+        }
 
-            .bill-details {
-                margin-bottom: 10px;
-            }
+        .bill-title {
+            text-align: center;
+            font-weight: bold;
+            text-decoration: underline;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin: 8px 0 10px;
+            font-size: 16px;
+        }
 
-            .bill-details p {
-                margin: 3px 0;
-                display: flex;
-                justify-content: space-between;
-            }
+        .bill-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin: 4px 0;
+            font-size: 13px;
+        }
 
-            .items-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 10px;
-                font-size: 10px;
-            }
+        .bill-customer {
+            margin: 6px 0 10px;
+            font-size: 13px;
+        }
 
-            .items-table th,
-            .items-table td {
-                border: 1px solid #000;
-                padding: 4px 2px;
-                text-align: left;
-            }
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0;
+            font-size: 13px;
+        }
 
-            .items-table th {
-                background-color: #f0f0f0;
-                font-weight: bold;
-            }
+        .items-table th,
+        .items-table td {
+            border: 1px dashed #000;
+            padding: 6px 8px;
+            text-align: left;
+            vertical-align: top;
+        }
 
-            .items-table .text-right {
-                text-align: right;
-            }
+        .items-table th {
+            font-weight: bold;
+            text-transform: uppercase;
+        }
 
-            .total-section {
-                border-top: 2px solid #000;
-                padding-top: 8px;
-                margin-top: 10px;
-            }
+        .items-table .item-name {
+            word-break: break-word;
+        }
 
-            .total-section p {
-                margin: 3px 0;
-                display: flex;
-                justify-content: space-between;
-            }
+        .items-table .text-right {
+            text-align: right;
+            white-space: nowrap;
+        }
 
-            .total-section .final-total {
-                font-weight: bold;
-                font-size: 14px;
-                border-top: 1px solid #000;
-                padding-top: 5px;
-                margin-top: 5px;
-            }
+        .items-table .text-center {
+            text-align: center;
+            white-space: nowrap;
+        }
 
-            .bill-footer {
-                text-align: center;
-                margin-top: 15px;
-                font-size: 10px;
-                border-top: 1px dashed #000;
-                padding-top: 8px;
-            }
+        .bill-words {
+            font-size: 12px;
+            line-height: 1.3;
+        }
+
+        .bill-totals {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9px;
+        }
+
+        .bill-totals td {
+            border-left: 1px dashed #000;
+            border-right: 1px dashed #000;
+            padding: 2px 3px;
+        }
+
+        .bill-totals tr:last-child td {
+            border-bottom: 1px dashed #000;
+        }
+
+        .bill-signature {
+            margin-top: 24px;
+            font-size: 13px;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .text-center {
+            text-align: center;
+        }
     </style>
 @endpush
 
@@ -162,27 +217,52 @@
             </div>
 
 
-            <div class="row mb-3">
+            <div class="row mb-3 top-entry-row">
 
                 {{-- LEFT BOX: Sale Info --}}
                 <div class="col-md-6">
                     <div class="section-card h-100">
-                        <h6>Sale Info</h6>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0">Sale Info</h6>
+                        </div>
+
                         <div class="mb-3">
                             <label class="form-label">Sale Date<span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="saleDate" min="{{ session('year_start') }}"
                                 max="{{ min(date('Y-m-d'), session('year_end')) }}" value="{{ date('Y-m-d') }}">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Select Customer<span class="text-danger">*</span></label>
-                            <select class="form-select" id="partyId">
-                                <option value="">-- Select Customer --</option>
-                                @foreach ($customers as $customer)
-                                    <option value="{{ $customer->Party_Id }}">
-                                        {{ $customer->Party_Name }}-{{ $customer->Party_Code }}</option>
-                                @endforeach
-                            </select>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <label class="form-label mb-1" id="customerLabel">Select Customer<span
+                                        class="text-danger">*</span></label>
+                                <div class="d-flex align-items-center">
+                                    <div class="form-check form-check-inline mb-1">
+                                        <input class="form-check-input" type="radio" name="saleType" id="saleInternal"
+                                            value="internal" checked>
+                                        <label class="form-check-label" for="saleInternal">Internal</label>
+                                    </div>
+                                    <div class="form-check form-check-inline mb-1 me-0">
+                                        <input class="form-check-input" type="radio" name="saleType" id="saleOutside"
+                                            value="outside">
+                                        <label class="form-check-label" for="saleOutside">Outside</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="customerDiv">
+                                <select class="form-select" id="partyId">
+                                    <option value="">-- Select Customer --</option>
+                                    @foreach ($customers as $customer)
+                                        <option value="{{ $customer->Party_Id }}">
+                                            {{ $customer->Party_Name }}-{{ $customer->Party_Code }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div id="cashDiv" style="display:none;">
+                                <input type="text" class="form-control calc-label" value="Cash">
+                            </div>
                         </div>
+
+
                         <div class="mb-3">
                             <label class="form-label">Sale No</label>
                             <input type="text" class="form-control" id="saleNo" maxlength="20" autocomplete="off">
@@ -215,6 +295,10 @@
                                 <label class="form-label">Select Bank</label>
                                 <select class="form-select" id="bankAccountId">
                                     <option value="">-- Select Bank --</option>
+                                    @foreach ($banks as $bank)
+                                        <option value="{{ $bank->Account_Id }}">
+                                            {{ $bank->Ledger_Name ?? $bank->Account_Desc }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                             <div class="col-md-4 mb-3" id="bankRemarksDiv" style="display:none;">
@@ -228,19 +312,20 @@
 
                 {{-- RIGHT BOX: Item Section --}}
                 <div class="col-md-6">
-                    <div class="section-card h-100">
+                    <div class="section-card item-entry h-100">
                         <h6>Item Section</h6>
-
-                        {{-- Barcode Row --}}
-                        <div class="row mb-3">
-                            <div class="col-md-6">
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label"><i class="isax isax-scan"></i> Scan Barcode</label>
                                 <div class="input-group">
                                     <input type="text" class="form-control" id="barcodeInput"
                                         placeholder="Scan or type barcode & press Enter" autocomplete="off">
+                                    <button class="btn btn-primary" type="button" id="productSearchBtn">
+                                        <i class="fa-solid fa-magnifying-glass"></i>
+                                    </button>
                                 </div>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Item Selected</label>
                                 <input type="text" class="form-control calc-label" id="itemSelected" readonly
                                     placeholder="Scan barcode to select item">
@@ -249,70 +334,73 @@
                                 <input type="hidden" id="unitId">
                                 <input type="hidden" id="saleMrp">
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Unit</label>
                                 <input type="text" class="form-control calc-label" id="unitDisplay" readonly>
                             </div>
                         </div>
-
-                        {{-- Calc Fields --}}
                         <div class="row">
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Qty<span class="text-danger">*</span></label>
                                 <input type="number" class="form-control" id="quantity" step="0.01" min="0.01"
                                     autocomplete="off">
                             </div>
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Rate<span class="text-danger">*</span></label>
                                 <input type="number" class="form-control" id="rate" step="0.01" min="0"
                                     autocomplete="off" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Total Amt</label>
                                 <input type="text" class="form-control calc-label" id="totalAmount" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Disc %</label>
                                 <input type="number" class="form-control" id="discountPercent" step="0.01"
                                     max="100" min="0" autocomplete="off" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Disc Amt</label>
                                 <input type="text" class="form-control calc-label" id="discountAmount" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Taxable Amt</label>
                                 <input type="text" class="form-control calc-label" id="taxableAmount" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3 gst-col">
                                 <label class="form-label">CGST Rate</label>
                                 <input type="text" class="form-control calc-label" id="cgstRate" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3 gst-col">
                                 <label class="form-label">CGST Amt</label>
                                 <input type="text" class="form-control calc-label" id="cgstAmount" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3 gst-col">
                                 <label class="form-label">SGST Rate</label>
                                 <input type="text" class="form-control calc-label" id="sgstRate" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3 gst-col">
                                 <label class="form-label">SGST Amt</label>
                                 <input type="text" class="form-control calc-label" id="sgstAmount" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3 gst-col">
                                 <label class="form-label">Total GST</label>
                                 <input type="text" class="form-control calc-label" id="totalGst" readonly>
                             </div>
-                            <div class="col-md-2 mb-2">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Net Amt</label>
                                 <input type="text" class="form-control calc-label" id="netAmount" readonly>
                             </div>
                         </div>
-
-                        <div class="row align-items-end mt-1">
-                            <div class="col-md-3 mb-0">
-                                <label class="form-label">&nbsp;</label>
+                        <div class="row align-items-end">
+                            <div class="col-md-4 mb-3 ms-md-auto">
+                                <label class="form-label d-none d-md-block">&nbsp;</label>
                                 <button type="button" class="btn btn-success w-100 d-block" id="addItemBtn">+ Add
                                     Item</button>
                             </div>
@@ -412,9 +500,67 @@
         </div>
     </div>
 
+    {{-- Item Picker Modal --}}
+    <div class="modal fade" id="itemPickerModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-xl modal-xl-custom">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="itemPickerTitle">Select Item</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 mb-3" id="modalFilterRow">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Category</label>
+                            <select class="form-select form-select-sm" id="modalCateId">
+                                <option value="0">-- All Categories --</option>
+                                @foreach ($categories as $cat)
+                                    <option value="{{ $cat->Prd_CateId }}">{{ $cat->Prd_CateNm }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Sub Category</label>
+                            <select class="form-select form-select-sm" id="modalSubCateId">
+                                <option value="0">-- All Sub Categories --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Product Name / Code</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" id="modalSearchInput"
+                                    placeholder="Search...">
+                                <button class="btn btn-primary" type="button" id="modalSearchBtn">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="itemPickerLoader" class="text-center py-3" style="display:none;">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2 mb-0">Loading items...</p>
+                    </div>
+                    <div id="itemPickerTableWrap" style="display:none;">
+                        <table id="itemPickerTable" class="table table-bordered table-hover table-sm w-100">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Sl</th>
+                                    <th>Item Code</th>
+                                    <th>Item Name</th>
+                                    <th>Unit</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {{-- Sale Search Modal --}}
     <div class="modal fade" id="saleSearchModal" tabindex="-1" data-bs-backdrop="static">
-           <div class="modal-dialog modal-lg modal-xl-custom">
+        <div class="modal-dialog modal-lg modal-xl-custom">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Search Sale</h5>
@@ -464,7 +610,7 @@
     {{-- Bill Modal --}}
     <div class="modal fade" id="billModal" tabindex="-1" role="dialog" aria-labelledby="billModalLabel"
         aria-hidden="true">
-        <div class="modal-dialog modal-sm" role="document" style="max-width: 400px;">
+        <div class="modal-dialog" role="document" style="max-width: 480px;">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="billModalLabel">Sale Bill</h5>
@@ -491,7 +637,13 @@
         const SESSION_YEAR_END = "{{ session('year_end') }}";
         let itemsArray = [];
         let currentSaleId = 0;
+        let currentVouchId = 0;
+        const GST_TYPE = {{ session('gst_type', 1) }};
+        const ORG_NAME = @json(session('org_name', ''));
+        const BRANCH_NAME = @json(session('branch_name', ''));
         let saleSearchDT = null;
+        let itemPickerDT = null;
+        let allItemsData = [];
 
         function showBillModal(billData) {
             if (!billData) {
@@ -507,64 +659,187 @@
             billModal.show();
         }
 
-        // Function to generate bill HTML
-        function generateBillHTML(billData) {
-            let itemsHtml = '';
+        function pickVal(obj, keys, fallback) {
+            if (!obj) return fallback;
+            for (let i = 0; i < keys.length; i++) {
+                const val = obj[keys[i]];
+                if (val !== undefined && val !== null && val !== '') return val;
+            }
+            return fallback;
+        }
 
-            if (billData.items && Array.isArray(billData.items)) {
-                billData.items.forEach(item => {
-                    itemsHtml += `
-                <tr>
-                    <td>${item.item_name || 'N/A'}</td>
-                    <td class="text-right">${item.qty }</td>
-                    <td class="text-right">${parseFloat(item.rate ).toFixed(2)}</td>
-                    <td class="text-right">${parseFloat(item.amount ).toFixed(2)}</td>
-                </tr>
-            `;
-                });
+        function fmtAmt(n) {
+            const val = parseFloat(n);
+            return isNaN(val) ? '0.00' : val.toFixed(2);
+        }
+
+        function fmtDate(d) {
+            return (window.siDate && siDate.toDisplay) ? siDate.toDisplay(d) : (d || '');
+        }
+
+        function numberToWords(amount) {
+            var num = Math.round((parseFloat(amount) || 0) * 100) / 100;
+            var rupees = Math.floor(num);
+            var paise = Math.round((num - rupees) * 100);
+            var ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+                'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+            var tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+            function twoDigits(n) {
+                if (n < 20) return ones[n];
+                return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+            }
+            function threeDigits(n) {
+                if (n < 100) return twoDigits(n);
+                return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + twoDigits(n % 100) : '');
+            }
+            function toWords(n) {
+                if (n === 0) return 'Zero';
+                var crore = Math.floor(n / 10000000);
+                var lakh = Math.floor((n % 10000000) / 100000);
+                var thousand = Math.floor((n % 100000) / 1000);
+                var rest = n % 1000;
+                var parts = [];
+                if (crore) parts.push(twoDigits(crore) + ' Crore');
+                if (lakh) parts.push(twoDigits(lakh) + ' Lakh');
+                if (thousand) parts.push(twoDigits(thousand) + ' Thousand');
+                if (rest) parts.push(threeDigits(rest));
+                return parts.join(' ');
             }
 
-            const discount = parseFloat(billData.Discount);
-            const totalAmount = parseFloat(billData.Tot_Amount);
+            var text = 'Rs. ' + toWords(rupees);
+            if (paise > 0) {
+                text += ' and ' + twoDigits(paise) + ' Paise';
+            }
+            return text + ' Only';
+        }
+
+        function captureBillSnapshot() {
+            const transMode = $('input[name="transMode"]:checked').val();
+            const payMode = transMode == '2' ? 'Bank' : (transMode == '3' ? 'Credit' : 'Cash');
+            const isOutside = $('input[name="saleType"]:checked').val() === 'outside';
+            const customer = isOutside ? 'Cash' : (($('#partyId option:selected').text() || '').trim() || 'Cash');
+            return {
+                Org_Name: ORG_NAME,
+                Branch_Name: BRANCH_NAME,
+                Invoice_No: $('#saleNo').val(),
+                Invoice_Date: $('#saleDate').val(),
+                Cust_Name: customer,
+                Pay_Mode: payMode,
+                Discount: $('#totalDiscountAmount').val() || 0,
+                Disc_Percent: $('#summaryDiscPercent').val() || 0,
+                Taxable: $('#totalTaxableAmount').val() || 0,
+                GST_Amt: $('#totalGSTAmount').val() || 0,
+                CGST: itemsArray.reduce((s, i) => s + (parseFloat(i.cgst_amount) || 0), 0),
+                SGST: itemsArray.reduce((s, i) => s + (parseFloat(i.sgst_amount) || 0), 0),
+                Round_Off: $('#roundOff').val() || 0,
+                Tot_Amount: $('#finalNetAmount').val() || 0,
+                Gross_Amt: $('#summaryTotalAmount').val() || 0,
+                items: itemsArray.map(item => ({
+                    item_name: item.item_name,
+                    qty: item.quantity,
+                    rate: item.rate,
+                    amount: item.net_amount || item.total_amount,
+                    hsn: item.hsn_code || ''
+                }))
+            };
+        }
+
+        function mergeBillData(apiBill, snapshot) {
+            const src = apiBill || {};
+            const items = (src.items && src.items.length) ? src.items
+                : (src.Item_Details && src.Item_Details.length) ? src.Item_Details
+                : (snapshot.items || []);
+            return {
+                Org_Name: pickVal(src, ['Org_Name', 'org_name', 'Shop_Name'], snapshot.Org_Name),
+                Branch_Name: pickVal(src, ['Branch_Name', 'branch_name'], snapshot.Branch_Name),
+                Invoice_No: pickVal(src, ['Invoice_No', 'invoice_no', 'Sale_No'], snapshot.Invoice_No),
+                Invoice_Date: pickVal(src, ['Invoice_Date', 'invoice_date', 'Sale_Date'], snapshot.Invoice_Date),
+                Cust_Name: pickVal(src, ['Cust_Name', 'cust_name', 'Party_Name'], snapshot.Cust_Name),
+                Pay_Mode: pickVal(src, ['Pay_Mode', 'pay_mode', 'Trans_Mode'], snapshot.Pay_Mode),
+                Discount: pickVal(src, ['Discount', 'Disc_Amt', 'discount'], snapshot.Discount),
+                Disc_Percent: pickVal(src, ['Disc_Percent', 'Disc_Perc', 'disc_percent'], snapshot.Disc_Percent),
+                Taxable: pickVal(src, ['Taxable', 'Taxable_Amt', 'taxable'], snapshot.Taxable),
+                GST_Amt: pickVal(src, ['GST_Amt', 'Tot_Gst', 'gst_amt'], snapshot.GST_Amt),
+                CGST: pickVal(src, ['CGST', 'Cgst_Amt', 'cgst'], snapshot.CGST),
+                SGST: pickVal(src, ['SGST', 'Sgst_Amt', 'sgst'], snapshot.SGST),
+                Round_Off: pickVal(src, ['Round_Off', 'round_off'], snapshot.Round_Off),
+                Tot_Amount: pickVal(src, ['Tot_Amount', 'Net_Amt', 'net_amount'], snapshot.Tot_Amount),
+                Gross_Amt: pickVal(src, ['Gross_Amt', 'Tot_Amt', 'gross'], snapshot.Gross_Amt),
+                items: items
+            };
+        }
+
+        function generateBillHTML(billData) {
+            let itemsHtml = '';
+            const rows = billData.items && Array.isArray(billData.items) ? billData.items : [];
+            rows.forEach((item) => {
+                const name = pickVal(item, ['item_name', 'Item_Name', 'Prod_ShortNm', 'Prod_Name'], 'N/A');
+                const qty = pickVal(item, ['qty', 'Qty', 'quantity', 'Qnty'], '0');
+                const rate = pickVal(item, ['rate', 'Rate', 'MRP'], 0);
+                const amount = pickVal(item, ['amount', 'Amount', 'net_amount', 'Net_Amt', 'total_amount'], 0);
+                itemsHtml += `
+                <tr>
+                    <td class="item-name">${name}</td>
+                    <td class="text-center">${qty}</td>
+                    <td class="text-right">${fmtAmt(rate)}</td>
+                    <td class="text-right">${fmtAmt(amount)}</td>
+                </tr>`;
+            });
+
+            const discount = parseFloat(billData.Discount) || 0;
+            const roundOff = parseFloat(billData.Round_Off) || 0;
+            const totalAmount = parseFloat(billData.Tot_Amount) || 0;
+            const grossAmt = parseFloat(billData.Gross_Amt) || 0;
+            let discPct = parseFloat(billData.Disc_Percent) || 0;
+            if (!discPct && grossAmt > 0 && discount > 0) {
+                discPct = (discount / grossAmt) * 100;
+            }
+            const discPctLabel = discPct > 0 ? fmtAmt(discPct) : '';
 
             return `
         <div class="bill-container">
             <div class="bill-header">
-                <h3>${billData.Cust_Name}</h3>
-                <p>Sale Invoice</p>
+                <h3>${billData.Org_Name || 'Smart Inventory'}</h3>
+                ${billData.Branch_Name ? `<p>${billData.Branch_Name}</p>` : ''}
             </div>
-            
-            <div class="bill-details">
-                <p><strong>Invoice No:</strong> <span>${billData.Invoice_No || 'N/A'}</span></p>
-                <p><strong>Date:</strong> <span>${billData.Invoice_Date || 'N/A'}</span></p>
-                <p><strong>Customer:</strong> <span>${billData.Cust_Name || 'N/A'}</span></p>
+            <div class="bill-title">BILL</div>
+            <div class="bill-meta">
+                <span>No. : ${billData.Invoice_No || 'N/A'}</span>
+                <span>Date : ${fmtDate(billData.Invoice_Date) || 'N/A'}</span>
             </div>
-            
+            <div class="bill-customer">Customer Name : ${billData.Cust_Name || 'Cash'}</div>
             <table class="items-table">
                 <thead>
                     <tr>
-                        <th>Item</th>
-                        <th>Qty</th>
-                        <th>Rate</th>
-                        <th>Amount</th>
+                        <th>ITEM</th>
+                        <th class="text-center" style="width:14%;">QTY</th>
+                        <th class="text-right" style="width:20%;">MRP</th>
+                        <th class="text-right" style="width:22%;">AMT</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${itemsHtml}
+                    ${itemsHtml || '<tr><td colspan="4" class="text-center">No items</td></tr>'}
+                    <tr>
+                        <td colspan="3" class="text-right">Amount :</td>
+                        <td class="text-right">${fmtAmt(grossAmt || totalAmount)}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="3">(-) Disc @ ${discPctLabel}% :</td>
+                        <td class="text-right">${discount > 0 ? fmtAmt(discount) : ''}</td>
+                    </tr>
+                    ${roundOff != 0 ? `<tr>
+                        <td colspan="3">Round Off</td>
+                        <td class="text-right">${fmtAmt(roundOff)}</td>
+                    </tr>` : ''}
+                    <tr>
+                        <td colspan="3" class="bill-words">${numberToWords(totalAmount)}</td>
+                        <td class="text-right"><strong>${fmtAmt(totalAmount)}</strong></td>
+                    </tr>
                 </tbody>
             </table>
-            
-            <div class="total-section">
-                ${discount > 0 ? `<p><strong>Discount:</strong> <span>${discount.toFixed(2)}</span></p>` : ''}
-                <p class="final-total"><strong>Total Amount:</strong> <span>${totalAmount.toFixed(2)}</span></p>
-            </div>
-            
-            <div class="bill-footer">
-                <p>Thank you for your business!</p>
-                <p>Visit Again!</p>
-            </div>
-        </div>
-    `;
+            <div class="bill-signature">Signature</div>
+        </div>`;
         }
 
         // Function to print bill
@@ -576,7 +851,7 @@
 
             iframe = document.createElement('iframe');
             iframe.id = 'printFrame';
-            iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:80mm;height:auto;border:none;';
+            iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:58mm;height:auto;border:none;';
             document.body.appendChild(iframe);
 
             const doc = iframe.contentWindow.document;
@@ -588,36 +863,41 @@
 <style>
     * { margin:0; padding:0; box-sizing:border-box; }
 @page {
-    size: 80mm auto;
-    margin: 0;
+    size: 58mm auto;
+    margin: 2mm 1.5mm;
 }
-
 html, body {
     margin: 0;
     padding: 0;
-    width: 100%;
+    width: 58mm;
 }
-
 body {
-    display: flex;
-    justify-content: center;
+    width: 58mm;
 }
 .bill-container {
-    width: 76mm;
-    margin: 0 auto; 
+    width: 54mm;
+    max-width: 54mm;
+    margin: 0 auto;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10px;
+    color: #000;
+    line-height: 1.25;
+    word-wrap: break-word;
 }
-    .bill-header { text-align:center; border-bottom:1px dashed #000; padding-bottom:5px; margin-bottom:5px; }
-    .bill-header h3 { font-size:14px; font-weight:bold; }
-    .bill-header p { font-size:11px; }
-    .bill-details p { display:flex; justify-content:space-between; margin:2px 0; }
-    .items-table { width:100%; border-collapse:collapse; margin:5px 0; font-size:10px; }
-    .items-table th, .items-table td { border:1px solid #000; padding:2px 3px; }
-    .items-table th { background:#eee; }
-    .text-right { text-align:right; }
-    .total-section { border-top:1px dashed #000; padding-top:5px; margin-top:5px; }
-    .total-section p { display:flex; justify-content:space-between; margin:2px 0; }
-    .final-total { font-weight:bold; font-size:12px; border-top:1px solid #000; padding-top:3px; margin-top:3px; }
-    .bill-footer { text-align:center; border-top:1px dashed #000; padding-top:5px; margin-top:8px; font-size:10px; }
+.bill-header { text-align:center; padding-bottom:2px; }
+.bill-header h3 { font-size:11px; font-weight:bold; text-transform:uppercase; margin:0; line-height:1.2; }
+.bill-header p { font-size:9px; margin:2px 0 0; }
+.bill-title { text-align:center; font-weight:bold; text-decoration:underline; text-transform:uppercase; letter-spacing:1px; margin:4px 0 6px; font-size:11px; }
+.bill-meta { display:flex; justify-content:space-between; gap:4px; margin:2px 0; font-size:9px; }
+.bill-customer { margin:3px 0 6px; font-size:9px; }
+.items-table { width:100%; border-collapse:collapse; font-size:9px; }
+.items-table th, .items-table td { border:1px dashed #000; padding:2px 3px; text-align:left; vertical-align:top; }
+.items-table th { font-weight:bold; text-transform:uppercase; }
+.items-table .item-name { word-break:break-word; }
+.text-right { text-align:right; white-space:nowrap; }
+.text-center { text-align:center; white-space:nowrap; }
+.bill-words { font-size:8px; line-height:1.2; }
+.bill-signature { margin-top:14px; font-size:9px; }
 </style>
 </head>
 <body>${billHtml}</body>
@@ -640,9 +920,25 @@ body {
                 placeholder: '-- Select Bank --',
                 allowClear: true
             });
+            if (GST_TYPE == 2) {
+                $('#cgstRate, #cgstAmount, #sgstRate, #sgstAmount, #totalGst').closest('.gst-col').hide();
+                $('th:contains("CGST"), th:contains("SGST"), th:contains("Total GST")').hide();
+                $('#totalGSTAmount').closest('tr').hide();
+            }
 
 
-            // Function to show bill modal
+            $('input[name="saleType"]').on('change', function() {
+                if ($(this).val() === 'outside') {
+                    $('#customerDiv').hide();
+                    $('#cashDiv').show();
+                    $('#partyId').val('').trigger('change');
+                } else {
+                    $('#customerDiv').show();
+                    $('#cashDiv').hide();
+                    $('#partyId').val('').trigger('change');
+                }
+            });
+
 
 
 
@@ -681,7 +977,7 @@ body {
                         html += `<tr>
                 <td>${i + 1}</td>
                 <td>${row.Invoice_No}</td>
-                <td>${row.Invoice_Date}</td>
+                <td>${siDate.toDisplay(row.Invoice_Date)}</td>
                 <td>${row.Net_Amt}</td>
                 <td><button class="btn btn-sm btn-primary viewSale" data-id="${row.Sale_Id}">Edit</button></td>
             </tr>`;
@@ -718,6 +1014,7 @@ body {
 
                 $.get("{{ url('counter-sale/details') }}/" + saleId, function(data) {
                     $('#saleSearchModal').modal('hide');
+                    currentVouchId = data.Voucher_Id || 0;
 
                     // Fill header
                     $('#saleDate').val(data.Invoice_Date ? data.Invoice_Date.substring(0, 10) : '');
@@ -828,10 +1125,164 @@ body {
                         $('#barcodeInput').focus();
                     })
                     .fail(function() {
-                        Swal.fire('Not Found', 'No item found for barcode: ' + barcode, 'warning');
-                        $('#barcodeInput').select();
+                        $.get("{{ route('counter-sale.items') }}", {
+                            code: barcode,
+                            cat_id: 0,
+                            sub_cat_id: 0
+                        }, function(data) {
+                            if (data.length > 0) {
+                                openItemPickerModal(data, true, barcode);
+                            } else {
+                                Swal.fire('Not Found', 'No item found for barcode: ' + barcode, 'warning');
+                                $('#barcodeInput').select();
+                            }
+                        }).fail(function() {
+                            Swal.fire('Not Found', 'No item found for barcode: ' + barcode, 'warning');
+                            $('#barcodeInput').select();
+                        });
                     });
             }
+
+            function ensureSaleDate() {
+                const saleDate = $('#saleDate').val();
+                if (!saleDate) {
+                    Swal.fire('Error', 'Please select sale date first', 'error');
+                    $('#saleDate').focus();
+                    return false;
+                }
+                const saleDateObj = new Date(saleDate);
+                const yearStartObj = new Date('{{ session('year_start') }}');
+                const yearEndObj = new Date('{{ session('year_end') }}');
+                const today = new Date();
+                if (saleDateObj > today) {
+                    Swal.fire('Error', 'Sale Date cannot be After Today', 'error');
+                    $('#saleDate').focus();
+                    return false;
+                }
+                if (saleDateObj < yearStartObj || saleDateObj > yearEndObj) {
+                    Swal.fire('Error',
+                        'Sale Date must be between {{ session('year_start') }} and {{ session('year_end') }}',
+                        'error');
+                    $('#saleDate').focus();
+                    return false;
+                }
+                return true;
+            }
+
+            $('#productSearchBtn').on('click', function(e) {
+                e.preventDefault();
+                if (!ensureSaleDate()) return;
+                const code = $('#barcodeInput').val().trim();
+                if (!code) {
+                    openItemPickerModal([], false, '');
+                    return;
+                }
+                $.get("{{ route('counter-sale.items') }}", {
+                    code: code,
+                    cat_id: 0,
+                    sub_cat_id: 0
+                }, function(data) {
+                    openItemPickerModal(data, true, code);
+                }).fail(function() {
+                    Swal.fire('Error', 'Failed to load items', 'error');
+                });
+            });
+
+            $('#modalCateId').on('change', function() {
+                const catId = parseInt($(this).val()) || 0;
+                $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
+                if (!catId) return;
+                $.get("{{ route('counter-sale.subcats') }}", {
+                    cat_id: catId
+                }, function(subs) {
+                    subs.forEach(s => {
+                        $('#modalSubCateId').append(
+                            `<option value="${s.Prd_SubCateId}">${s.Prd_SubCateNm}</option>`
+                        );
+                    });
+                });
+            });
+
+            $('#modalSearchBtn').on('click', function() {
+                const catId = parseInt($('#modalCateId').val()) || 0;
+                const subCatId = parseInt($('#modalSubCateId').val()) || 0;
+                const code = $('#modalSearchInput').val().trim();
+                $('#itemPickerLoader').show();
+                $('#itemPickerTableWrap').hide();
+                if (itemPickerDT) {
+                    itemPickerDT.destroy();
+                    itemPickerDT = null;
+                }
+                $('#itemPickerTable tbody').html('');
+                $.get("{{ route('counter-sale.items') }}", {
+                    cat_id: catId,
+                    sub_cat_id: subCatId,
+                    code: code
+                }, function(data) {
+                    renderItemPickerTable(data, false);
+                }).fail(function() {
+                    $('#itemPickerLoader').hide();
+                    Swal.fire('Error', 'Failed to load items', 'error');
+                });
+            });
+
+            $('#modalSearchInput').on('keypress', function(e) {
+                if (e.which === 13) $('#modalSearchBtn').trigger('click');
+            });
+
+            $('#itemPickerModal').on('hidden.bs.modal', function() {
+                $('#modalCateId').val('0');
+                $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
+                $('#modalSearchInput').val('');
+                $('#itemPickerLoader').hide();
+                $('#itemPickerTableWrap').hide();
+                if (itemPickerDT) {
+                    itemPickerDT.destroy();
+                    itemPickerDT = null;
+                }
+                $('#itemPickerTable tbody').html('');
+            });
+
+            function openItemPickerModal(data, isCodeSearch, code) {
+                $('#itemPickerTitle').text('Select Item');
+                $('#itemPickerLoader').hide();
+                $('#itemPickerTableWrap').hide();
+                if (itemPickerDT) {
+                    itemPickerDT.destroy();
+                    itemPickerDT = null;
+                }
+                $('#itemPickerTable tbody').html('');
+                allItemsData = data;
+                $('#modalFilterRow').show();
+                // Partial code (e.g. "sm") must not auto-select category/subcategory.
+                $('#modalCateId').val('0');
+                $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
+                $('#modalSearchInput').val(code || '');
+                $('#itemPickerModal').modal('show');
+                if (data.length > 0) {
+                    $('#itemPickerLoader').show();
+                    renderItemPickerTable(data, isCodeSearch);
+                }
+            }
+
+            $(document).on('click', '#itemPickerTable tbody tr', function() {
+                const $row = $(this);
+                const prodId = $row.data('id');
+                if (!prodId) return;
+                if (!ensureSaleDate()) return;
+                $.get("{{ route('counter-sale.item-info') }}", {
+                    prod_id: prodId,
+                    sale_date: $('#saleDate').val()
+                }).done(function(item) {
+                    $('#itemPickerModal').modal('hide');
+                    populateItemFields(item);
+                    if ($row.data('hsn')) {
+                        $('#selectedHsnCode').val($row.data('hsn'));
+                    }
+                }).fail(function(xhr) {
+                    Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load item details', 'error');
+                });
+            });
 
 
             $('#quantity').on('input', calculateAmounts);
@@ -884,7 +1335,7 @@ body {
                     sgst_amount: $('#sgstAmount').val(),
                     total_gst: $('#totalGst').val(),
                     net_amount: $('#netAmount').val(),
-                    sale_mrp: $('#saleMrp').val() || 0,
+                    sale_mrp: $('#saleMrp').val() || $('#rate').val() || 0,
                 });
                 renderItemsTable();
                 clearItemSelection();
@@ -943,10 +1394,12 @@ body {
                     Swal.fire('Error', 'Sale Date is required', 'error');
                     return;
                 }
-                if (!$('#partyId').val()) {
+                const isOutside = $('input[name="saleType"]:checked').val() === 'outside';
+                if (!isOutside && !$('#partyId').val()) {
                     Swal.fire('Error', 'Please select a Customer', 'error');
                     return;
                 }
+
 
                 if (itemsArray.length === 0) {
                     Swal.fire('Error', 'Please add at least one item', 'error');
@@ -965,9 +1418,10 @@ body {
                     data: {
                         _token: "{{ csrf_token() }}",
                         sale_id: currentSaleId,
+                        vouch_id: currentVouchId,
                         sale_date: $('#saleDate').val(),
                         sale_no: $('#saleNo').val(),
-                        party_id: $('#partyId').val(),
+                        party_id: isOutside ? 0 : $('#partyId').val(),
                         trans_mode: $('input[name="transMode"]:checked').val(),
                         ref_vouch_no: $('#refVoucherNo').val(),
                         bank_id: $('#bankAccountId').val(),
@@ -980,13 +1434,12 @@ body {
                         items: itemsArray
                     },
                     success: function(res) {
+                        const snapshot = captureBillSnapshot();
                         const msg = currentSaleId > 0 ? 'Sale Updated Successfully' : res
                             .message;
                         Swal.fire('Success', msg, 'success').then(() => {
-                            // Show bill if available
-                            if (res.show_bill && res.bill_data) {
-                                showBillModal(res.bill_data);
-                            }
+                            const bill = mergeBillData(res.bill_data, snapshot);
+                            showBillModal(bill);
                             resetForm();
                         });
                     },
@@ -1004,6 +1457,56 @@ body {
         });
 
         // ── Helper Functions ──────────────────────────────────────────────
+
+        function renderItemPickerTable(data, isCodeSearch) {
+            setTimeout(function() {
+                $('#itemPickerLoader').hide();
+                if (!data.length) {
+                    $('#itemPickerTable tbody').html(
+                        '<tr><td colspan="4" class="text-center text-muted">No items found</td></tr>');
+                    $('#itemPickerTableWrap').show();
+                    return;
+                }
+                $.each(data, function(i, item) {
+                    const gst = item.GST_Data ? (typeof item.GST_Data === 'string' ? JSON.parse(item.GST_Data) : item.GST_Data) : {};
+                    $('#itemPickerTable tbody').append(
+                        `<tr data-id="${item.Prod_Id}"
+                     data-name="${item.Prod_ShortNm}"
+                     data-unit="${item.Unit_Id}"
+                     data-unitname="${item.Unit_Name}"
+                     data-hsn="${item.Gst_Id ?? 0}"
+                     data-cgst="${gst.CGST ?? 0}"
+                     data-sgst="${gst.SGST ?? 0}">
+                    <td>${i + 1}</td>
+                    <td>${item.Prod_Code}</td>
+                    <td>${item.Prod_ShortNm}</td>
+                    <td>${item.Unit_Name}</td>
+                </tr>`
+                    );
+                });
+                if (itemPickerDT) {
+                    itemPickerDT.destroy();
+                    itemPickerDT = null;
+                }
+                $('#itemPickerTableWrap').show();
+                itemPickerDT = $('#itemPickerTable').DataTable({
+                    pageLength: 10,
+                    lengthMenu: [10, 25, 50],
+                    ordering: true,
+                    sDom: 'fBtlpi',
+                    language: {
+                        search: '',
+                        searchPlaceholder: 'Search items...',
+                        sLengthMenu: 'Row Per Page _MENU_ Entries',
+                        info: '_START_ - _END_ of _TOTAL_ items',
+                        paginate: {
+                            next: '<i class="isax isax-arrow-right-1"></i>',
+                            previous: '<i class="isax isax-arrow-left"></i>'
+                        }
+                    }
+                });
+            }, 0);
+        }
 
         function populateItemFields(item) {
             const productId = item.Prod_Id;
@@ -1028,21 +1531,23 @@ body {
             $('#itemSelected').val(item.Prod_ShortNm);
             $('#unitId').val(item.Unit_Id);
             $('#unitDisplay').val(item.Unit_Name);
-            $('#rate').val(item.MRP);
+            const stockMrp = parseFloat(item.MRP ?? item.Rate) || 0;
+            $('#rate').val(stockMrp > 0 ? stockMrp.toFixed(2) : '');
+            $('#saleMrp').val(stockMrp > 0 ? stockMrp.toFixed(2) : '0');
             $('#discountPercent').val(item.Discount || 0);
-            $('#cgstRate').val(cgst);
-            $('#sgstRate').val(sgst);
+            $('#cgstRate').val(GST_TYPE == 2 ? 0 : cgst);
+            $('#sgstRate').val(GST_TYPE == 2 ? 0 : sgst);
             $('#quantity').val(1);
-            $('#saleMrp').val(item.MRP);
-
             calculateAmounts();
-            // Store additional data
-            $('#barcodeInput').data('available-qty', item.Avil_Qnty);
-            $('#barcodeInput').data('pack-date', item.Pack_Date);
-
-            // Show available quantity info
-            if (item.Avil_Qnty <= 0) {
-                Swal.fire('Warning', 'This product is out of stock!', 'warning');
+            if (item.Avil_Qnty != null) {
+                $('#barcodeInput').data('available-qty', item.Avil_Qnty);
+                $('#barcodeInput').data('pack-date', item.Pack_Date);
+                if (item.Avil_Qnty <= 0) {
+                    Swal.fire('Warning', 'This product is out of stock!', 'warning');
+                }
+            } else {
+                $('#barcodeInput').removeData('available-qty');
+                $('#barcodeInput').removeData('pack-date');
             }
             $('#saleDate').prop('disabled', true);
             $('#quantity').focus();
@@ -1107,7 +1612,7 @@ body {
                 Swal.fire('Error', 'Quantity must be greater than 0', 'error');
                 return false;
             }
-            if (qty > availableQty) {
+            if (!isNaN(availableQty) && qty > availableQty) {
                 Swal.fire('Error', `You cannot sell this product as available quantity = ${availableQty}`, 'error');
                 return false;
             }
@@ -1209,7 +1714,9 @@ body {
         function resetForm() {
             itemsArray = [];
             currentSaleId = 0;
-            $('#saleDate, #saleNo, #refVoucherNo, #bankRemarks').val('');
+            currentVouchId = 0;
+            $('#saleNo, #refVoucherNo, #bankRemarks').val('');
+            $('#saleDate').val('{{ date('Y-m-d') }}');
             $('#partyId, #bankAccountId').val('').trigger('change');
             $('#bankSelectDiv, #bankRemarksDiv').hide();
             $('#transCash').prop('checked', true);
@@ -1221,6 +1728,10 @@ body {
             $('#saleDate').prop('disabled', false);
             clearItemSelection();
             $('#barcodeInput').focus();
+            $('#saleInternal').prop('checked', true);
+            $('#customerDiv').show();
+            $('#cashDiv').hide();
+
 
             $('#addItemBtn').text('+ Add Item').data('editing', false);
         }

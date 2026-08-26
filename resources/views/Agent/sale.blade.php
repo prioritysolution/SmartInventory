@@ -454,7 +454,7 @@
                 </div>
                 <div class="bill-details">
                     <p><strong>Invoice No:</strong> <span>${billData.Invoice_No || 'N/A'}</span></p>
-                    <p><strong>Date:</strong> <span>${billData.Invoice_Date || 'N/A'}</span></p>
+                    <p><strong>Date:</strong> <span>${siDate.toDisplay(billData.Invoice_Date) || 'N/A'}</span></p>
                     <p><strong>Customer:</strong> <span>${billData.Cust_Name || 'N/A'}</span></p>
                 </div>
                 <table class="items-table">
