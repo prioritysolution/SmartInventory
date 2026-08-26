@@ -17,12 +17,14 @@
             </a>
             <ul>
                 @foreach($parent->children as $child)
+                @if($child->name)
                 <li>
                     <a href="{{ $child->route ? route($child->route) : 'javascript:void(0);' }}"
-                       class="{{ $child->route && request()->routeIs($child->route) ? 'active' : '' }}" >
-                        {{ $child->name }}
+                       class="{{ $child->route && request()->routeIs($child->route) ? 'active' : '' }}">
+                        <span>{{ $child->name }}</span>
                     </a>
                 </li>
+                @endif
                 @endforeach
             </ul>
         </li>

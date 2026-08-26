@@ -74,20 +74,42 @@ class AppServiceProvider extends ServiceProvider
 
     $menuData = DB::connection('coops')->select("CALL USP_GET_AGENT_MENUE()");
 
+    $submenuRoutes = [
+        1 => 'agent.report.indent',
+        2 => 'agent.report.issue',
+        3 => 'agent.report.sale',
+        4 => 'agent.report.return',
+        5 => 'agent.report.stock',
+    ];
+    $submenuNames = [
+        1 => 'Indent',
+        2 => 'Issue',
+        3 => 'Sales',
+        4 => 'Return',
+        5 => 'Stock',
+    ];
+
     $menu = [];
     foreach ($menuData as $item) {
         if (!isset($menu[$item->Menu_Id])) {
             $menu[$item->Menu_Id] = (object)[
                 'name'     => $item->Menu_Name,
                 'icon'     => $item->Icon,
-                'route'    => $item->Route,
+                'route'    => $item->SubMenu_Id ? null : $item->Route,
                 'children' => []
             ];
+        } elseif ($item->Menu_Name && !$menu[$item->Menu_Id]->name) {
+            $menu[$item->Menu_Id]->name = $item->Menu_Name;
         }
         if ($item->SubMenu_Id) {
+            $subId = (int) $item->SubMenu_Id;
+            $childName = $item->SubMenu_Name ?: ($submenuNames[$subId] ?? '');
+            if ($childName === '') {
+                continue;
+            }
             $menu[$item->Menu_Id]->children[] = (object)[
-                'name'  => $item->SubMenu_Name,
-                'route' => $item->Route
+                'name'  => $childName,
+                'route' => $item->Route ?: ($submenuRoutes[$subId] ?? null)
             ];
         }
     }

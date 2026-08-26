@@ -116,10 +116,16 @@
             return;
         }
         var css = [
-            '.si-date-wrap { width: 100%; position: relative; z-index: 5; }',
+            '.si-date-wrap { width: 100%; position: relative; z-index: 5; overflow: visible; }',
+            '.si-date-wrap.si-picker-open { z-index: 40; }',
+            '.card:has(.si-date-wrap), .card-body:has(.si-date-wrap), .col-md-3:has(.si-date-wrap), .col-md-4:has(.si-date-wrap), .col-md-6:has(.si-date-wrap) { overflow: visible; }',
+            '.si-date-wrap .input-group { width: 100%; }',
             '.si-date-wrap .input-group-text { cursor: pointer; background: #fff; }',
+            '.si-date-wrap .si-date-icon i { font-size: 16px; color: #5b6670; }',
             '.si-date-wrap input.si-dmy { background-image: none !important; cursor: text; }',
             '.si-date-wrap input.si-dmy::-webkit-calendar-picker-indicator { display: none !important; }',
+            '.si-date-wrap > .bootstrap-datetimepicker-widget { position: absolute !important; top: calc(100% + 4px) !important; left: 0 !important; right: auto !important; bottom: auto !important; inset: auto !important; transform: none !important; margin: 0 !important; z-index: 20000 !important; }',
+            '.si-date-wrap > .bootstrap-datetimepicker-widget.si-date-flip { top: auto !important; bottom: calc(100% + 4px) !important; }',
             '.bootstrap-datetimepicker-widget { z-index: 20000 !important; }',
             '.bootstrap-datetimepicker-widget.dropdown-menu { margin: 0 !important; }',
             '.modal .bootstrap-datetimepicker-widget { z-index: 20050 !important; }'
@@ -165,37 +171,23 @@
     };
 
     function placeWidget($input) {
-        var $anchor = $input.closest('.si-date-wrap');
-        if (!$anchor.length) {
-            $anchor = $input;
-        }
-        var $widget = $('.bootstrap-datetimepicker-widget:visible').last();
-        if (!$widget.length) {
-            $widget = $('.bootstrap-datetimepicker-widget').last();
-        }
-        if (!$widget.length || !$anchor[0]) {
+        var $wrap = $input.closest('.si-date-wrap');
+        if (!$wrap.length) {
             return;
         }
-        var rect = $anchor[0].getBoundingClientRect();
+        var $widget = $wrap.children('.bootstrap-datetimepicker-widget');
+        if (!$widget.length) {
+            $widget = $wrap.find('.bootstrap-datetimepicker-widget').first();
+        }
+        if (!$widget.length) {
+            return;
+        }
+        $widget.removeClass('si-date-flip');
+        var rect = $wrap[0].getBoundingClientRect();
         var widgetHeight = $widget.outerHeight() || 280;
-        var widgetWidth = $widget.outerWidth() || 280;
-        var top = rect.bottom + 4;
-        var left = rect.left;
-        if (top + widgetHeight > window.innerHeight - 8) {
-            top = Math.max(8, rect.top - widgetHeight - 4);
+        if (rect.bottom + widgetHeight > window.innerHeight - 8 && rect.top > widgetHeight + 8) {
+            $widget.addClass('si-date-flip');
         }
-        if (left + widgetWidth > window.innerWidth - 8) {
-            left = Math.max(8, window.innerWidth - widgetWidth - 8);
-        }
-        $widget.css({
-            position: 'fixed',
-            top: top + 'px',
-            left: left + 'px',
-            right: 'auto',
-            bottom: 'auto',
-            display: 'block',
-            zIndex: 20000
-        });
     }
 
     function wrapWithCalendar($el) {
@@ -203,12 +195,14 @@
             return $el.closest('.si-date-wrap');
         }
 
-        var $wrap = $('<div class="input-group si-date-wrap"></div>');
+        var $wrap = $('<div class="si-date-wrap"></div>');
+        var $group = $('<div class="input-group"></div>');
         $el.after($wrap);
-        $wrap.append($el);
-        $wrap.append(
+        $wrap.append($group);
+        $group.append($el);
+        $group.append(
             '<span class="input-group-text input-group-addon si-date-icon datepickerbutton" title="Select date">' +
-                '<i class="fa-solid fa-calendar" aria-hidden="true"></i>' +
+                '<i class="fa-solid fa-calendar fas fa-calendar" aria-hidden="true"></i>' +
             '</span>'
         );
         return $wrap;
@@ -267,21 +261,21 @@
                         this.hide();
                     }
                 },
-                widgetParent: $('body'),
+                widgetParent: $wrap,
                 widgetPositioning: {
                     horizontal: 'auto',
                     vertical: 'bottom'
                 },
                 icons: {
-                    time: 'fa fa-clock',
-                    date: 'fa fa-calendar',
-                    up: 'fa fa-angle-up',
-                    down: 'fa fa-angle-down',
-                    previous: 'fa fa-angle-left',
-                    next: 'fa fa-angle-right',
-                    today: 'fa fa-crosshairs',
-                    clear: 'fa fa-trash',
-                    close: 'fa fa-times'
+                    time: 'fa fa-clock fas fa-clock',
+                    date: 'fa fa-calendar fas fa-calendar',
+                    up: 'fa fa-angle-up fas fa-angle-up',
+                    down: 'fa fa-angle-down fas fa-angle-down',
+                    previous: 'fa fa-angle-left fas fa-angle-left',
+                    next: 'fa fa-angle-right fas fa-angle-right',
+                    today: 'fa fa-crosshairs fas fa-crosshairs',
+                    clear: 'fa fa-trash fas fa-trash',
+                    close: 'fa fa-times fas fa-times'
                 }
             };
 
@@ -355,9 +349,9 @@
                 $('.si-date-wrap').removeClass('si-picker-open');
                 $wrap.addClass('si-picker-open');
                 placeWidget($el);
-                setTimeout(function () {
+                requestAnimationFrame(function () {
                     placeWidget($el);
-                }, 50);
+                });
             });
             $wrap.on('dp.hide', function () {
                 $wrap.removeClass('si-picker-open');
@@ -398,9 +392,9 @@
             picker.show();
             $wrap.addClass('si-picker-open');
             placeWidget($input);
-            setTimeout(function () {
+            requestAnimationFrame(function () {
                 placeWidget($input);
-            }, 50);
+            });
         }
     }
 
@@ -408,11 +402,13 @@
 
     $(document).on('mousedown.siDateHide', function (e) {
         var $t = $(e.target);
-        if ($t.closest('.bootstrap-datetimepicker-widget').length) {
-            return;
-        }
-        if ($t.closest('.si-date-wrap .si-date-icon, .si-date-wrap .input-group-addon, .si-date-wrap .input-group-text').length) {
-            return;
+        if ($t.closest('.bootstrap-datetimepicker-widget, .si-date-wrap').length) {
+            if ($t.closest('.si-date-wrap .si-date-icon, .si-date-wrap .input-group-addon, .si-date-wrap .input-group-text').length) {
+                return;
+            }
+            if ($t.closest('.bootstrap-datetimepicker-widget').length) {
+                return;
+            }
         }
         $('.si-date-wrap').each(function () {
             var picker = $(this).data('DateTimePicker');

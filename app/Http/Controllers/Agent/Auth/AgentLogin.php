@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Agent\Auth;  
 
 use App\Http\Controllers\Controller;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Log;
 
 class AgentLogin extends Controller
 {
@@ -21,7 +23,38 @@ class AgentLogin extends Controller
 
     public function Agent_dashboard()
     {
-        return view('AgentDashboard.dashboard');
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+
+        $agentId = session('agent_id');
+        $yearId  = session('year_id');
+        $today   = Carbon::now('Asia/Kolkata')->toDateString();
+
+        $stats     = null;
+        $chartData = [];
+        $lowStock  = [];
+
+        try {
+            $rows = DB::connection('coops')->select(
+                'CALL USP_GET_AGENT_DASHBOARD_STATS(?, ?, ?)',
+                [$agentId, $yearId, $today]
+            );
+            $stats = !empty($rows) ? $rows[0] : null;
+
+            $chartData = DB::connection('coops')->select(
+                'CALL USP_GET_AGENT_MONTHLY_SALE_RETURN(?, ?)',
+                [$agentId, $yearId]
+            );
+
+            $lowStock = DB::connection('coops')->select(
+                'CALL USP_GET_AGENT_LOW_STOCK(?, ?)',
+                [$agentId, $today]
+            );
+        } catch (\Exception $e) {
+            Log::error('Agent dashboard error: ' . $e->getMessage());
+        }
+
+        return view('AgentDashboard.dashboard', compact('stats', 'chartData', 'lowStock'));
     }
 
     public function login(Request $request)

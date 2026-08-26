@@ -67,17 +67,17 @@
         }
 
         .header {
-            height: 104px !important;
+            height: 70px !important;
         }
 
         .page-wrapper {
-            padding-top: 104px !important;
+            padding-top: 70px !important;
         }
 
         .sidebar .sidebar-logo.custom-logo-fix {
-            height: 104px !important;
+            height: 70px !important;
             width: 276px;
-            padding: 6px 36px 6px 8px !important;
+            padding: 8px 36px 8px 12px !important;
             overflow: hidden;
             display: flex;
             align-items: center;
@@ -87,8 +87,8 @@
 
         .sidebar [data-simplebar],
         .sidebar .slimScrollDiv {
-            top: 104px !important;
-            height: calc(100% - 104px) !important;
+            top: 70px !important;
+            height: calc(100% - 70px) !important;
         }
 
         .sidebar .sidebar-inner {
@@ -97,44 +97,46 @@
 
         .custom-logo-fix .logo-normal img,
         .custom-logo-fix .dark-logo img {
-            max-height: 96px;
-            max-width: 258px;
-            width: 258px;
-            height: auto;
+            max-height: 48px;
+            max-width: 210px;
+            width: auto;
+            height: 48px;
             object-fit: contain;
             object-position: left center;
             display: block;
             margin-left: 0;
-            background-color: #f7f8f9;
+            background-color: transparent;
         }
 
         .custom-logo-fix .logo-small img,
         .custom-logo-fix .dark-small img {
-            max-height: 56px;
-            max-width: 80px;
+            max-height: 36px;
+            max-width: 70px;
             width: auto;
             height: auto;
             object-fit: contain;
             display: block;
-            background-color: #f7f8f9;
+            background-color: transparent;
         }
 
         .header-left .logo img,
         .header-left .dark-logo img {
-            max-height: 88px;
-            width: 255px;
-            height: auto;
+            max-height: 48px;
+            width: auto;
+            max-width: 210px;
+            height: 48px;
             object-fit: contain;
             display: block;
-            background-color: #f7f8f9;
+            background-color: transparent;
         }
 
         @media (max-width: 991.98px) {
             .header-left .logo img,
             .header-left .dark-logo img {
-                width: 220px !important;
-                max-height: 64px;
-                height: auto;
+                width: auto !important;
+                max-width: 180px;
+                max-height: 40px;
+                height: 40px;
             }
         }
 

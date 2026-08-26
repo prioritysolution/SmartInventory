@@ -2,10 +2,10 @@
 
     <div class="header-left active">
         <a href="{{ route('agent.dashboard') }}" class="logo">
-            <img src="{{ asset('template/assets/img/smart-inventory-logo.png') }}" alt="Smart Inventory" style="width:240px;max-height:72px;height:auto;object-fit:contain;background-color:#f7f8f9;">
+            <img src="{{ asset('template/assets/img/smart-inventory-logo.png') }}" alt="Smart Inventory">
         </a>
         <a href="{{ route('agent.dashboard') }}" class="logo-small">
-            <img src="{{ asset('template/assets/img/smart-inventory-logo.png') }}" alt="Smart Inventory" style="width:180px;max-height:56px;height:auto;object-fit:contain;background-color:#f7f8f9;">
+            <img src="{{ asset('template/assets/img/smart-inventory-logo.png') }}" alt="Smart Inventory">
         </a>
         <a id="toggle_btn" href="javascript:void(0);">
         </a>

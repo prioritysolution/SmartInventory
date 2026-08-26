@@ -16,11 +16,34 @@ class AgentSale extends Controller
         DB::purge('coops');
 
         $customers = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?)', [2, session('branch_id')]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
         return view('Agent.sale', [
             'customers'  => $customers,
+            'categories' => $categories,
             'year_start' => session('year_start'),
             'year_end'   => session('year_end'),
         ]);
+    }
+
+    private function toIsoDate(?string $date): ?string
+    {
+        if (!$date) {
+            return null;
+        }
+        $date = trim($date);
+        if (preg_match('/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/', $date, $m)) {
+            return "{$m[3]}-{$m[2]}-{$m[1]}";
+        }
+        return substr($date, 0, 10);
+    }
+
+    private function agentAvailableQty(int $prodId, string $date): float
+    {
+        $row = DB::connection('coops')->selectOne(
+            'SELECT UDF_CAL_AGENT_STOCK(?, ?, ?) AS Avil_Qnty',
+            [session('agent_id'), $prodId, $date]
+        );
+        return (float) ($row->Avil_Qnty ?? 0);
     }
 
     public function getItemByBarcode(Request $request)
@@ -29,19 +52,76 @@ class AgentSale extends Controller
             Config::set('database.connections.coops.database', session('org_schema'));
             DB::purge('coops');
 
+            $date = $this->toIsoDate($request->input('sale_date'));
             $result = DB::connection('coops')->select('CALL USP_GET_PROD_INFO_AGENT(?, ?, ?)', [
                 $request->input('barcode'),
                 session('agent_id'),
-                $request->input('sale_date'),
+                $date,
             ]);
             Log::channel('trading')->info('product info:', ['result' => $result]);
 
             if (!empty($result)) {
-                return response()->json($result[0]);
+                $item = $result[0];
+                $item->Avil_Qnty = $this->agentAvailableQty((int) $item->Prod_Id, $date);
+                return response()->json($item);
             }
             return response()->json(['error' => 'Invalid Code Entered !!'], 404);
         } catch (\Exception $e) {
             Log::error('Agent Sale Barcode Error: ' . $e->getMessage());
+            return response()->json(['error' => 'Error fetching product details'], 500);
+        }
+    }
+
+    public function getSubCats(Request $request)
+    {
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?, ?)', [
+            session('org_id'),
+            $request->input('cat_id', 0)
+        ]);
+        return response()->json($subs);
+    }
+
+    public function getItems(Request $request)
+    {
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+        $items = DB::connection('coops')->select('CALL USP_GET_ITEM_LIST(?, ?, ?)', [
+            (int) $request->input('cat_id', 0),
+            (int) $request->input('sub_cat_id', 0),
+            (string) ($request->input('code') ?? '')
+        ]);
+        return response()->json($items);
+    }
+
+    public function getItemByProd(Request $request)
+    {
+        try {
+            $prodId = (int) $request->input('prod_id', 0);
+            $date = $this->toIsoDate($request->input('sale_date'));
+            if ($prodId <= 0 || !$date) {
+                return response()->json(['error' => 'Product and sale date are required'], 400);
+            }
+            Config::set('database.connections.coops.database', session('org_schema'));
+            DB::purge('coops');
+            $agentQty = $this->agentAvailableQty($prodId, $date);
+            $result = DB::connection('coops')->select('CALL USP_GET_PROD_INFO_BY_ITEM(?, ?)', [
+                $prodId,
+                $date,
+            ]);
+            if (!empty($result)) {
+                $item = $result[0];
+                $item->Avil_Qnty = $agentQty;
+                Log::channel('trading')->info('agent sale item-info', [
+                    'prod_id' => $prodId,
+                    'agent_qty' => $agentQty,
+                ]);
+                return response()->json($item);
+            }
+            return response()->json(['error' => 'Item not found'], 404);
+        } catch (\Exception $e) {
+            Log::error('Agent Sale Item Info Error: ' . $e->getMessage());
             return response()->json(['error' => 'Error fetching product details'], 500);
         }
     }

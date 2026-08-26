@@ -12,8 +12,8 @@
 <script src="{{asset('agenttemplate/assets/js/bootstrap.bundle.min.js')}}"></script>
 
 <script src="{{asset('template/assets/js/moment.js')}}"></script>
-<script src="{{asset('agenttemplate/assets/js/bootstrap-datetimepicker.min.js')}}"></script>
-<script src="{{asset('template/assets/js/date-format.js')}}?v=11"></script>
+<script src="{{asset('template/assets/js/bootstrap-datetimepicker.min.js')}}"></script>
+<script src="{{asset('template/assets/js/date-format.js')}}?v=15"></script>
 
 <script src="{{asset('agenttemplate/assets/plugins/apexchart/apexcharts.min.js')}}"></script>
 <script src="{{asset('agenttemplate/assets/plugins/apexchart/chart-data.js')}}"></script>

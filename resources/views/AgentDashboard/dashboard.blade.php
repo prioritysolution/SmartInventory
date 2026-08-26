@@ -86,7 +86,7 @@
             <div class="si-welcome position-relative mb-4 p-4">
                 <div>
                     <h4 class="mb-1">{{ $greeting }}, {{ $agentName }}</h4>
-                    <p class="mb-3" style="opacity:.85;">Track your sales, requisitions and customer returns for this year.</p>
+                    <p class="mb-3" style="opacity:.85;">Track your sales, requisitions and customer returns for this month.</p>
                     <div class="d-flex flex-wrap" style="gap:16px;">
                         <span><i class="fa fa-user me-1"></i>{{ session('agent_code') }}</span>
                         <span><i class="fa fa-building me-1"></i>{{ $branchName }}</span>
@@ -102,7 +102,7 @@
                             <span><img src="{{ asset('agenttemplate/assets/img/icons/dash3.svg') }}" alt=""></span>
                         </div>
                         <div class="dash-widgetcontent">
-                            <h5>₹ 1.86L</h5>
+                            <h5>₹ {{ number_format($stats?->agent_sales_month ?? $stats?->agent_sales_year ?? 0, 2) }}</h5>
                             <h6>Agent Sales</h6>
                         </div>
                     </div>
@@ -113,7 +113,7 @@
                             <span><img src="{{ asset('agenttemplate/assets/img/icons/dash1.svg') }}" alt=""></span>
                         </div>
                         <div class="dash-widgetcontent">
-                            <h5>₹ 42,800</h5>
+                            <h5>₹ {{ number_format($stats?->requisitions_month ?? $stats?->requisitions_year ?? 0, 2) }}</h5>
                             <h6>Requisitions</h6>
                         </div>
                     </div>
@@ -124,7 +124,7 @@
                             <span><img src="{{ asset('agenttemplate/assets/img/icons/dash2.svg') }}" alt=""></span>
                         </div>
                         <div class="dash-widgetcontent">
-                            <h5>₹ 6,240</h5>
+                            <h5>₹ {{ number_format($stats?->customer_returns_month ?? $stats?->customer_returns_year ?? 0, 2) }}</h5>
                             <h6>Customer Returns</h6>
                         </div>
                     </div>
@@ -135,7 +135,7 @@
                             <span><img src="{{ asset('agenttemplate/assets/img/icons/dash4.svg') }}" alt=""></span>
                         </div>
                         <div class="dash-widgetcontent">
-                            <h5>248</h5>
+                            <h5>{{ number_format($stats?->stock_with_agent ?? 0, 0) }}</h5>
                             <h6>Stock with Agent</h6>
                         </div>
                     </div>
@@ -146,7 +146,7 @@
                 <div class="col-lg-3 col-sm-6 col-12 d-flex">
                     <div class="dash-count">
                         <div class="dash-counts">
-                            <h4>₹ 12,450</h4>
+                            <h4>₹ {{ number_format($stats?->today_sales ?? 0, 2) }}</h4>
                             <h5>Today's Sales</h5>
                         </div>
                         <div class="dash-imgs"><i data-feather="shopping-cart"></i></div>
@@ -155,16 +155,16 @@
                 <div class="col-lg-3 col-sm-6 col-12 d-flex">
                     <div class="dash-count das1">
                         <div class="dash-counts">
-                            <h4>9</h4>
-                            <h5>Today's Bills</h5>
+                            <h4>₹ {{ number_format($stats?->today_return ?? 0, 2) }}</h4>
+                            <h5>Today's Return</h5>
                         </div>
-                        <div class="dash-imgs"><i data-feather="file-text"></i></div>
+                        <div class="dash-imgs"><i data-feather="rotate-ccw"></i></div>
                     </div>
                 </div>
                 <div class="col-lg-3 col-sm-6 col-12 d-flex">
                     <div class="dash-count das2">
                         <div class="dash-counts">
-                            <h4>3</h4>
+                            <h4>{{ number_format($stats?->pending_indents ?? 0, 0) }}</h4>
                             <h5>Pending Indents</h5>
                         </div>
                         <div class="dash-imgs"><i data-feather="clipboard"></i></div>
@@ -173,7 +173,7 @@
                 <div class="col-lg-3 col-sm-6 col-12 d-flex">
                     <div class="dash-count das3">
                         <div class="dash-counts">
-                            <h4>7</h4>
+                            <h4>{{ number_format($stats?->low_stock_count ?? 0, 0) }}</h4>
                             <h5>Low Stock Items</h5>
                         </div>
                         <div class="dash-imgs"><i data-feather="alert-triangle"></i></div>
@@ -184,17 +184,22 @@
             <div class="row">
                 <div class="col-lg-12 d-flex">
                     <div class="card flex-fill">
-                        <div class="card-header pb-0 d-flex justify-content-between align-items-center">
+                        <div class="card-header pb-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <h5 class="card-title mb-0">Sales Trend</h5>
-                            <div class="graph-sets">
-                                <ul>
-                                    <li><span>Sales</span></li>
-                                    <li><span>Returns</span></li>
-                                </ul>
+                            <div class="d-flex align-items-center flex-wrap gap-2">
+                                <select id="selAgentChartMonth" class="form-select form-select-sm" style="min-width: 150px;">
+                                    <option value="all">All months</option>
+                                </select>
+                                <div class="graph-sets mb-0">
+                                    <ul>
+                                        <li><span>Sales</span></li>
+                                        <li><span>Returns</span></li>
+                                    </ul>
+                                </div>
                             </div>
                         </div>
                         <div class="card-body">
-                            <div id="sales_charts"></div>
+                            <div id="agent_sales_charts"></div>
                         </div>
                     </div>
                 </div>
@@ -217,26 +222,23 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr>
-                                            <td>Rice 25kg</td>
-                                            <td>4</td>
-                                            <td><span class="badge bg-danger">Critical</span></td>
-                                        </tr>
-                                        <tr>
-                                            <td>Sunflower Oil 1L</td>
-                                            <td>9</td>
-                                            <td><span class="badge bg-warning">Low</span></td>
-                                        </tr>
-                                        <tr>
-                                            <td>Wheat Flour 10kg</td>
-                                            <td>3</td>
-                                            <td><span class="badge bg-danger">Critical</span></td>
-                                        </tr>
-                                        <tr>
-                                            <td>Toor Dal 1kg</td>
-                                            <td>11</td>
-                                            <td><span class="badge bg-warning">Low</span></td>
-                                        </tr>
+                                        @forelse ($lowStock ?? [] as $item)
+                                            <tr>
+                                                <td>{{ $item->Prod_Name }}</td>
+                                                <td>{{ number_format((float) $item->On_Hand, 0) }}</td>
+                                                <td>
+                                                    @if (($item->Alert_Status ?? '') === 'Critical')
+                                                        <span class="badge bg-danger">Critical</span>
+                                                    @else
+                                                        <span class="badge bg-warning">Low</span>
+                                                    @endif
+                                                </td>
+                                            </tr>
+                                        @empty
+                                            <tr>
+                                                <td colspan="3" class="text-center text-muted py-3">No low stock items</td>
+                                            </tr>
+                                        @endforelse
                                     </tbody>
                                 </table>
                             </div>
@@ -249,3 +251,131 @@
         </div>
     </div>
 @endsection
+
+@push('scripts')
+    <script>
+        (function() {
+            var el = document.querySelector('#agent_sales_charts');
+            if (!el || typeof ApexCharts === 'undefined') {
+                return;
+            }
+
+            var chartData = @json($chartData ?? []);
+            if (!Array.isArray(chartData)) {
+                chartData = [];
+            }
+
+            var currentMonthKey = @json($now->format('Y-m'));
+            var monthSelect = document.getElementById('selAgentChartMonth');
+            var selectedKey = 'all';
+
+            chartData.forEach(function(row, idx) {
+                if (monthSelect) {
+                    var opt = document.createElement('option');
+                    opt.value = String(idx);
+                    opt.textContent = row.Month_Label;
+                    monthSelect.appendChild(opt);
+                }
+                if (String(row.Month_Key) === currentMonthKey) {
+                    selectedKey = String(idx);
+                }
+            });
+
+            if (selectedKey === 'all' && chartData.length) {
+                selectedKey = String(chartData.length - 1);
+            }
+
+            if (monthSelect) {
+                monthSelect.value = selectedKey;
+            }
+
+            function periodSeries(key) {
+                if (key === 'all') {
+                    return {
+                        labels: chartData.map(function(r) { return r.Month_Label; }),
+                        sales: chartData.map(function(r) { return Number(r.Sales_Amt || 0); }),
+                        returns: chartData.map(function(r) { return Number(r.Return_Amt || 0); })
+                    };
+                }
+                var row = chartData[Number(key)];
+                return {
+                    labels: [row ? row.Month_Label : 'Month'],
+                    sales: [row ? Number(row.Sales_Amt || 0) : 0],
+                    returns: [row ? Number(row.Return_Amt || 0) : 0]
+                };
+            }
+
+            var initial = periodSeries(selectedKey);
+            if (!initial.labels.length) {
+                initial = { labels: ['No data'], sales: [0], returns: [0] };
+            }
+
+            var chart = new ApexCharts(el, {
+                series: [
+                    { name: 'Sales', data: initial.sales },
+                    { name: 'Returns', data: initial.returns }
+                ],
+                colors: ['#28C76F', '#EA5455'],
+                chart: {
+                    type: 'bar',
+                    height: 300,
+                    stacked: false,
+                    toolbar: { show: false },
+                    zoom: { enabled: false }
+                },
+                plotOptions: {
+                    bar: {
+                        horizontal: false,
+                        columnWidth: selectedKey === 'all' ? '40%' : '20%',
+                        endingShape: 'rounded'
+                    }
+                },
+                dataLabels: { enabled: false },
+                stroke: { show: true, width: 2, colors: ['transparent'] },
+                xaxis: { categories: initial.labels },
+                yaxis: {
+                    labels: {
+                        formatter: function(val) {
+                            return Number(val).toLocaleString('en-IN', {
+                                maximumFractionDigits: 0
+                            });
+                        }
+                    }
+                },
+                legend: { position: 'right', offsetY: 40 },
+                fill: { opacity: 1 },
+                tooltip: {
+                    y: {
+                        formatter: function(val) {
+                            return '₹ ' + Number(val).toLocaleString('en-IN', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                            });
+                        }
+                    }
+                }
+            });
+            chart.render();
+
+            if (monthSelect) {
+                monthSelect.addEventListener('change', function() {
+                    var key = monthSelect.value;
+                    var period = periodSeries(key);
+                    if (!period.labels.length) {
+                        period = { labels: ['No data'], sales: [0], returns: [0] };
+                    }
+                    chart.updateOptions({
+                        xaxis: { categories: period.labels },
+                        plotOptions: {
+                            bar: { columnWidth: key === 'all' ? '40%' : '20%' }
+                        },
+                        series: [
+                            { name: 'Sales', data: period.sales },
+                            { name: 'Returns', data: period.returns }
+                        ]
+                    });
+                });
+            }
+        })();
+    </script>
+@endpush

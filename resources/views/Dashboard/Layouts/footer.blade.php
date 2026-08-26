@@ -34,4 +34,4 @@
 
 <!-- Custom JS -->
 <script src="{{asset('template/assets/js/script.js')}}"></script>
-<script src="{{asset('template/assets/js/date-format.js')}}?v=11"></script>
+<script src="{{asset('template/assets/js/date-format.js')}}?v=15"></script>

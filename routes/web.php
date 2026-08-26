@@ -12,6 +12,7 @@ use App\Http\Controllers\Agent\Auth\AgentLogin;
 use App\Http\Controllers\Agent\AgentSale;
 use App\Http\Controllers\Agent\AgentRequisition;
 use App\Http\Controllers\Agent\AgentCustomer;
+use App\Http\Controllers\Agent\AgentReport;
 
 Route::middleware('guest.session')->group(function () {
   Route::get('/', [ProcessLogin::class, 'index_login'])->name('login-index');
@@ -206,12 +207,30 @@ Route::prefix('agent')->group(function () {
     //agent sale
     Route::get('/sale', [AgentSale::class, 'index'])->name('agent.sale');
     Route::get('/sale/barcode', [AgentSale::class, 'getItemByBarcode'])->name('agent.sale.barcode');
+    Route::get('/sale/items', [AgentSale::class, 'getItems'])->name('agent.sale.items');
+    Route::get('/sale/subcats', [AgentSale::class, 'getSubCats'])->name('agent.sale.subcats');
+    Route::get('/sale/item-info', [AgentSale::class, 'getItemByProd'])->name('agent.sale.item-info');
     Route::post('/sale/save', [AgentSale::class, 'store'])->name('agent.sale.store');
 
     //customer return
     Route::get('/customer-return', [AgentCustomer::class, 'index'])->name('agent.customer');
     Route::get('/customer-return/barcode', [AgentCustomer::class, 'getItemByBarcode'])->name('agent.customer.barcode');
+    Route::get('/customer-return/items', [AgentCustomer::class, 'getItems'])->name('agent.customer.items');
+    Route::get('/customer-return/subcats', [AgentCustomer::class, 'getSubCats'])->name('agent.customer.subcats');
+    Route::get('/customer-return/item-info', [AgentCustomer::class, 'getItemByProd'])->name('agent.customer.item-info');
     Route::post('/customer-return/save', [AgentCustomer::class, 'store'])->name('agent.customer.store');
+
+    //register reports
+    Route::get('/report/indent', [AgentReport::class, 'indent'])->name('agent.report.indent');
+    Route::get('/report/indent/search', [AgentReport::class, 'indentSearch'])->name('agent.report.indent.search');
+    Route::get('/report/issue', [AgentReport::class, 'issue'])->name('agent.report.issue');
+    Route::get('/report/issue/search', [AgentReport::class, 'issueSearch'])->name('agent.report.issue.search');
+    Route::get('/report/sale', [AgentReport::class, 'sale'])->name('agent.report.sale');
+    Route::get('/report/sale/search', [AgentReport::class, 'saleSearch'])->name('agent.report.sale.search');
+    Route::get('/report/return', [AgentReport::class, 'officeReturn'])->name('agent.report.return');
+    Route::get('/report/return/search', [AgentReport::class, 'officeReturnSearch'])->name('agent.report.return.search');
+    Route::get('/report/stock', [AgentReport::class, 'stock'])->name('agent.report.stock');
+    Route::get('/report/stock/search', [AgentReport::class, 'stockSearch'])->name('agent.report.stock.search');
 
     //agent error
     Route::fallback(function () {
