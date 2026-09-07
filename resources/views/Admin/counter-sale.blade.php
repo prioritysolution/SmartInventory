@@ -349,6 +349,7 @@
                                 <label class="form-label">Rate<span class="text-danger">*</span></label>
                                 <input type="number" class="form-control" id="rate" step="0.01" min="0"
                                     autocomplete="off" readonly>
+                                <select class="form-select" id="rateSelect" style="display:none;"></select>
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label class="form-label">Total Amt</label>
@@ -851,7 +852,8 @@
 
             iframe = document.createElement('iframe');
             iframe.id = 'printFrame';
-            iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:58mm;height:auto;border:none;';
+            iframe.setAttribute('aria-hidden', 'true');
+            iframe.style.cssText = 'position:fixed;top:0;left:0;width:58mm;height:500mm;border:0;opacity:0;pointer-events:none;z-index:-1;';
             document.body.appendChild(iframe);
 
             const doc = iframe.contentWindow.document;
@@ -861,9 +863,9 @@
 <head>
 <meta charset="UTF-8">
 <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
+* { margin:0; padding:0; box-sizing:border-box; }
 @page {
-    size: 58mm auto;
+    size: 58mm 400mm;
     margin: 2mm 1.5mm;
 }
 html, body {
@@ -871,9 +873,7 @@ html, body {
     padding: 0;
     width: 58mm;
 }
-body {
-    width: 58mm;
-}
+body { width: 58mm; }
 .bill-container {
     width: 54mm;
     max-width: 54mm;
@@ -888,7 +888,9 @@ body {
 .bill-header h3 { font-size:11px; font-weight:bold; text-transform:uppercase; margin:0; line-height:1.2; }
 .bill-header p { font-size:9px; margin:2px 0 0; }
 .bill-title { text-align:center; font-weight:bold; text-decoration:underline; text-transform:uppercase; letter-spacing:1px; margin:4px 0 6px; font-size:11px; }
-.bill-meta { display:flex; justify-content:space-between; gap:4px; margin:2px 0; font-size:9px; }
+.bill-meta { display:block; overflow:hidden; margin:2px 0; font-size:9px; }
+.bill-meta span { display:inline-block; width:49%; vertical-align:top; }
+.bill-meta span:last-child { text-align:right; }
 .bill-customer { margin:3px 0 6px; font-size:9px; }
 .items-table { width:100%; border-collapse:collapse; font-size:9px; }
 .items-table th, .items-table td { border:1px dashed #000; padding:2px 3px; text-align:left; vertical-align:top; }
@@ -903,10 +905,10 @@ body {
 <body>${billHtml}</body>
 </html>`);
             doc.close();
-
-            iframe.contentWindow.onload = function() {
+            setTimeout(function () {
+                iframe.contentWindow.focus();
                 iframe.contentWindow.print();
-            };
+            }, 150);
         }
 
 
@@ -1087,35 +1089,44 @@ body {
             });
 
 
+            function pickUniqueItem(data, code) {
+                if (!data || !data.length) return null;
+                const needle = String(code).toLowerCase();
+                const exact = data.filter(item => String(item.Prod_Code || '').toLowerCase() === needle);
+                if (exact.length === 1) return exact[0];
+                if (data.length === 1) return data[0];
+                return null;
+            }
+
+            function loadItemByProdId(prodId) {
+                if (!ensureSaleDate()) return;
+                $.get("{{ route('counter-sale.item-info') }}", {
+                    prod_id: prodId,
+                    sale_date: $('#saleDate').val()
+                }).done(function(item) {
+                    populateItemFields(item);
+                    $('#barcodeInput').focus();
+                }).fail(function(xhr) {
+                    Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load item details', 'error');
+                });
+            }
+
+            function resolveItemsOrOpenPicker(data, code) {
+                const unique = pickUniqueItem(data, code);
+                if (unique) {
+                    loadItemByProdId(unique.Prod_Id);
+                    return;
+                }
+                openItemPickerModal(data || [], true, code);
+            }
+
             function lookupBarcode() {
                 const barcode = $('#barcodeInput').val().trim();
                 const saleDate = $('#saleDate').val();
 
                 if (!barcode) return;
+                if (!ensureSaleDate()) return;
 
-                if (!saleDate) {
-                    Swal.fire('Error', 'Please select sale date first', 'error');
-                    $('#saleDate').focus();
-                    return;
-                }
-                const saleDateObj = new Date(saleDate);
-                const yearStartObj = new Date('{{ session('year_start') }}');
-                const yearEndObj = new Date('{{ session('year_end') }}');
-                const today = new Date();
-
-                if (saleDateObj > today) {
-                    Swal.fire('Error', 'Sale Date cannot be After Today', 'error');
-                    $('#saleDate').focus();
-                    return;
-                }
-
-                if (saleDateObj < yearStartObj || saleDateObj > yearEndObj) {
-                    Swal.fire('Error',
-                        'Sale Date must be between {{ session('year_start') }} and {{ session('year_end') }}',
-                        'error');
-                    $('#saleDate').focus();
-                    return;
-                }
                 $.get("{{ route('counter-sale.barcode') }}", {
                         barcode: barcode,
                         sale_date: saleDate
@@ -1130,15 +1141,9 @@ body {
                             cat_id: 0,
                             sub_cat_id: 0
                         }, function(data) {
-                            if (data.length > 0) {
-                                openItemPickerModal(data, true, barcode);
-                            } else {
-                                Swal.fire('Not Found', 'No item found for barcode: ' + barcode, 'warning');
-                                $('#barcodeInput').select();
-                            }
+                            resolveItemsOrOpenPicker(data, barcode);
                         }).fail(function() {
-                            Swal.fire('Not Found', 'No item found for barcode: ' + barcode, 'warning');
-                            $('#barcodeInput').select();
+                            openItemPickerModal([], true, barcode);
                         });
                     });
             }
@@ -1182,9 +1187,9 @@ body {
                     cat_id: 0,
                     sub_cat_id: 0
                 }, function(data) {
-                    openItemPickerModal(data, true, code);
+                    resolveItemsOrOpenPicker(data, code);
                 }).fail(function() {
-                    Swal.fire('Error', 'Failed to load items', 'error');
+                    openItemPickerModal([], true, code);
                 });
             });
 
@@ -1286,6 +1291,13 @@ body {
 
 
             $('#quantity').on('input', calculateAmounts);
+
+            $('#rateSelect').on('change', function() {
+                const selected = $(this).val();
+                $('#rate').val(selected);
+                $('#saleMrp').val(selected);
+                calculateAmounts();
+            });
 
             $('#summaryDiscPercent').on('input', function() {
                 if ($(this).prop('readonly')) return;
@@ -1508,11 +1520,61 @@ body {
             }, 0);
         }
 
-        function populateItemFields(item) {
-            const productId = item.Prod_Id;
-            const existingItem = itemsArray.find(existingItem => existingItem.item_id == productId);
+        function parseSaleRateValue(r) {
+            if (r == null) return NaN;
+            if (typeof r === 'object') return parseFloat(r.MRP ?? r.mrp ?? r.Rate ?? r.rate);
+            return parseFloat(r);
+        }
 
-            if (existingItem) {
+        function applySaleRateOptions(saleRates, currentMrp) {
+            const rates = [];
+            (Array.isArray(saleRates) ? saleRates : []).forEach(function(r) {
+                const n = parseSaleRateValue(r);
+                if (n > 0 && rates.indexOf(n.toFixed(2)) === -1) {
+                    rates.push(n.toFixed(2));
+                }
+            });
+            if (rates.length > 1) {
+                $('#rate').hide();
+                $('#rateSelect').empty().css('display', 'block');
+                rates.forEach(function(r) {
+                    $('#rateSelect').append('<option value="' + r + '">' + r + '</option>');
+                });
+                const current = (parseFloat(currentMrp) > 0 ? parseFloat(currentMrp).toFixed(2) : rates[0]);
+                const selected = rates.indexOf(current) >= 0 ? current : rates[0];
+                $('#rateSelect').val(selected);
+                $('#rate').val(selected);
+                $('#saleMrp').val(selected);
+            } else {
+                resetRateSelect();
+                $('#rate').val(parseFloat(currentMrp) > 0 ? parseFloat(currentMrp).toFixed(2) : '');
+                $('#saleMrp').val(parseFloat(currentMrp) > 0 ? parseFloat(currentMrp).toFixed(2) : '0');
+            }
+        }
+
+        function loadSaleRatesForItem(prodId, currentMrp) {
+            if (!prodId) return;
+            $.get("{{ route('counter-sale.sale-rates') }}", { prod_id: prodId })
+                .done(function(rows) {
+                    if (String($('#selectedItemId').val()) !== String(prodId)) return;
+                    applySaleRateOptions(rows, currentMrp);
+                    calculateAmounts();
+                });
+        }
+
+        function resetRateSelect() {
+            $('#rateSelect').hide().empty();
+            $('#rate').show();
+        }
+
+        function populateItemFields(item) {
+            const existingItem = itemsArray.find(function(row) {
+                return String(row.item_id) === String(item.Prod_Id)
+                    && parseFloat(row.rate) === parseFloat(item.MRP ?? item.Rate ?? 0);
+            });
+            const saleRates = Array.isArray(item.Sale_Rates) ? item.Sale_Rates
+                : (Array.isArray(item.sale_rates) ? item.sale_rates : []);
+            if (existingItem && saleRates.length === 1) {
                 Swal.fire('Product Already Added',
                     `${item.Prod_ShortNm} is already in the list with quantity: ${existingItem.quantity}`,
                     'warning');
@@ -1532,8 +1594,8 @@ body {
             $('#unitId').val(item.Unit_Id);
             $('#unitDisplay').val(item.Unit_Name);
             const stockMrp = parseFloat(item.MRP ?? item.Rate) || 0;
-            $('#rate').val(stockMrp > 0 ? stockMrp.toFixed(2) : '');
-            $('#saleMrp').val(stockMrp > 0 ? stockMrp.toFixed(2) : '0');
+            applySaleRateOptions(saleRates, stockMrp);
+            loadSaleRatesForItem(item.Prod_Id, stockMrp);
             $('#discountPercent').val(item.Discount || 0);
             $('#cgstRate').val(GST_TYPE == 2 ? 0 : cgst);
             $('#sgstRate').val(GST_TYPE == 2 ? 0 : sgst);
@@ -1607,6 +1669,14 @@ body {
             const discPct = parseFloat($('#discountPercent').val()) || 0;
             const totAmt = parseFloat($('#totalAmount').val()) || 0;
             const availableQty = parseFloat($('#barcodeInput').data('available-qty'));
+            const alreadyAdded = itemsArray.find(function(row) {
+                return String(row.item_id) === String($('#selectedItemId').val())
+                    && parseFloat(row.rate) === rate;
+            });
+            if (alreadyAdded && !$('#addItemBtn').data('editing')) {
+                Swal.fire('Error', 'This item at this rate is already in the list', 'error');
+                return false;
+            }
 
             if (!$('#quantity').val() || qty <= 0) {
                 Swal.fire('Error', 'Quantity must be greater than 0', 'error');
@@ -1707,6 +1777,7 @@ body {
             $('#selectedItemId, #selectedHsnCode, #unitId').val('');
             $('#itemSelected, #unitDisplay, #saleMrp').val('');
             $('#cgstRate, #sgstRate').val('');
+            resetRateSelect();
             clearItemCalc();
             $('#addItemBtn').text('+ Add Item').data('editing', false);
         }

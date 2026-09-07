@@ -15,10 +15,11 @@
     <meta name="author" content="Dreams Technologies">
 
     <!-- Favicon -->
-    <link rel="shortcut icon" type="image/x-icon" href="{{asset('template/assets/img/favicon.png')}}">
+    <link rel="shortcut icon" type="image/png" href="{{asset('template/assets/img/favicon.png')}}?v=2">
+    <link rel="icon" type="image/png" href="{{asset('template/assets/img/favicon.png')}}?v=2">
 
     <!-- Apple Touch Icon -->
-    <link rel="apple-touch-icon" sizes="180x180" href="{{asset('template/assets/img/apple-touch-icon.png')}}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{asset('template/assets/img/apple-touch-icon.png')}}?v=2">
 
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="{{asset('template/assets/css/bootstrap.min.css')}}">

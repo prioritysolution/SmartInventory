@@ -212,6 +212,7 @@
                                 <label class="form-label">Rate<span class="text-danger">*</span></label>
                                 <input type="number" class="form-control" id="rate" step="0.01" min="0"
                                     autocomplete="off" readonly>
+                                <select class="form-select" id="rateSelect" style="display:none;"></select>
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label class="form-label">Total Amt</label>
@@ -896,34 +897,45 @@
             });
 
 
+            function pickUniqueItem(data, code) {
+                if (!data || !data.length) return null;
+                const needle = String(code).toLowerCase();
+                const exact = data.filter(item => String(item.Prod_Code || '').toLowerCase() === needle);
+                if (exact.length === 1) return exact[0];
+                if (data.length === 1) return data[0];
+                return null;
+            }
+
+            function loadItemByProdId(prodId) {
+                if (!ensureSaleDate()) return;
+                $.get("{{ route('sale-return.item-info') }}", {
+                    prod_id: prodId,
+                    sale_date: $('#saleDate').val()
+                }).done(function(item) {
+                    populateItemFields(item);
+                    $('#barcodeInput').focus();
+                }).fail(function(xhr) {
+                    Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load item details', 'error');
+                });
+            }
+
+            function resolveItemsOrOpenPicker(data, code) {
+                const unique = pickUniqueItem(data, code);
+                if (unique) {
+                    loadItemByProdId(unique.Prod_Id);
+                    return;
+                }
+                openItemPickerModal(data || [], true, code);
+            }
+
             function lookupBarcode() {
                 const barcode = $('#barcodeInput').val().trim();
                 const saleDate = $('#saleDate').val();
 
                 if (!barcode) return;
+                if (!ensureSaleDate()) return;
 
-                if (!saleDate) {
-                    Swal.fire('Error', 'Please select sale date first', 'error');
-                    $('#saleDate').focus();
-                    return;
-                }
-                const saleDateObj = new Date(saleDate);
-    const yearStartObj = new Date('{{ session("year_start") }}');
-    const yearEndObj = new Date('{{ session("year_end") }}');
-    const today = new Date();
-    
-    if (saleDateObj > today) {
-        Swal.fire('Error', 'Sale Date cannot be After Today', 'error');
-        $('#saleDate').focus();
-        return;
-    }
-    
-    if (saleDateObj < yearStartObj || saleDateObj > yearEndObj) {
-        Swal.fire('Error', 'Sale Date must be between {{ session("year_start") }} and {{ session("year_end") }}', 'error');
-        $('#saleDate').focus();
-        return;
-    }
-              $.get("{{ route('sale-return.barcode') }}", {
+                $.get("{{ route('sale-return.barcode') }}", {
                         barcode: barcode,
                         sale_date: saleDate
                     })
@@ -937,15 +949,9 @@
                             cat_id: 0,
                             sub_cat_id: 0
                         }, function(data) {
-                            if (data.length > 0) {
-                                openItemPickerModal(data, true, barcode);
-                            } else {
-                                Swal.fire('Not Found', 'No item found for barcode: ' + barcode, 'warning');
-                                $('#barcodeInput').select();
-                            }
+                            resolveItemsOrOpenPicker(data, barcode);
                         }).fail(function() {
-                            Swal.fire('Not Found', 'No item found for barcode: ' + barcode, 'warning');
-                            $('#barcodeInput').select();
+                            openItemPickerModal([], true, barcode);
                         });
                     });
             }
@@ -987,9 +993,9 @@
                     cat_id: 0,
                     sub_cat_id: 0
                 }, function(data) {
-                    openItemPickerModal(data, true, code);
+                    resolveItemsOrOpenPicker(data, code);
                 }).fail(function() {
-                    Swal.fire('Error', 'Failed to load items', 'error');
+                    openItemPickerModal([], true, code);
                 });
             });
 
@@ -1091,6 +1097,13 @@
 
             $('#quantity').on('input', calculateAmounts);
 
+            $('#rateSelect').on('change', function() {
+                const selected = $(this).val();
+                $('#rate').val(selected);
+                $('#saleMrp').val(selected);
+                calculateAmounts();
+            });
+
             $('#summaryDiscPercent').on('input', function() {
                 if ($(this).prop('readonly')) return;
                 const discPct = parseFloat($(this).val()) || 0;
@@ -1165,10 +1178,12 @@
     $('#unitDisplay').val(item.unit_name);
     $('#quantity').val(item.quantity);
     $('#rate').val(item.rate);
+    $('#saleMrp').val(item.sale_mrp || item.rate);
     $('#discountPercent').val(item.discount_percent);
     $('#cgstRate').val(item.cgst_rate);
     $('#sgstRate').val(item.sgst_rate);
     $('#maxReturnQty').val(item.max_return_qty || '');
+    loadSaleRatesForItem(item.item_id, item.rate);
     
     // Calculate amounts
     calculateAmounts();
@@ -1292,11 +1307,62 @@
             }, 0);
         }
 
+        function parseSaleRateValue(r) {
+            if (r == null) return NaN;
+            if (typeof r === 'object') return parseFloat(r.MRP ?? r.mrp ?? r.Rate ?? r.rate);
+            return parseFloat(r);
+        }
+
+        function applySaleRateOptions(saleRates, currentMrp) {
+            const rates = [];
+            (Array.isArray(saleRates) ? saleRates : []).forEach(function(r) {
+                const n = parseSaleRateValue(r);
+                if (n > 0 && rates.indexOf(n.toFixed(2)) === -1) {
+                    rates.push(n.toFixed(2));
+                }
+            });
+            if (rates.length > 1) {
+                $('#rate').hide();
+                $('#rateSelect').empty().css('display', 'block');
+                rates.forEach(function(r) {
+                    $('#rateSelect').append('<option value="' + r + '">' + r + '</option>');
+                });
+                const current = (parseFloat(currentMrp) > 0 ? parseFloat(currentMrp).toFixed(2) : rates[0]);
+                const selected = rates.indexOf(current) >= 0 ? current : rates[0];
+                $('#rateSelect').val(selected);
+                $('#rate').val(selected);
+                $('#saleMrp').val(selected);
+            } else {
+                resetRateSelect();
+                $('#rate').val(parseFloat(currentMrp) > 0 ? parseFloat(currentMrp).toFixed(2) : '');
+                $('#saleMrp').val(parseFloat(currentMrp) > 0 ? parseFloat(currentMrp).toFixed(2) : '0');
+            }
+        }
+
+        function loadSaleRatesForItem(prodId, currentMrp) {
+            if (!prodId) return;
+            $.get("{{ route('sale-return.sale-rates') }}", { prod_id: prodId })
+                .done(function(rows) {
+                    if (String($('#selectedItemId').val()) !== String(prodId)) return;
+                    applySaleRateOptions(rows, currentMrp);
+                    calculateAmounts();
+                });
+        }
+
+        function resetRateSelect() {
+            $('#rateSelect').hide().empty();
+            $('#rate').show();
+        }
+
         function populateItemFields(item) {
             const productId = item.Prod_Id;
-            const existingItem = itemsArray.find(existingItem => existingItem.item_id == productId);
-
-            if (existingItem) {
+            const existingItem = itemsArray.find(function(row) {
+                return String(row.item_id) === String(productId)
+                    && parseFloat(row.rate) === parseFloat(item.MRP ?? item.Rate ?? 0);
+            });
+            const saleRates = Array.isArray(item.Sale_Rates) ? item.Sale_Rates
+                : (Array.isArray(item.sale_rates) ? item.sale_rates : []);
+            if (existingItem && saleRates.length === 1) {
                 Swal.fire('Product Already Added',
                     `${item.Prod_ShortNm} is already in the list with quantity: ${existingItem.quantity}`,
                     'warning');
@@ -1316,8 +1382,8 @@
             $('#unitId').val(item.Unit_Id);
             $('#unitDisplay').val(item.Unit_Name);
             const stockMrp = parseFloat(item.MRP ?? item.Rate) || 0;
-            $('#rate').val(stockMrp > 0 ? stockMrp.toFixed(2) : '');
-            $('#saleMrp').val(stockMrp > 0 ? stockMrp.toFixed(2) : '0');
+            applySaleRateOptions(saleRates, stockMrp);
+            loadSaleRatesForItem(item.Prod_Id, stockMrp);
             $('#discountPercent').val(item.Discount || 0);
             $('#cgstRate').val(GST_TYPE == 2 ? 0 : cgst);
             $('#sgstRate').val(GST_TYPE == 2 ? 0 : sgst);
@@ -1389,6 +1455,14 @@
             const discPct = parseFloat($('#discountPercent').val()) || 0;
             const totAmt = parseFloat($('#totalAmount').val()) || 0;
             const availableQty = parseFloat($('#barcodeInput').data('available-qty'));
+            const alreadyAdded = itemsArray.find(function(row) {
+                return String(row.item_id) === String($('#selectedItemId').val())
+                    && parseFloat(row.rate) === rate;
+            });
+            if (alreadyAdded) {
+                Swal.fire('Error', 'This item at this rate is already in the list', 'error');
+                return false;
+            }
 
             if (!$('#quantity').val() || qty <= 0) {
                 Swal.fire('Error', 'Quantity must be greater than 0', 'error');
@@ -1491,6 +1565,7 @@
             $('#itemSelected, #unitDisplay, #saleMrp').val('');
             $('#cgstRate, #sgstRate').val('');
             $('#maxReturnQty').val('');
+            resetRateSelect();
             clearItemCalc();
         }
 
@@ -1552,7 +1627,10 @@
         }
 
         function populateReturnFromSale(item, header) {
-            const existing = itemsArray.find(x => String(x.item_id) === String(item.Prod_Id));
+            const existing = itemsArray.find(function(x) {
+                return String(x.item_id) === String(item.Prod_Id)
+                    && parseFloat(x.rate) === parseFloat(item.Item_Rate);
+            });
             if (existing) {
                 Swal.fire('Product Already Added',
                     `${item.Prod_Name} is already in the return list`,
@@ -1586,6 +1664,7 @@
             $('#unitDisplay').val(item.Unit_Name);
             $('#quantity').val(remaining);
             $('#maxReturnQty').val(remaining);
+            resetRateSelect();
             $('#rate').val(item.Item_Rate);
             $('#discountPercent').val(item.Disc_Prcnt || 0);
             $('#saleMrp').val(item.MRP || item.Item_Rate || 0);

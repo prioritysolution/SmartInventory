@@ -56,7 +56,14 @@
                                                 data-code="{{ $agent->Agent_Code }}" data-name="{{ $agent->Agent_Name }}"
                                                 data-address="{{ $agent->Address }}"
                                                 data-mobile="{{ $agent->Contact_No }}" data-join="{{ $agent->Join_Date }}"
-                                                data-limit="{{ $agent->Stock_Limit }}" data-password="">Edit</button>
+                                                data-limit="{{ $agent->Stock_Limit }}"
+                                                data-credit-limit="{{ $agent->Credit_Sell_Limit }}"
+                                                data-village="{{ $agent->Village_Id ?? '' }}"
+                                                data-ps="{{ $agent->Ps_Id ?? '' }}"
+                                                data-post="{{ $agent->Post_Id ?? '' }}"
+                                                data-pin="{{ $agent->Pin_Id ?? '' }}"
+                                                data-dist="{{ $agent->Dist_Id ?? '' }}"
+                                                data-password="">Edit</button>
                                         </td>
                                     </tr>
                                 @endforeach
@@ -99,7 +106,7 @@
         </div>
     </div>
     <!-- Agent Modal -->
-    <div class="modal fade" id="agentModal" tabindex="-1">
+    <div class="modal fade" id="agentModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-xl" style="max-width: 95%;">
             <div class="modal-content" style="min-height: 70vh;">
 
@@ -138,6 +145,12 @@
                         </div>
 
                         <div class="col-md-6">
+                           <label class="form-label fw-semibold">Credit Sell Limit (₹)</label>
+                            <input type="number" step="0.01" class="form-control form-control-lg" id="creditSellLimit"
+                                max="99999999.99" autocomplete="off" placeholder="0.00">
+                        </div>
+
+                        <div class="col-md-6">
                             <label class="form-label fw-semibold">Password</label>
                             <div class="position-relative">
                                 <input type="password" class="form-control form-control-lg" id="password"
@@ -150,12 +163,13 @@
 
 
 
-                        <div class="col-md-8">
-                            <label class="form-label fw-semibold">Address <span class="text-danger">*</span></label>
-                           <textarea class="form-control form-control-lg" id="address" rows="5" autocomplete="off"
-    placeholder="Enter full address" style="height:130px; font-size:1rem;"></textarea>
-
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Address</label>
+                            <input type="text" class="form-control form-control-lg" id="address" maxlength="150"
+                                autocomplete="off" placeholder="Enter address">
                         </div>
+
+                        @include('Admin.partials.address-master-fields', ['colClass' => 'col-md-4'])
 
                     </div>
                 </div>
@@ -173,6 +187,7 @@
 
 
 @push('scripts')
+    <script src="{{ asset('template/assets/js/address-master-form.js') }}?v=1"></script>
     <script>
         $(document).ready(function() {
             $('#eyeIcon').on('click', function() {
@@ -192,6 +207,14 @@
                 $('#mobile').val($(this).data('mobile'));
                 $('#joinDate').val($(this).data('join'));
                 $('#stockLimit').val($(this).data('limit'));
+                $('#creditSellLimit').val($(this).data('credit-limit'));
+                AddressMasterForm.setValues('', {
+                    village_id: $(this).data('village'),
+                    ps_id: $(this).data('ps'),
+                    post_id: $(this).data('post'),
+                    pin_id: $(this).data('pin'),
+                    dist_id: $(this).data('dist')
+                });
                 $('#modalTitle').text('Edit Agent');
                 $('#saveAgent').text('Update').prop('disabled', false);
                 $('#agentModal').modal('show');
@@ -202,15 +225,16 @@
                 $(this).prop('disabled', true).text('Saving...');
                 let agentId = $('#agentId').val();
                 let url = agentId ? `/agent-profile/${agentId}` : "{{ route('agent-profile.store') }}";
-                let data = {
+                let data = Object.assign({
                     _token: "{{ csrf_token() }}",
                     agent_name: $('#agentName').val(),
                     address: $('#address').val(),
                     mobile: $('#mobile').val(),
                     join_date: $('#joinDate').val(),
                     stock_limit: $('#stockLimit').val(),
+                    credit_sell_limit: $('#creditSellLimit').val(),
                     password: $('#password').val() || null
-                };
+                }, AddressMasterForm.collect(''));
                 if (agentId) data._method = 'PUT';
                 $.ajax({
                     url: url,
@@ -233,7 +257,8 @@
             });
 
             $('#agentModal').on('hidden.bs.modal', function() {
-                $('#agentId, #agentName, #address, #mobile, #stockLimit, #password').val('');
+                $('#agentId, #agentName, #address, #mobile, #stockLimit, #creditSellLimit, #password').val('');
+                AddressMasterForm.clearValues('');
                 $('#joinDate').val('{{ date('Y-m-d') }}');
                 $('#modalTitle').text('Add New Agent');
                 $('#saveAgent').text('Save').prop('disabled', false);
@@ -248,10 +273,7 @@
                 Swal.fire('Validation Error', 'Agent Name required', 'error');
                 return false;
             }
-            if (!$('#address').val()) {
-                Swal.fire('Validation Error', 'Address required', 'error');
-                return false;
-            }
+            if (!AddressMasterForm.validate('')) return false;
             if (!$('#mobile').val()) {
                 Swal.fire('Validation Error', 'Mobile required', 'error');
                 return false;
@@ -268,11 +290,16 @@
                 Swal.fire('Validation Error', 'Stock limit must not exceed 99,999,999.99', 'error');
                 return false;
             }
+            if ($('#creditSellLimit').val() && $('#creditSellLimit').val() > 99999999.99) {
+                Swal.fire('Validation Error', 'Credit sell limit must not exceed 99,999,999.99', 'error');
+                return false;
+            }
             return true;
         }
 
         function openAddModal() {
-            $('#agentId, #agentName, #address, #mobile, #stockLimit, #password').val('');
+            $('#agentId, #agentName, #address, #mobile, #stockLimit, #creditSellLimit, #password').val('');
+            AddressMasterForm.clearValues('');
             $('#joinDate').val('{{ date('Y-m-d') }}');
             $('#modalTitle').text('Add New Agent');
             $('#saveAgent').text('Save').prop('disabled', false);

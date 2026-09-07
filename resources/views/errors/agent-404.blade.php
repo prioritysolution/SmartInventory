@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=0">
 <title>Page Not Found</title>
-<link rel="shortcut icon" type="image/x-icon" href="{{ asset('agenttemplate/assets/img/favicon.png') }}">
+<link rel="shortcut icon" type="image/png" href="{{ asset('agenttemplate/assets/img/favicon.png') }}?v=2">
+<link rel="icon" type="image/png" href="{{ asset('agenttemplate/assets/img/favicon.png') }}?v=2">
+<link rel="apple-touch-icon" sizes="180x180" href="{{ asset('agenttemplate/assets/img/apple-touch-icon.png') }}?v=2">
 <link rel="stylesheet" href="{{ asset('agenttemplate/assets/css/bootstrap.min.css') }}">
 <link rel="stylesheet" href="{{ asset('agenttemplate/assets/css/animate.css') }}">
 <link rel="stylesheet" href="{{ asset('agenttemplate/assets/plugins/fontawesome/css/fontawesome.min.css') }}">

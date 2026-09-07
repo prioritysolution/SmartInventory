@@ -12,7 +12,7 @@
         <div class="card-body">
             <div class="row g-3">
                 <div class="col-md-3">
-                    <label class="form-label">Date <span class="text-danger">*</span></label>
+                    <label class="form-label">As on Date <span class="text-danger">*</span></label>
                     <input type="date" class="form-control" id="asOnDate"
                         min="{{ $year_start }}" max="{{ $year_end }}"
                         value="{{ min($year_end, date('Y-m-d')) }}">
@@ -33,7 +33,7 @@
 
     <div class="card">
         <div class="card-body">
-            <div class="table-responsive">
+            <div class="table-responsive report-scroll">
                 <table id="stockTable" class="table table-bordered table-sm w-100">
                     <thead class="thead-light">
                         <tr>
@@ -45,7 +45,7 @@
                         </tr>
                     </thead>
                     <tbody id="stockBody">
-                        <tr><td colspan="5" class="text-center text-muted">Select date and click Search</td></tr>
+                        <tr><td colspan="5" class="text-center text-muted">Select as on date and click Search</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -59,10 +59,9 @@
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-    const baseUrl = "{{ url('/') }}";
-    const orgName = @json(session('org_name'));
-    const agentName = @json(session('agent_name'));
-    let stockDT = null;
+    const searchUrl = "{{ route('agent.report.stock.search') }}";
+    const orgName = @json($org_name);
+    const agentName = @json($agent_name);
     let printRows = [];
 
     function printStock() {
@@ -92,7 +91,7 @@
             </style></head><body>
             <h3>${orgName || 'Smart Inventory'}</h3>
             <h4>Stock Report</h4>
-            <p>Agent: ${agentName || ''} &nbsp;|&nbsp; Date: ${asOn}</p>
+            <p>Agent: ${agentName || ''} &nbsp;|&nbsp; As on: ${asOn}</p>
             <table>
                 <thead><tr>
                     <th>Sl</th><th>Item Code</th><th>Item Name</th><th>Unit</th><th>Qty</th>
@@ -114,12 +113,11 @@
             return;
         }
 
-        if (stockDT) { stockDT.destroy(); stockDT = null; }
         printRows = [];
         $('#printBtn').prop('disabled', true);
         $('#stockBody').html('<tr><td colspan="5" class="text-center">Loading...</td></tr>');
 
-        $.get(baseUrl + '/agent/report/stock/search', { as_on_date: asOnDate }, function (data) {
+        $.get(searchUrl, { as_on_date: asOnDate }, function (data) {
             if (!data.length) {
                 $('#stockBody').html('<tr><td colspan="5" class="text-center text-muted">No stock found</td></tr>');
                 return;
@@ -137,24 +135,15 @@
             });
             $('#stockBody').html(html);
             $('#printBtn').prop('disabled', false);
-            stockDT = $('#stockTable').DataTable({
-                pageLength: 10,
-                ordering: true,
-                language: {
-                    search: '', searchPlaceholder: 'Search...',
-                    sLengthMenu: 'Row Per Page _MENU_ Entries',
-                    info: '_START_ - _END_ of _TOTAL_ items',
-                    paginate: {
-                        next: '<i class="fa fa-angle-right"></i>',
-                        previous: '<i class="fa fa-angle-left"></i>'
-                    }
-                }
-            });
         }).fail(function (xhr) {
             const msg = xhr.responseJSON?.message || 'Failed to load stock report. Run USP_AGENT_REPORTS.sql on the organisation database.';
             Swal.fire('Error', msg, 'error');
             $('#stockBody').html('<tr><td colspan="5" class="text-center text-danger">Failed to load</td></tr>');
         });
     });
+
+    if (new URLSearchParams(window.location.search).get('today') === '1') {
+        $('#searchBtn').trigger('click');
+    }
 </script>
 @endpush

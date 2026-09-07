@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Agent;
 
+use App\Http\Controllers\Concerns\SearchesItemsByCode;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -10,12 +11,18 @@ use Illuminate\Support\Facades\Log;
 
 class AgentCustomer extends Controller
 {
+    use SearchesItemsByCode;
+
     public function index()
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
 
-        $customers = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?)', [2, session('branch_id')]);
+        $customers = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [
+            2,
+            session('branch_id'),
+            session('agent_id'),
+        ]);
         $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
         return view('Agent.agent-custmer', [
             'customers'  => $customers,
@@ -37,13 +44,41 @@ class AgentCustomer extends Controller
         return substr($date, 0, 10);
     }
 
-    private function agentAvailableQty(int $prodId, string $date): float
+    private function saleReturnableQty(int $partyId, int $prodId, int $excludeId = 0): object
     {
-        $row = DB::connection('coops')->selectOne(
-            'SELECT UDF_CAL_AGENT_STOCK(?, ?, ?) AS Avil_Qnty',
-            [session('agent_id'), $prodId, $date]
-        );
-        return (float) ($row->Avil_Qnty ?? 0);
+        $pdo = DB::connection('coops')->getPdo();
+        $stmt = $pdo->prepare('CALL USP_GET_AGENT_SALE_RETURNABLE_QTY(?, ?, ?, ?)');
+        $stmt->execute([
+            session('agent_id'),
+            $partyId,
+            $prodId,
+            $excludeId,
+        ]);
+        $row = $stmt->fetch(\PDO::FETCH_OBJ);
+        $stmt->closeCursor();
+        return $row ?: (object) [
+            'Sold_Qty' => 0,
+            'Returned_Qty' => 0,
+            'Remaining_Qty' => 0,
+        ];
+    }
+
+    public function getReturnableQty(Request $request)
+    {
+        $partyId = (int) $request->input('party_id', 0);
+        $prodId  = (int) $request->input('prod_id', 0);
+        $exclude = (int) $request->input('exclude_id', 0);
+        if ($partyId <= 0 || $prodId <= 0) {
+            return response()->json(['error' => 'Select customer and item first'], 422);
+        }
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+        try {
+            return response()->json($this->saleReturnableQty($partyId, $prodId, $exclude));
+        } catch (\Exception $e) {
+            Log::error('Agent customer returnable qty lookup failed: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load returnable quantity'], 500);
+        }
     }
 
     public function getItemByBarcode(Request $request)
@@ -53,17 +88,14 @@ class AgentCustomer extends Controller
             DB::purge('coops');
 
             $date = $this->toIsoDate($request->input('sale_date'));
-            $result = DB::connection('coops')->select('CALL USP_GET_PROD_INFO_AGENT(?, ?, ?)', [
-                $request->input('barcode'),
-                session('agent_id'),
-                $date,
-            ]);
-            Log::channel('trading')->info('product info:', ['result' => $result]);
-
+            $code = trim((string) $request->input('barcode'));
+            $result = $this->prodInfoByAgentBarcode($code, (int) session('agent_id'), (string) $date);
+            if (empty($result)) {
+                $result = $this->resolveUniqueProductInfo($code, (string) $date);
+            }
             if (!empty($result)) {
                 $item = $result[0];
-                $item->Avil_Qnty = $this->agentAvailableQty((int) $item->Prod_Id, $date);
-                return response()->json($item);
+                return response()->json($this->attachSaleRates($item, (int) $item->Prod_Id));
             }
             return response()->json(['error' => 'Invalid Code Entered !!'], 404);
         } catch (\Exception $e) {
@@ -87,11 +119,11 @@ class AgentCustomer extends Controller
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
-        $items = DB::connection('coops')->select('CALL USP_GET_ITEM_LIST(?, ?, ?)', [
+        $items = $this->searchItemsByCode(
             (int) $request->input('cat_id', 0),
             (int) $request->input('sub_cat_id', 0),
             (string) ($request->input('code') ?? '')
-        ]);
+        );
         return response()->json($items);
     }
 
@@ -105,15 +137,13 @@ class AgentCustomer extends Controller
             }
             Config::set('database.connections.coops.database', session('org_schema'));
             DB::purge('coops');
-            $agentQty = $this->agentAvailableQty($prodId, $date);
             $result = DB::connection('coops')->select('CALL USP_GET_PROD_INFO_BY_ITEM(?, ?)', [
                 $prodId,
                 $date,
             ]);
             if (!empty($result)) {
                 $item = $result[0];
-                $item->Avil_Qnty = $agentQty;
-                return response()->json($item);
+                return response()->json($this->attachSaleRates($item, $prodId));
             }
             return response()->json(['error' => 'Item not found'], 404);
         } catch (\Exception $e) {
@@ -141,6 +171,40 @@ class AgentCustomer extends Controller
 
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
+
+        $party = DB::connection('coops')->selectOne(
+            'SELECT Party_Id FROM mst_party WHERE Party_Id = ? AND Party_Type = 2 AND Cust_Agent_Id = ? LIMIT 1',
+            [$request->party_id, session('agent_id')]
+        );
+        if (!$party) {
+            return response()->json(['error' => 'Selected customer is not assigned to you'], 400);
+        }
+
+        try {
+            $excludeId = intval($request->input('sale_id', 0));
+            $usedQty   = [];
+            foreach ($request->items as $item) {
+                $prodId = (int) ($item['item_id'] ?? 0);
+                if ($prodId <= 0) {
+                    return response()->json(['error' => 'Invalid item in return list'], 400);
+                }
+                $row       = $this->saleReturnableQty((int) $request->party_id, $prodId, $excludeId);
+                $remaining = (float) ($row->Remaining_Qty ?? 0);
+                $already   = $usedQty[$prodId] ?? 0;
+                $qty       = (float) $item['quantity'];
+                $allowed   = $remaining - $already;
+                if ($qty > $allowed + 0.0001) {
+                    $name = $item['item_name'] ?? ('Item ' . $prodId);
+                    return response()->json([
+                        'error' => "{$name}: return qty {$qty} exceeds remaining sold qty ({$allowed}). Sold: {$row->Sold_Qty}, already returned: {$row->Returned_Qty}.",
+                    ], 400);
+                }
+                $usedQty[$prodId] = $already + $qty;
+            }
+        } catch (\Exception $e) {
+            Log::error('Agent customer return qty check failed: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to validate returnable quantity'], 500);
+        }
 
         $conn = DB::connection('coops');
         $conn->beginTransaction();
@@ -202,10 +266,11 @@ class AgentCustomer extends Controller
             $netAmt      = floatval($request->input('net_amt', 0));
             $saleId      = intval($request->input('sale_id', 0));
 
-            $result = $conn->select('CALL USP_ADD_EDIT_SALE_RETURN(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $result = $conn->select('CALL USP_ADD_EDIT_AGENT_SALE_RET(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                 $saleId,
                 session('branch_id'),
                 $request->input('sale_date'),
+                $request->input('sale_no', null),
                 $request->input('party_id'),
                 $totAmt,
                 $discAmt,
@@ -239,8 +304,46 @@ class AgentCustomer extends Controller
 
         } catch (\Exception $e) {
             $conn->rollBack();
-            Log::error('Agent Sale Error: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to save sale'], 500);
+            Log::error('Agent customer return error: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to save customer return'], 500);
         }
+    }
+
+    public function getSaleRates(Request $request)
+    {
+        return response()->json($this->fetchSaleRates((int) $request->input('prod_id', 0)));
+    }
+
+    private function fetchSaleRates(int $prodId): array
+    {
+        if ($prodId <= 0) {
+            return [];
+        }
+        try {
+            Config::set('database.connections.coops.database', session('org_schema'));
+            DB::purge('coops');
+            $pdo = DB::connection('coops')->getPdo();
+            $stmt = $pdo->prepare('CALL USP_GET_PROD_SALE_RATES(?)');
+            $stmt->execute([$prodId]);
+            $rows = $stmt->fetchAll(\PDO::FETCH_OBJ);
+            $stmt->closeCursor();
+            $rates = [];
+            foreach ($rows as $row) {
+                $mrp = round((float) ($row->MRP ?? $row->mrp ?? 0), 2);
+                if ($mrp > 0 && !in_array($mrp, $rates, true)) {
+                    $rates[] = $mrp;
+                }
+            }
+            return $rates;
+        } catch (\Exception $e) {
+            Log::error('Sale rates lookup error: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    private function attachSaleRates(object $item, int $prodId): object
+    {
+        $item->Sale_Rates = $this->fetchSaleRates($prodId);
+        return $item;
     }
 }

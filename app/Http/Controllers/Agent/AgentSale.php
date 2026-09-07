@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Agent;
 
+use App\Http\Controllers\Concerns\SearchesItemsByCode;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -10,12 +11,18 @@ use Illuminate\Support\Facades\Log;
 
 class AgentSale extends Controller
 {
+    use SearchesItemsByCode;
+
     public function index()
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
 
-        $customers = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?)', [2, session('branch_id')]);
+        $customers = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [
+            2,
+            session('branch_id'),
+            session('agent_id'),
+        ]);
         $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
         return view('Agent.sale', [
             'customers'  => $customers,
@@ -53,17 +60,15 @@ class AgentSale extends Controller
             DB::purge('coops');
 
             $date = $this->toIsoDate($request->input('sale_date'));
-            $result = DB::connection('coops')->select('CALL USP_GET_PROD_INFO_AGENT(?, ?, ?)', [
-                $request->input('barcode'),
-                session('agent_id'),
-                $date,
-            ]);
-            Log::channel('trading')->info('product info:', ['result' => $result]);
-
+            $code = trim((string) $request->input('barcode'));
+            $result = $this->prodInfoByAgentBarcode($code, (int) session('agent_id'), (string) $date);
+            if (empty($result)) {
+                $result = $this->resolveUniqueProductInfo($code, (string) $date);
+            }
             if (!empty($result)) {
                 $item = $result[0];
                 $item->Avil_Qnty = $this->agentAvailableQty((int) $item->Prod_Id, $date);
-                return response()->json($item);
+                return response()->json($this->attachSaleRates($item, (int) $item->Prod_Id));
             }
             return response()->json(['error' => 'Invalid Code Entered !!'], 404);
         } catch (\Exception $e) {
@@ -87,11 +92,11 @@ class AgentSale extends Controller
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
-        $items = DB::connection('coops')->select('CALL USP_GET_ITEM_LIST(?, ?, ?)', [
+        $items = $this->searchItemsByCode(
             (int) $request->input('cat_id', 0),
             (int) $request->input('sub_cat_id', 0),
             (string) ($request->input('code') ?? '')
-        ]);
+        );
         return response()->json($items);
     }
 
@@ -113,6 +118,7 @@ class AgentSale extends Controller
             if (!empty($result)) {
                 $item = $result[0];
                 $item->Avil_Qnty = $agentQty;
+                $item = $this->attachSaleRates($item, $prodId);
                 Log::channel('trading')->info('agent sale item-info', [
                     'prod_id' => $prodId,
                     'agent_qty' => $agentQty,
@@ -130,7 +136,7 @@ class AgentSale extends Controller
     {
         $request->validate([
             'sale_date'  => 'required|date',
-            'party_id'   => 'required|integer',
+            'party_id'   => 'required|integer|min:0',
             'trans_mode' => 'required|in:1,2,3',
             'items'      => 'required|array|min:1',
             'items.*.quantity' => 'required|numeric|min:0.01',
@@ -145,6 +151,23 @@ class AgentSale extends Controller
 
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
+
+        $partyId = (int) $request->input('party_id', 0);
+        $transMode = (int) $request->input('trans_mode', 1);
+
+        if ($transMode === 3 && $partyId <= 0) {
+            return response()->json(['error' => 'Customer is required for credit sale'], 400);
+        }
+
+        if ($partyId > 0) {
+            $party = DB::connection('coops')->selectOne(
+                'SELECT Party_Id FROM mst_party WHERE Party_Id = ? AND Party_Type = 2 AND Cust_Agent_Id = ? LIMIT 1',
+                [$partyId, session('agent_id')]
+            );
+            if (!$party) {
+                return response()->json(['error' => 'Selected customer is not assigned to you'], 400);
+            }
+        }
 
         $conn = DB::connection('coops');
         $conn->beginTransaction();
@@ -206,18 +229,19 @@ class AgentSale extends Controller
             $netAmt      = floatval($request->input('net_amt', 0));
             $saleId      = intval($request->input('sale_id', 0));
 
-            $result = $conn->select('CALL USP_ADD_EDIT_AGENT_SALE(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $result = $conn->select('CALL USP_ADD_EDIT_AGENT_SALE(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                 $saleId,
                 session('branch_id'),
                 $request->input('sale_date'),
                 $request->input('sale_no', null),
-                $request->input('party_id'),
+                $partyId,
                 $totAmt,
                 $discAmt,
                 $taxableAmt,
                 $totGst,
                 $roundOff,
                 $netAmt,
+                $transMode,
                 session('agent_id'),
                 session('year_id'),
                 $saleId > 0 ? 2 : 1,
@@ -238,7 +262,7 @@ class AgentSale extends Controller
                 'success'   => true,
                 'message'   => $result[0]->Message ?? 'Sale saved successfully',
                 'bill_data' => $billData,
-                'show_bill' => !empty($billData),
+                'show_bill' => true,
             ]);
 
         } catch (\Exception $e) {
@@ -246,5 +270,43 @@ class AgentSale extends Controller
             Log::error('Agent Sale Error: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to save sale'], 500);
         }
+    }
+
+    public function getSaleRates(Request $request)
+    {
+        return response()->json($this->fetchSaleRates((int) $request->input('prod_id', 0)));
+    }
+
+    private function fetchSaleRates(int $prodId): array
+    {
+        if ($prodId <= 0) {
+            return [];
+        }
+        try {
+            Config::set('database.connections.coops.database', session('org_schema'));
+            DB::purge('coops');
+            $pdo = DB::connection('coops')->getPdo();
+            $stmt = $pdo->prepare('CALL USP_GET_PROD_SALE_RATES(?)');
+            $stmt->execute([$prodId]);
+            $rows = $stmt->fetchAll(\PDO::FETCH_OBJ);
+            $stmt->closeCursor();
+            $rates = [];
+            foreach ($rows as $row) {
+                $mrp = round((float) ($row->MRP ?? $row->mrp ?? 0), 2);
+                if ($mrp > 0 && !in_array($mrp, $rates, true)) {
+                    $rates[] = $mrp;
+                }
+            }
+            return $rates;
+        } catch (\Exception $e) {
+            Log::error('Sale rates lookup error: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    private function attachSaleRates(object $item, int $prodId): object
+    {
+        $item->Sale_Rates = $this->fetchSaleRates($prodId);
+        return $item;
     }
 }

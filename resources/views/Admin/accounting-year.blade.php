@@ -80,6 +80,10 @@ $(document).ready(function () {
     $('#cancelBtn').on('click', clearForm);
 
     $('#saveYear').click(function () {
+        if (!IS_ADMIN) {
+            Swal.fire('Access Denied', 'You do not have permission to perform this action.', 'warning');
+            return;
+        }
         if (!$('#yearStart').val()) { Swal.fire('Validation Error', 'Start Date required', 'error'); return; }
         $(this).prop('disabled', true).text('Saving...');
         $.ajax({

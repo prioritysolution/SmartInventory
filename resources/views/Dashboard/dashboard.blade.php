@@ -257,7 +257,14 @@
                                     <h6 class="mb-0">Reorder Alerts</h6>
                                     <p class="text-muted fs-13 mb-0">Items below reorder quantity</p>
                                 </div>
-                                <a href="{{ route('product-master') }}" class="btn btn-sm btn-primary">Product Master</a>
+                                @php
+                                    $reorderAction = collect($menuLinks ?? [])->first(
+                                        fn ($link) => in_array($link->route, ['reorder-report', 'product-master'], true)
+                                    );
+                                @endphp
+                                @if ($reorderAction)
+                                    <a href="{{ route($reorderAction->route) }}" class="btn btn-sm btn-primary">{{ $reorderAction->name }}</a>
+                                @endif
                             </div>
                             <div class="table-responsive">
                                 <table class="table table-nowrap border mb-0">

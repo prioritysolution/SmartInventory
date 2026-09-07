@@ -47,7 +47,7 @@
                 <div class="col-md-5">
                     <label class="form-label">Select Item <span class="text-danger">*</span></label>
                     <div class="input-group" style="position:relative;">
-                        <input type="text" id="itemSearch" class="form-control" placeholder="Search item..." autocomplete="off">
+                        <input type="text" id="itemSearch" class="form-control" placeholder="Scan barcode or product code" autocomplete="off">
                        <button class="btn btn-primary" type="button" id="itemSearchBtn">
                           <i class="fas fa-search"></i>
                        </button>
@@ -75,7 +75,7 @@
                     <input type="text" id="remarks" class="form-control" maxlength="100">
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
-                    <button class="btn btn-secondary w-100" onclick="addItem()">Add</button>
+                    <button class="btn btn-success w-100" onclick="addItem()">Add</button>
                 </div>
             </div>
 
@@ -241,9 +241,22 @@
                 cat_id: 0,
                 sub_cat_id: 0
             }, function (data) {
+                if (!data || !data.length) {
+                    openItemPickerModal([], code);
+                    return;
+                }
+                if (data.length === 1) {
+                    selectRequisitionItem(data[0]);
+                    return;
+                }
+                const exact = data.filter(item => String(item.Prod_Code || '').toLowerCase() === code.toLowerCase());
+                if (exact.length === 1) {
+                    selectRequisitionItem(exact[0]);
+                    return;
+                }
                 openItemPickerModal(data, code);
             }).fail(function () {
-                Swal.fire('Error', 'Failed to load items', 'error');
+                openItemPickerModal([], code);
             });
         });
 
@@ -303,12 +316,13 @@
         $(document).on('click', '#itemPickerTable tbody tr', function () {
             const prodId = $(this).data('id');
             if (!prodId) return;
-            $('#itemSearch').val($(this).data('name') || '');
-            $('#selectedItemId').val(prodId);
-            $('#selectedUnitId').val($(this).data('unit') || '');
-            $('#selectedUnitName').val($(this).data('unitname') || '');
+            selectRequisitionItem({
+                Prod_Id: prodId,
+                Prod_ShortNm: $(this).data('name') || '',
+                Unit_Id: $(this).data('unit') || '',
+                Unit_Name: $(this).data('unitname') || ''
+            });
             $('#itemPickerModal').modal('hide');
-            $('#itemQty').focus();
         });
 
         $('#itemSearch').on('keypress', function (e) {
@@ -349,7 +363,10 @@
             if (reqSearchDT) { reqSearchDT.destroy(); reqSearchDT = null; }
             $('#reqSearchBody').html('<tr><td colspan="5" class="text-center">Loading...</td></tr>');
 
-            $.get(baseUrl + '/agent/requisition/search', { frm_date: frmDate, to_date: toDate }, function (data) {
+            $.get(baseUrl + '/agent/requisition/search', {
+                frm_date: frmDate,
+                to_date: toDate
+            }, function (data) {
                 if (!data.length) {
                     $('#reqSearchBody').html('<tr><td colspan="5" class="text-center text-muted">No records found</td></tr>');
                     return;
@@ -400,11 +417,19 @@ $('#reqSearchModal').on('hidden.bs.modal', function () {
     if (selectedRow) {
         const row = selectedRow;
         selectedRow = null;
-        loadForEdit(row);   // ← use local copy, clear selectedRow first
+        loadForEdit(row);
     }
 });
 
     });
+
+    function selectRequisitionItem(item) {
+        $('#itemSearch').val(item.Prod_ShortNm || item.Item_Name || '');
+        $('#selectedItemId').val(item.Prod_Id);
+        $('#selectedUnitId').val(item.Unit_Id || '');
+        $('#selectedUnitName').val(item.Unit_Name || '');
+        $('#itemQty').focus();
+    }
 
     function openItemPickerModal(data, code) {
         $('#itemPickerLoader').hide();
@@ -521,8 +546,8 @@ function renderItemTable() {
         tbody.append(`
             <tr>
                 <td>${idx + 1}</td>
-                <td>${item.item_name}</td>
-                <td>${item.unit_name}</td>
+                <td>${item.item_name || ''}</td>
+                <td>${item.unit_name || ''}</td>
                 <td>${item.qnty}</td>
                 <td class="text-center">
                     <button class="btn btn-warning btn-sm me-1" onclick="loadItemIntoForm(${idx})">
@@ -596,7 +621,7 @@ function loadForEdit(row) {
         if (typeof items === 'string') {
             try { items = JSON.parse(items); } catch(e) { items = []; }
         }
-        items.forEach(i => {
+        (items || []).forEach(i => {
             itemList.push({
                 item_id:   i.Prod_Id,
                 item_name: i.Prod_ShortNm,
@@ -607,7 +632,7 @@ function loadForEdit(row) {
         });
     }
 
-    renderItemTable();  // show all items in table directly
+    renderItemTable();
     $('html, body').animate({ scrollTop: 0 }, 300);
 }
 

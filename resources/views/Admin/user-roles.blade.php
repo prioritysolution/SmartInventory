@@ -309,6 +309,10 @@
 
             /* Save */
             $('#saveGroup').click(function() {
+                if (!IS_ADMIN) {
+                    Swal.fire('Access Denied', 'You do not have permission to perform this action.', 'warning');
+                    return;
+                }
                 let menus = [];
                 $('.child-menu:checked').each(function() {
                     let val = $(this).val().split('|');

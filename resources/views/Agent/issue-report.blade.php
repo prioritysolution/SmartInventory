@@ -5,7 +5,7 @@
 <div class="content container-fluid">
 
     <div class="d-flex justify-content-between align-items-center ps-2 mb-3">
-        <h6 class="mb-0">{{ $pageTitle }}</h6>
+        <h6 class="mb-0">Issue Report</h6>
     </div>
 
     <div class="card mb-3">
@@ -38,21 +38,22 @@
 
     <div class="card mb-3">
         <div class="card-body">
-            <div class="table-responsive">
+            <div class="table-responsive report-scroll">
                 <table id="reportTable" class="table table-bordered table-sm w-100">
                     <thead class="thead-light">
                         <tr>
                             <th>Sl</th>
-                            <th>{{ $docLabel }}</th>
+                            <th>Indent No</th>
                             <th>Date</th>
                             <th>Item Code</th>
                             <th>Item Name</th>
                             <th class="text-end">Qty</th>
+                            <th class="text-end">Reject Qty</th>
                             <th>Unit</th>
                         </tr>
                     </thead>
                     <tbody id="reportBody">
-                        <tr><td colspan="7" class="text-center text-muted">Select dates and click Search</td></tr>
+                        <tr><td colspan="8" class="text-center text-muted">Select dates and click Search</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -66,13 +67,9 @@
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-    const baseUrl = "{{ url('/') }}";
-    const searchUrl = @json($searchUrl);
-    const pageTitle = @json($pageTitle);
-    const docLabel = @json($docLabel);
-    const orgName = @json(session('org_name'));
-    const agentName = @json(session('agent_name'));
-    let reportDT = null;
+    const searchUrl = "{{ route('agent.report.issue.search') }}";
+    const orgName = @json($org_name);
+    const agentName = @json($agent_name);
     let printRows = [];
 
     function printReport() {
@@ -91,11 +88,12 @@
                 <td>${row.Prod_Code ?? ''}</td>
                 <td>${row.Prod_ShortNm ?? ''}</td>
                 <td style="text-align:right;">${row.Quantity ?? 0}</td>
+                <td style="text-align:right;">${row.Reject_Qty ?? 0}</td>
                 <td>${row.Unit_Name ?? ''}</td>
             </tr>`;
         });
         const w = window.open('', '_blank');
-        w.document.write(`<!DOCTYPE html><html><head><title>${pageTitle}</title>
+        w.document.write(`<!DOCTYPE html><html><head><title>Issue Report</title>
             <style>
                 body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
                 h3, h4, p { margin: 0 0 6px 0; text-align: center; }
@@ -104,12 +102,13 @@
                 th { background: #f0f0f0; }
             </style></head><body>
             <h3>${orgName || 'Smart Inventory'}</h3>
-            <h4>${pageTitle}</h4>
+            <h4>Issue Report</h4>
             <p>Agent: ${agentName || ''} &nbsp;|&nbsp; From: ${frm} &nbsp; To: ${to}</p>
             <table>
                 <thead><tr>
-                    <th>Sl</th><th>${docLabel}</th><th>Date</th>
-                    <th>Item Code</th><th>Item Name</th><th>Qty</th><th>Unit</th>
+                    <th>Sl</th><th>Indent No</th><th>Date</th>
+                    <th>Item Code</th><th>Item Name</th><th>Qty</th>
+                    <th>Reject Qty</th><th>Unit</th>
                 </tr></thead>
                 <tbody>${body}</tbody>
             </table>
@@ -133,14 +132,13 @@
             return;
         }
 
-        if (reportDT) { reportDT.destroy(); reportDT = null; }
         printRows = [];
         $('#printBtn').prop('disabled', true);
-        $('#reportBody').html('<tr><td colspan="7" class="text-center">Loading...</td></tr>');
+        $('#reportBody').html('<tr><td colspan="8" class="text-center">Loading...</td></tr>');
 
         $.get(searchUrl, { frm_date: frmDate, to_date: toDate }, function (data) {
             if (!data.length) {
-                $('#reportBody').html('<tr><td colspan="7" class="text-center text-muted">No records found</td></tr>');
+                $('#reportBody').html('<tr><td colspan="8" class="text-center text-muted">No records found</td></tr>');
                 return;
             }
             printRows = data;
@@ -153,28 +151,23 @@
                     <td>${row.Prod_Code ?? ''}</td>
                     <td>${row.Prod_ShortNm ?? ''}</td>
                     <td class="text-end">${row.Quantity ?? 0}</td>
+                    <td class="text-end">${row.Reject_Qty ?? 0}</td>
                     <td>${row.Unit_Name ?? ''}</td>
                 </tr>`;
             });
             $('#reportBody').html(html);
             $('#printBtn').prop('disabled', false);
-            reportDT = $('#reportTable').DataTable({
-                pageLength: 10,
-                ordering: true,
-                language: {
-                    search: '', searchPlaceholder: 'Search...',
-                    sLengthMenu: 'Row Per Page _MENU_ Entries',
-                    info: '_START_ - _END_ of _TOTAL_ items',
-                    paginate: {
-                        next: '<i class="fa fa-angle-right"></i>',
-                        previous: '<i class="fa fa-angle-left"></i>'
-                    }
-                }
-            });
         }).fail(function (xhr) {
             Swal.fire('Error', xhr.responseJSON?.message || 'Failed to load report', 'error');
-            $('#reportBody').html('<tr><td colspan="7" class="text-center text-danger">Failed to load</td></tr>');
+            $('#reportBody').html('<tr><td colspan="8" class="text-center text-danger">Failed to load</td></tr>');
         });
     });
+
+    if (new URLSearchParams(window.location.search).get('today') === '1') {
+        const today = @json(date('Y-m-d'));
+        $('#frmDate').val(today);
+        $('#toDate').val(today);
+        $('#searchBtn').trigger('click');
+    }
 </script>
 @endpush

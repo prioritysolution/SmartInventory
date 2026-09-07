@@ -3,6 +3,19 @@
 @push('style')
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link href="{{ asset('template/assets/css/select2-custom.css') }}" rel="stylesheet" />
+    <style>
+        .modal-xl-custom {
+            max-width: 1100px;
+        }
+
+        #itemPickerTable tbody tr {
+            cursor: pointer;
+        }
+
+        #itemPickerTable tbody tr:hover {
+            background-color: #eef5ff;
+        }
+    </style>
 @endpush
 
 @section('content')
@@ -17,9 +30,6 @@
                         <button class="btn btn-primary" type="button" id="searchBtn">
                             <i class="fa-solid fa-magnifying-glass"></i>
                         </button>
-                    </div>
-                    <div id="searchDropdown" class="list-group position-absolute"
-                        style="display: none; z-index: 1000; max-height: 300px; overflow-y: auto; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
                     </div>
                 </div>
             </div>
@@ -95,7 +105,65 @@
                     </div>
                     <div class="d-flex gap-2 justify-content-end">
                         <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
-                        <button type="button" class="btn btn-primary" id="saveBtn">Save</button>
+                        <button type="button" class="btn btn-primary" id="saveBtn" data-admin-only="true">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- Item Picker Modal (category-wise) --}}
+    <div class="modal fade" id="itemPickerModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-xl modal-xl-custom">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="itemPickerTitle">Select Product</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 mb-3" id="modalFilterRow">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Category</label>
+                            <select class="form-select form-select-sm" id="modalCateId">
+                                <option value="0">-- All Categories --</option>
+                                @foreach ($categories as $cat)
+                                    <option value="{{ $cat->Prd_CateId }}">{{ $cat->Prd_CateNm }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Sub Category</label>
+                            <select class="form-select form-select-sm" id="modalSubCateId">
+                                <option value="0">-- All Sub Categories --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Product Name / Code</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" id="modalSearchInput"
+                                    placeholder="Search...">
+                                <button class="btn btn-primary" type="button" id="modalSearchBtn">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="itemPickerLoader" class="text-center py-3" style="display:none;">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2 mb-0">Loading items...</p>
+                    </div>
+                    <div id="itemPickerTableWrap" style="display:none;">
+                        <table id="itemPickerTable" class="table table-bordered table-hover table-sm w-100">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Sl</th>
+                                    <th>Item Code</th>
+                                    <th>Item Name</th>
+                                    <th>Unit</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -107,6 +175,7 @@
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
         $(document).ready(function() {
+            let itemPickerDT = null;
 
             $('#unit').select2({
                 placeholder: 'Select Unit',
@@ -125,49 +194,136 @@
                 allowClear: true
             });
 
-            // Search
-            $('#searchBtn').on('click', function() {
-                const searchTerm = $('#searchItem').val().trim();
-                if (searchTerm.length >= 1) {
-                    $.ajax({
-                        url: '/product-master/search',
-                        type: 'GET',
-                        data: {
-                            search: searchTerm
-                        },
-                        success: function(data) {
-                            if (data.length > 0) {
-                                let html = '';
-                                data.forEach(item => {
-                                    html +=
-                                        `<a href="#" class="list-group-item list-group-item-action search-item" data-id="${item.Prod_Id}">${item.ItemDisplay}</a>`;
-                                });
-                                $('#searchDropdown').html(html).show();
-                            } else {
-                                $('#searchDropdown').html(
-                                        '<div class="list-group-item">No items found</div>')
-                                    .show();
+            function openItemPickerModal(code) {
+                $('#itemPickerTitle').text('Select Product');
+                $('#itemPickerLoader').hide();
+                $('#itemPickerTableWrap').hide();
+                if (itemPickerDT) {
+                    itemPickerDT.destroy();
+                    itemPickerDT = null;
+                }
+                $('#itemPickerTable tbody').html('');
+                $('#modalCateId').val('0');
+                $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
+                $('#modalSearchInput').val(code || '');
+                $('#itemPickerModal').modal('show');
+                if (code) {
+                    $('#modalSearchBtn').trigger('click');
+                }
+            }
+
+            function renderItemPickerTable(data) {
+                setTimeout(function() {
+                    $('#itemPickerLoader').hide();
+                    if (!data.length) {
+                        $('#itemPickerTable tbody').html(
+                            '<tr><td colspan="4" class="text-center text-muted">No items found</td></tr>');
+                        $('#itemPickerTableWrap').show();
+                        return;
+                    }
+                    $.each(data, function(i, item) {
+                        $('#itemPickerTable tbody').append(
+                            `<tr data-id="${item.Prod_Id}">
+                                <td>${i + 1}</td>
+                                <td>${item.Prod_Code || ''}</td>
+                                <td>${item.Prod_ShortNm || item.Item_Name || ''}</td>
+                                <td>${item.Unit_Name || ''}</td>
+                            </tr>`
+                        );
+                    });
+                    if (itemPickerDT) {
+                        itemPickerDT.destroy();
+                        itemPickerDT = null;
+                    }
+                    $('#itemPickerTableWrap').show();
+                    itemPickerDT = $('#itemPickerTable').DataTable({
+                        pageLength: 10,
+                        lengthMenu: [10, 25, 50],
+                        ordering: true,
+                        sDom: 'fBtlpi',
+                        language: {
+                            search: '',
+                            searchPlaceholder: 'Search items...',
+                            sLengthMenu: 'Row Per Page _MENU_ Entries',
+                            info: '_START_ - _END_ of _TOTAL_ items',
+                            paginate: {
+                                next: '<i class="isax isax-arrow-right-1"></i>',
+                                previous: '<i class="isax isax-arrow-left"></i>'
                             }
                         }
                     });
+                }, 0);
+            }
+
+            $('#searchBtn').on('click', function() {
+                openItemPickerModal($('#searchItem').val().trim());
+            });
+
+            $('#searchItem').on('keypress', function(e) {
+                if (e.which === 13) {
+                    e.preventDefault();
+                    $('#searchBtn').trigger('click');
                 }
             });
 
-            $('#searchItem').on('input', function() {
-                if ($(this).val().trim() === '') $('#searchDropdown').hide();
+            $('#modalCateId').on('change', function() {
+                const catId = parseInt($(this).val()) || 0;
+                $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
+                if (!catId) return;
+                $.get(`/product-master/subcategories/${catId}`, function(subs) {
+                    (subs || []).forEach(s => {
+                        $('#modalSubCateId').append(
+                            `<option value="${s.Prd_SubCateId}">${s.Prd_SubCateNm}</option>`
+                        );
+                    });
+                });
             });
 
-            $(document).on('click', '.search-item', function(e) {
-                e.preventDefault();
-                $('#searchItem').val($(this).text());
-                $('#searchDropdown').hide();
-                loadItemDetails($(this).data('id'));
-            });
-
-            $(document).on('click', function(e) {
-                if (!$(e.target).closest('#searchItem, #searchDropdown, #searchBtn').length) {
-                    $('#searchDropdown').hide();
+            $('#modalSearchBtn').on('click', function() {
+                const catId = parseInt($('#modalCateId').val()) || 0;
+                const subCatId = parseInt($('#modalSubCateId').val()) || 0;
+                const code = $('#modalSearchInput').val().trim();
+                $('#itemPickerLoader').show();
+                $('#itemPickerTableWrap').hide();
+                if (itemPickerDT) {
+                    itemPickerDT.destroy();
+                    itemPickerDT = null;
                 }
+                $('#itemPickerTable tbody').html('');
+                $.get("{{ route('product-master.search') }}", {
+                    cat_id: catId,
+                    sub_cat_id: subCatId,
+                    code: code
+                }, function(data) {
+                    renderItemPickerTable(data || []);
+                }).fail(function() {
+                    $('#itemPickerLoader').hide();
+                    Swal.fire('Error', 'Failed to load items', 'error');
+                });
+            });
+
+            $('#modalSearchInput').on('keypress', function(e) {
+                if (e.which === 13) $('#modalSearchBtn').trigger('click');
+            });
+
+            $('#itemPickerModal').on('hidden.bs.modal', function() {
+                $('#modalCateId').val('0');
+                $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
+                $('#modalSearchInput').val('');
+                $('#itemPickerLoader').hide();
+                $('#itemPickerTableWrap').hide();
+                if (itemPickerDT) {
+                    itemPickerDT.destroy();
+                    itemPickerDT = null;
+                }
+                $('#itemPickerTable tbody').html('');
+            });
+
+            $(document).on('click', '#itemPickerTable tbody tr', function() {
+                const prodId = $(this).data('id');
+                if (!prodId) return;
+                $('#itemPickerModal').modal('hide');
+                loadItemDetails(prodId);
             });
 
             function loadItemDetails(itemId) {
@@ -185,12 +341,11 @@
                             $('#sale_margin').val(data.Sale_Margin);
                             $('#reorder_qnty').val(data.ReOrder_Qty);
                             $('#prod_life').val(data.Prod_Life);
-                            // Load subcategories then set value
                             $('#category').val(data.Cate_Id).trigger('change');
                             $.get(`/product-master/subcategories/${data.Cate_Id}`, function(subs) {
                                 $('#sub_category').html(
                                     '<option value="">Select Sub Category</option>');
-                                subs.forEach(s => {
+                                (subs || []).forEach(s => {
                                     $('#sub_category').append(
                                         `<option value="${s.Prd_SubCateId}">${s.Prd_SubCateNm}</option>`
                                     );
@@ -200,7 +355,6 @@
 
                             $('#saveBtn').text('Update');
                             $('#searchItem').val('');
-                            $('#searchDropdown').hide();
                         } else {
                             Swal.fire('Error', 'Product not found', 'error');
                         }
@@ -212,6 +366,11 @@
             }
 
             $('#saveBtn').on('click', function() {
+
+                if (!IS_ADMIN) {
+                    Swal.fire('Access Denied', 'You do not have permission to perform this action.', 'warning');
+                    return;
+                }
 
                 if (!validateForm()) return;
 
@@ -270,7 +429,7 @@
                 if (!categoryId) return;
                 $.get(`/product-master/subcategories/${categoryId}`, function(data) {
                     $('#sub_category').html('<option value="">Select Sub Category</option>');
-                    data.forEach(item => {
+                    (data || []).forEach(item => {
                         $('#sub_category').append(
                             `<option value="${item.Prd_SubCateId}">${item.Prd_SubCateNm}</option>`
                         );

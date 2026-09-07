@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
 
@@ -43,7 +44,7 @@ class UserManagement extends Controller
                 $request->mobile,
                 $request->mail,
                 $request->user_name,
-                $request->password,
+                Hash::make($request->password),
                 $request->grp_id,
                 session('branch_id'),
                 session('user_id'),
@@ -96,7 +97,7 @@ class UserManagement extends Controller
                 $request->mobile,
                 $request->mail,
                 null,
-                $request->password,
+                $request->filled('password') ? Hash::make($request->password) : null,
                 $request->grp_id,
                 session('branch_id'),
                 session('user_id'),

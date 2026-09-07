@@ -58,6 +58,21 @@
         .bg-warning-subtle { background: #fff6e5; color: #d39e00; }
         .bg-info-subtle { background: #e7f6fb; color: #0dcaf0; }
         .bg-danger-subtle { background: #fdecec; color: #dc3545; }
+
+        a.si-stat-link {
+            display: flex;
+            width: 100%;
+            text-decoration: none;
+            color: inherit;
+        }
+        a.si-stat-link:hover,
+        a.si-stat-link:focus {
+            text-decoration: none;
+            color: inherit;
+        }
+        a.si-stat-link .dash-count {
+            width: 100%;
+        }
     </style>
 @endpush
 
@@ -74,12 +89,11 @@
                     <span class="badge bg-light text-dark border px-3 py-2">
                         <i class="fa fa-calendar me-1 text-primary"></i>{{ $now->format('l, d M Y') }}
                     </span>
-                    <a href="{{ route('agent.sale') }}" class="btn btn-primary">
-                        <i class="fa fa-plus me-1"></i>New Sale
-                    </a>
-                    <a href="{{ route('agent.requisition') }}" class="btn btn-outline-primary">
-                        <i class="fa fa-clipboard me-1"></i>Requisition
-                    </a>
+                    @foreach (collect($agentMenuLinks ?? [])->filter(fn ($link) => !str_starts_with($link->route, 'agent.report.'))->take(2) as $link)
+                        <a href="{{ route($link->route) }}" class="btn {{ $loop->first ? 'btn-primary' : 'btn-outline-primary' }}">
+                            <i class="{{ $link->icon }} me-1"></i>{{ $link->name }}
+                        </a>
+                    @endforeach
                 </div>
             </div>
 
@@ -142,43 +156,42 @@
                 </div>
             </div>
 
+            @php
+                $agentStatLinks = [
+                    ['route' => 'agent.report.sale', 'params' => ['today' => 1], 'amount' => $stats?->today_sales ?? 0, 'label' => "Today's Sales", 'class' => ''],
+                    ['route' => 'agent.report.return', 'params' => ['today' => 1], 'amount' => $stats?->today_return ?? 0, 'label' => "Today's Return", 'class' => 'das1'],
+                    ['route' => 'agent.report.indent', 'params' => ['today' => 1], 'amount' => $stats?->pending_indents ?? 0, 'label' => 'Pending Indents', 'class' => 'das2', 'format' => 'number'],
+                    ['route' => 'agent.report.stock', 'params' => ['today' => 1], 'amount' => $stats?->low_stock_count ?? 0, 'label' => 'Low Stock Items', 'class' => 'das3', 'format' => 'number'],
+                ];
+            @endphp
             <div class="row">
-                <div class="col-lg-3 col-sm-6 col-12 d-flex">
-                    <div class="dash-count">
-                        <div class="dash-counts">
-                            <h4>₹ {{ number_format($stats?->today_sales ?? 0, 2) }}</h4>
-                            <h5>Today's Sales</h5>
-                        </div>
-                        <div class="dash-imgs"><i data-feather="shopping-cart"></i></div>
+                @foreach ($agentStatLinks as $stat)
+                    @php
+                        $statUrl = menuLinkRoute($agentMenuLinks ?? [], $stat['route'], $stat['params']);
+                        $statValue = ($stat['format'] ?? '') === 'number'
+                            ? number_format($stat['amount'], 0)
+                            : '₹ ' . number_format($stat['amount'], 2);
+                    @endphp
+                    <div class="col-lg-3 col-sm-6 col-12 d-flex">
+                        @if ($statUrl)
+                            <a href="{{ $statUrl }}" class="si-stat-link">
+                        @else
+                            <div class="si-stat-link">
+                        @endif
+                                <div class="dash-count {{ $stat['class'] }}">
+                                    <div class="dash-counts">
+                                        <h4>{{ $statValue }}</h4>
+                                        <h5>{{ $stat['label'] }}</h5>
+                                    </div>
+                                    <div class="dash-imgs"><i data-feather="{{ $loop->index === 0 ? 'shopping-cart' : ($loop->index === 1 ? 'rotate-ccw' : ($loop->index === 2 ? 'clipboard' : 'alert-triangle')) }}"></i></div>
+                                </div>
+                        @if ($statUrl)
+                            </a>
+                        @else
+                            </div>
+                        @endif
                     </div>
-                </div>
-                <div class="col-lg-3 col-sm-6 col-12 d-flex">
-                    <div class="dash-count das1">
-                        <div class="dash-counts">
-                            <h4>₹ {{ number_format($stats?->today_return ?? 0, 2) }}</h4>
-                            <h5>Today's Return</h5>
-                        </div>
-                        <div class="dash-imgs"><i data-feather="rotate-ccw"></i></div>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-sm-6 col-12 d-flex">
-                    <div class="dash-count das2">
-                        <div class="dash-counts">
-                            <h4>{{ number_format($stats?->pending_indents ?? 0, 0) }}</h4>
-                            <h5>Pending Indents</h5>
-                        </div>
-                        <div class="dash-imgs"><i data-feather="clipboard"></i></div>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-sm-6 col-12 d-flex">
-                    <div class="dash-count das3">
-                        <div class="dash-counts">
-                            <h4>{{ number_format($stats?->low_stock_count ?? 0, 0) }}</h4>
-                            <h5>Low Stock Items</h5>
-                        </div>
-                        <div class="dash-imgs"><i data-feather="alert-triangle"></i></div>
-                    </div>
-                </div>
+                @endforeach
             </div>
 
             <div class="row">
@@ -242,7 +255,10 @@
                                     </tbody>
                                 </table>
                             </div>
-                            <a href="{{ route('agent.requisition') }}" class="btn btn-light w-100 mt-3">Raise Requisition</a>
+                            @php $requisitionUrl = menuLinkRoute($agentMenuLinks ?? [], 'agent.requisition'); @endphp
+                            @if ($requisitionUrl)
+                                <a href="{{ $requisitionUrl }}" class="btn btn-light w-100 mt-3">Raise Requisition</a>
+                            @endif
                         </div>
                     </div>
                 </div>

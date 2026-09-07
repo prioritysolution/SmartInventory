@@ -155,7 +155,7 @@ class Accounting extends Controller
     {
         Config::set('database.connections.coops.database', session('org_schema'));
 
-        $allParties = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?)', [$partyType, session('branch_id')]);
+        $allParties = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [$partyType, session('branch_id'), 0]);
         $parties = array_values(array_filter($allParties, function ($row) {
             return (int) ($row->Status_Cd ?? 1) === 1;
         }));

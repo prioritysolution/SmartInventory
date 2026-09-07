@@ -2,8 +2,9 @@
     .quick-access-sidebar {
         position: fixed;
         top: 0;
-        right: -320px;
-        width: 320px;
+        right: -420px;
+        width: 400px;
+        max-width: calc(100vw - 24px);
         height: 100%;
         z-index: 1065;
         background: #fff;
@@ -11,7 +12,8 @@
         display: flex;
         flex-direction: column;
         transition: right .25s ease;
-        padding: 16px 12px 12px;
+        padding: 16px;
+        box-sizing: border-box;
     }
 
     .quick-access-sidebar.is-open {
@@ -34,11 +36,7 @@
         flex: 1;
         min-height: 0;
         overflow-y: auto;
-        scrollbar-width: none;
-    }
-
-    .quick-access-panel::-webkit-scrollbar {
-        display: none;
+        scrollbar-width: thin;
     }
 
     .quick-access-panel .qa-head {
@@ -58,8 +56,8 @@
 
     .quick-access-grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
         width: 100%;
     }
 
@@ -67,15 +65,17 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start;
         width: 100%;
-        aspect-ratio: 1 / 1;
-        padding: 6px 4px;
+        min-height: 96px;
+        padding: 10px 8px;
         text-decoration: none;
         border: 1px solid #e8eaf0;
         border-radius: 8px;
         background: #fff;
         color: #172b4c;
+        box-sizing: border-box;
+        overflow: hidden;
     }
 
     .quick-access-grid a:hover {
@@ -86,14 +86,35 @@
 
     .quick-access-grid a i {
         font-size: 18px;
-        margin-bottom: 6px;
+        margin-bottom: 8px;
+        flex-shrink: 0;
     }
 
     .quick-access-grid a span {
         font-size: 11px;
         font-weight: 600;
         text-align: center;
-        line-height: 1.2;
+        line-height: 1.25;
+        width: 100%;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    @media (max-width: 575.98px) {
+        .quick-access-sidebar {
+            width: 100%;
+            right: -100%;
+            max-width: 100%;
+        }
+
+        .quick-access-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
     }
 </style>
 
@@ -107,24 +128,12 @@
             </button>
         </div>
         <div class="quick-access-grid">
-            <a href="{{ route('user-dashboard') }}"><i class="fa fa-home text-primary"></i><span>Dashboard</span></a>
-            <a href="{{ route('counter-sale') }}"><i class="fa fa-shopping-cart text-warning"></i><span>Counter Sale</span></a>
-            <a href="{{ route('good-received-entry') }}"><i class="fa fa-truck text-success"></i><span>Goods Received</span></a>
-            <a href="{{ route('agent-indent') }}"><i class="fa fa-clipboard-list text-info"></i><span>Agent Indent</span></a>
-            <a href="{{ route('sale-return') }}"><i class="fa fa-rotate-left text-danger"></i><span>Counter Sale Return</span></a>
-            <a href="{{ route('purchase-return') }}"><i class="fa fa-undo text-warning"></i><span>Purchase Return</span></a>
-            <a href="{{ route('agent-return') }}"><i class="fa fa-repeat text-secondary"></i><span>Agent Return</span></a>
-            <a href="{{ route('barcode-label') }}"><i class="fa fa-tags text-primary"></i><span>Barcode Label</span></a>
-            <a href="{{ route('print-barcode') }}"><i class="fa fa-barcode text-success"></i><span>Print Barcode</span></a>
-            <a href="{{ route('product-master') }}"><i class="fa fa-box text-info"></i><span>Products</span></a>
-            <a href="{{ route('supplier-master') }}"><i class="fa fa-warehouse text-warning"></i><span>Suppliers</span></a>
-            <a href="{{ route('customer-master') }}"><i class="fa fa-users text-danger"></i><span>Customers</span></a>
-            <a href="{{ route('agent-profile') }}"><i class="fa fa-user-tie text-primary"></i><span>Agents</span></a>
-            <a href="{{ route('member-share') }}"><i class="fa fa-handshake text-success"></i><span>Members</span></a>
-            <a href="{{ route('gst-codes') }}"><i class="fa fa-receipt text-warning"></i><span>GST Codes</span></a>
-            <a href="{{ route('chart-of-accounts') }}"><i class="fa fa-sitemap text-info"></i><span>Accounts</span></a>
-            <a href="{{ route('prod-category') }}"><i class="fa fa-layer-group text-primary"></i><span>Category</span></a>
-            <a href="{{ route('user-creation') }}"><i class="fa fa-user-plus text-danger"></i><span>Users</span></a>
+            @foreach ($menuLinks ?? [] as $link)
+                <a href="{{ route($link->route) }}" title="{{ $link->name }}">
+                    <i class="{{ $link->icon }}"></i>
+                    <span>{{ $link->name }}</span>
+                </a>
+            @endforeach
         </div>
     </div>
 </aside>

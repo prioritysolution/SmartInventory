@@ -282,10 +282,10 @@
             var minDate = parseBound(min);
             var maxDate = parseBound(max);
             if (minDate) {
-                options.minDate = minDate;
+                options.minDate = moment.isMoment(minDate) ? minDate.clone().startOf('day') : minDate;
             }
             if (maxDate) {
-                options.maxDate = maxDate;
+                options.maxDate = moment.isMoment(maxDate) ? maxDate.clone().endOf('day') : maxDate;
             }
 
             // Init on the wrap, never the input. This plugin always opens on

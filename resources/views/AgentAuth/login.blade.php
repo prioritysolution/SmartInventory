@@ -30,11 +30,6 @@
                 </div>
             </div>
             <div class="form-login">
-                <div class="alreadyuser">
-                    <h4><a href="#" class="hover-a">Forgot Password?</a></h4>
-                </div>
-            </div>
-            <div class="form-login">
                 <button type="button" onclick="proc_agent_login()" class="btn btn-login">Sign In</button>
             </div>
         </div>

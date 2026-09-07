@@ -325,6 +325,26 @@
 
             loadList(1);
 
+            // Auto-preview from query params (redirect from barcode-label)
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('barcode')) {
+                const mode = parseInt(urlParams.get('mode') ?? 1);
+                if (mode === 2) {
+                    $('.btn-tab').removeClass('btn-primary active').addClass('btn-outline-primary');
+                    $('[data-mode="2"]').removeClass('btn-outline-primary').addClass('btn-primary active');
+                    loadList(2);
+                }
+                selectedProduct = {
+                    code:     urlParams.get('barcode'),
+                    name:     urlParams.get('name') ?? '',
+                    mrp:      urlParams.get('mrp') ?? 0,
+                    packdate: urlParams.get('packdate') ?? ''
+                };
+                $('#labelQty').val(urlParams.get('qty') ?? 1);
+                $('#printBtn').prop('disabled', false);
+                renderPreview(selectedProduct);
+            }
+
             $(document).on('click', '.btn-tab', function() {
                 $('.btn-tab').removeClass('btn-primary active').addClass('btn-outline-primary');
                 $(this).removeClass('btn-outline-primary').addClass('btn-primary active');

@@ -13,10 +13,11 @@
     <meta name="keywords" content="inventory, sales, purchase, dashboard">
 
     <!-- Favicon -->
-    <link rel="shortcut icon" type="image/x-icon" href="{{ asset('template/assets/img/favicon.png') }}">
+    <link rel="shortcut icon" type="image/png" href="{{ asset('template/assets/img/favicon.png') }}?v=2">
+    <link rel="icon" type="image/png" href="{{ asset('template/assets/img/favicon.png') }}?v=2">
 
     <!-- Apple Touch Icon -->
-    <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('template/assets/img/apple-touch-icon.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('template/assets/img/apple-touch-icon.png') }}?v=2">
 
     <!-- Theme Script -->
     <script src="{{ asset('template/assets/js/theme-script.js') }}"></script>
@@ -45,6 +46,7 @@
 
     <!-- Main Style -->
     <link rel="stylesheet" href="{{ asset('template/assets/css/style.css') }}">
+    <link rel="stylesheet" href="{{ asset('template/assets/css/global-loader.css') }}">
 
     <!-- DataTables Bootstrap 5 CSS -->
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
@@ -56,6 +58,9 @@
 
 
     @stack('style')
+    <script>
+        const IS_ADMIN = {{ session('is_admin') ? 'true' : 'false' }};
+    </script>
     <style>
         body {
             background-color: #edeef3 !important;
@@ -97,10 +102,10 @@
 
         .custom-logo-fix .logo-normal img,
         .custom-logo-fix .dark-logo img {
-            max-height: 48px;
-            max-width: 210px;
+            max-height: 58px;
+            max-width: 250px;
             width: auto;
-            height: 48px;
+            height: 58px;
             object-fit: contain;
             object-position: left center;
             display: block;
@@ -110,8 +115,8 @@
 
         .custom-logo-fix .logo-small img,
         .custom-logo-fix .dark-small img {
-            max-height: 36px;
-            max-width: 70px;
+            max-height: 42px;
+            max-width: 80px;
             width: auto;
             height: auto;
             object-fit: contain;
@@ -121,10 +126,10 @@
 
         .header-left .logo img,
         .header-left .dark-logo img {
-            max-height: 48px;
+            max-height: 58px;
             width: auto;
-            max-width: 210px;
-            height: 48px;
+            max-width: 250px;
+            height: 58px;
             object-fit: contain;
             display: block;
             background-color: transparent;
@@ -134,9 +139,9 @@
             .header-left .logo img,
             .header-left .dark-logo img {
                 width: auto !important;
-                max-width: 180px;
-                max-height: 40px;
-                height: 40px;
+                max-width: 200px;
+                max-height: 48px;
+                height: 48px;
             }
         }
 
@@ -147,9 +152,105 @@
             line-height: 1.2;
             margin-top: 2px;
         }
+
+        .report-scroll,
+        .report-scroll-sm {
+            overflow: auto;
+        }
+        .report-scroll {
+            max-height: calc(100vh - 280px);
+        }
+        .report-scroll-sm {
+            max-height: 260px;
+        }
+        .report-scroll table,
+        .report-scroll-sm table {
+            margin-bottom: 0;
+        }
+        .report-scroll thead th,
+        .report-scroll-sm thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #f6f6f6;
+            box-shadow: 0 1px 0 #dee2e6;
+        }
+        .report-scroll tfoot th,
+        .report-scroll-sm tfoot th {
+            position: sticky;
+            bottom: 0;
+            z-index: 2;
+            background: #fff;
+            box-shadow: 0 -1px 0 #dee2e6;
+        }
+
+        .modal .btn-close {
+            opacity: 0.75;
+            filter: none;
+        }
+
+        .modal .btn-close:hover {
+            opacity: 1;
+        }
+
+        /* Keep left-side header menus under their trigger (template forces right:0) */
+        @media (min-width: 992px) {
+            .header .header-user .user-menu #header-search .dropdown-menu,
+            .header .header-user .user-menu .add-menu-dropdown {
+                left: 0 !important;
+                right: auto !important;
+                top: 100% !important;
+                min-width: 280px;
+                max-height: min(70vh, 520px);
+                overflow-y: auto;
+            }
+        }
+
+        .header .header-user .user-menu .add-menu-dropdown .dropdown-item {
+            white-space: normal;
+            align-items: flex-start;
+            padding-top: 8px;
+            padding-bottom: 8px;
+        }
+
+        .header .header-user .user-menu .add-menu-dropdown .qa-link-name {
+            font-weight: 600;
+            color: #172b4c;
+            line-height: 1.2;
+        }
+
+        .header .header-user .user-menu .add-menu-dropdown .qa-link-group {
+            display: block;
+            font-size: 11px;
+            color: #6c757d;
+            margin-top: 2px;
+        }
+
+        .header .notification_item .badge.notification-count {
+            width: auto;
+            min-width: 16px;
+            height: 16px;
+            padding: 0 4px;
+            top: 2px;
+            right: 2px;
+            font-size: 10px;
+            line-height: 16px;
+            border-radius: 999px;
+            display: none;
+        }
+
+        .header .notification_item .badge.notification-count.is-visible {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
     </style>
 
 </head>
 
 <body>
+    <div id="global-loader" style="display:none;">
+        <span class="page-loader"></span>
+        <span class="loader-text">Please wait...</span>
+    </div>
     <div class="main-wrapper">

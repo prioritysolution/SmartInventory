@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\SearchesItemsByCode;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -10,12 +11,14 @@ use Illuminate\Support\Facades\Log;
 
 class Purchase extends Controller
 {
+    use SearchesItemsByCode;
+
     public function index()
     {
         $branchId = session('branch_id');
         $orgId    = session('org_id');
         Config::set('database.connections.coops.database', session('org_schema'));
-        $suppliers  = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?)', [1, $branchId]);
+        $suppliers  = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [1, $branchId, 0]);
         $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [$orgId]);
         $banks      = DB::connection('coops')->select('CALL USP_GET_BANK_LEDGER()');
         return view('Admin.good-received', compact('suppliers', 'categories', 'banks'))->with('pageTitle', 'Good Received Entry');
@@ -31,19 +34,12 @@ class Purchase extends Controller
     public function getItems(Request $request)
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $catId    = (int) $request->input('cat_id', 0);
-        $subCatId = (int) $request->input('sub_cat_id', 0);
-        $code     = (string) ($request->input('code') ?? '');
-
-        // amazonq-ignore-next-line
-        $items = DB::connection('coops')->select('CALL USP_GET_ITEM_LIST(?, ?, ?)', [
-            $catId,
-            $subCatId,
-            $code
-        ]);
-
-        Log::channel('trading')->info('getItems result count', ['count' => count($items)]);
-
+        DB::purge('coops');
+        $items = $this->searchItemsByCode(
+            (int) $request->input('cat_id', 0),
+            (int) $request->input('sub_cat_id', 0),
+            (string) ($request->input('code') ?? '')
+        );
         return response()->json($items);
     }
 
@@ -127,7 +123,6 @@ class Purchase extends Controller
 
                 ]);
             }
-Log::channel('trading')->info('Temp Table Items', ['items' => $request->items]);
 
             $totAmt     = collect($request->items)->sum(fn($i) => floatval($i['total_amount']));
             $discAmt    = collect($request->items)->sum(fn($i) => floatval($i['discount_amount'] ?? 0));
@@ -145,39 +140,6 @@ Log::channel('trading')->info('Temp Table Items', ['items' => $request->items]);
 
             $purchaseId = intval($request->input('purchase_id', 0));
             $mode = $purchaseId > 0 ? 2 : 1;
-
-Log::channel('trading')->info('Calculated Totals', [
-    'tot_amt'     => $totAmt,
-    'disc_perc'   => $discPerc,
-    'disc_amt'    => $discAmt,
-    'taxable_amt' => $taxableAmt,
-    'tot_gst'     => $totGst,
-    'freight_amt' => $fregAmt,
-    'round_off'   => $roundOff,
-    'net_amt'     => $netAmt,
-]);
-
-Log::channel('trading')->info('SP Params', [
-    'purchase_id' => $purchaseId,
-    'vouch_id'    => intval($request->input('vouch_id', 0)),
-    'branch_id'   => session('branch_id'),
-    'purchase_no' => $request->input('purchase_no'),
-    'purchase_date'=> $request->input('purchase_date'),
-    'party_id'    => $request->input('party_id'),
-    'tot_amt'     => $totAmt,
-    'disc_perc'   => $discPerc,
-    'disc_amt'    => $discAmt,
-    'taxable_amt' => $taxableAmt,
-    'tot_gst'     => $totGst,
-    'freight_amt' => $fregAmt,
-    'round_off'   => $roundOff,
-    'net_amt'     => $netAmt,
-    'trans_mode'  => intval($request->input('trans_mode')),
-    'bank_id'     => intval($request->input('bank_id', 0)),
-    'user_id'     => session('user_id'),
-    'year_id'     => session('year_id'),
-    'mode'        => $mode,
-]);
 
             $result = $conn->select('CALL USP_ADD_EDIT_PURCHASE(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?)', [
                 $purchaseId,
@@ -200,7 +162,6 @@ Log::channel('trading')->info('SP Params', [
                 session('year_id'),
                 $mode,
             ]);
-Log::channel('trading')->info('SP Result', ['result' => $result]);
 
             if (!empty($result) && $result[0]->Error_No < 0) {
                 $conn->rollBack();
@@ -295,7 +256,30 @@ Log::channel('trading')->info('SP Result', ['result' => $result]);
         }
 
         $row = $result[0];
-        $row->Item_Details = json_decode($row->Item_Details, true);
+        $items = json_decode($row->Item_Details, true);
+        if (!is_array($items)) {
+            $items = [];
+        }
+
+        $partyId = (int) ($row->Party_Id ?? 0);
+        foreach ($items as &$item) {
+            $prodId    = (int) ($item['Prod_Id'] ?? 0);
+            $purchased = (float) ($item['Purchased_Qty'] ?? 0);
+            $info      = $this->purchaseReturnableQty($partyId, $prodId, 0);
+            $returned  = (float) ($info->Returned_Qty ?? 0);
+            $remaining = max($purchased - $returned, 0);
+            $supplierRemaining = (float) ($info->Remaining_Qty ?? 0);
+            if ($remaining > $supplierRemaining) {
+                $remaining = max($supplierRemaining, 0);
+            }
+            $remaining = round($remaining, 2);
+            $item['Remaining_Qty'] = $remaining;
+            $item['qnty']          = $remaining;
+            $item['Returned_Qty']  = round(min($returned, $purchased), 2);
+        }
+        unset($item);
+
+        $row->Item_Details = array_values($items);
 
         return response()->json($row);
     }
@@ -306,7 +290,7 @@ Log::channel('trading')->info('SP Result', ['result' => $result]);
         $orgId    = session('org_id');
         $branchId = session('branch_id');
         Config::set('database.connections.coops.database', session('org_schema'));
-        $suppliers  = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?)', [1, $branchId]);
+        $suppliers  = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [1, $branchId, 0]);
         $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [$orgId]);
         $banks      = DB::connection('coops')->select('CALL USP_GET_BANK_LEDGER()');
         return view('Admin.purchase-return', compact('suppliers', 'categories', 'banks'))
@@ -327,16 +311,35 @@ Log::channel('trading')->info('SP Result', ['result' => $result]);
     public function purchaseReturnGetItems(Request $request)
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $catId    = (int) $request->input('cat_id', 0);
-        $subCatId = (int) $request->input('sub_cat_id', 0);
-        $code     = (string) ($request->input('code') ?? '');
-        // amazonq-ignore-next-line
-        $items = DB::connection('coops')->select('CALL USP_GET_ITEM_LIST(?, ?, ?)', [
-            $catId,
-            $subCatId,
-            $code
-        ]);
+        DB::purge('coops');
+        $items = $this->searchItemsByCode(
+            (int) $request->input('cat_id', 0),
+            (int) $request->input('sub_cat_id', 0),
+            (string) ($request->input('code') ?? '')
+        );
         return response()->json($items);
+    }
+
+    public function getPurchaseReturnableQty(Request $request)
+    {
+        $partyId = (int) $request->input('party_id', 0);
+        $prodId  = (int) $request->input('prod_id', 0);
+        $exclude = (int) $request->input('exclude_id', 0);
+
+        if ($partyId <= 0 || $prodId <= 0) {
+            return response()->json(['error' => 'Select party and item first'], 422);
+        }
+
+        Config::set('database.connections.coops.database', session('org_schema'));
+
+        try {
+            $row = $this->purchaseReturnableQty($partyId, $prodId, $exclude);
+        } catch (\Exception $e) {
+            Log::channel('trading')->error('Returnable qty lookup failed: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load returnable quantity'], 500);
+        }
+
+        return response()->json($row);
     }
 
     public function storePurchaseReturn(Request $request)
@@ -366,6 +369,32 @@ Log::channel('trading')->info('SP Result', ['result' => $result]);
         Config::set('database.connections.coops.database', session('org_schema'));
         // amazonq-ignore-next-line
         $conn = DB::connection('coops');
+
+        try {
+            $excludeId = intval($request->input('purchase_id', 0));
+            $usedQty   = [];
+            foreach ($request->items as $item) {
+                $prodId = (int) ($item['item_id'] ?? 0);
+                if ($prodId <= 0) {
+                    return response()->json(['error' => 'Invalid item in return list'], 400);
+                }
+                $row      = $this->purchaseReturnableQty((int) $request->party_id, $prodId, $excludeId);
+                $remaining = (float) ($row->Remaining_Qty ?? 0);
+                $already   = $usedQty[$prodId] ?? 0;
+                $qty       = (float) $item['quantity'];
+                $allowed   = $remaining - $already;
+                if ($qty > $allowed + 0.0001) {
+                    $name = $item['item_name'] ?? ('Item ' . $prodId);
+                    return response()->json([
+                        'error' => "{$name}: return qty {$qty} exceeds remaining purchased qty ({$allowed}). Purchased: {$row->Purchased_Qty}, already returned: {$row->Returned_Qty}.",
+                    ], 400);
+                }
+                $usedQty[$prodId] = $already + $qty;
+            }
+        } catch (\Exception $e) {
+            Log::channel('trading')->error('Purchase return qty check failed: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to validate returnable quantity'], 500);
+        }
 
         $conn->beginTransaction();
 
@@ -504,5 +533,19 @@ Log::channel('trading')->info('SP Result', ['result' => $result]);
         $row->Item_Details = json_decode($row->Item_Details, true);
 
         return response()->json($row);
+    }
+
+    private function purchaseReturnableQty(int $partyId, int $prodId, int $excludeId = 0): object
+    {
+        $rows = DB::connection('coops')->select(
+            'CALL USP_GET_PURCHASE_RETURNABLE_QTY(?, ?, ?, ?)',
+            [$partyId, $prodId, (int) session('branch_id'), $excludeId]
+        );
+
+        return $rows[0] ?? (object) [
+            'Purchased_Qty'  => 0,
+            'Returned_Qty'   => 0,
+            'Remaining_Qty'  => 0,
+        ];
     }
 }

@@ -2,19 +2,28 @@
 
 namespace App\Http\Controllers\Admin\Auth;
 
+use App\Http\Controllers\Concerns\VerifiesStoredPassword;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Log;
 use Exception;
 
 class ProcessLogin extends Controller
 {
+    use VerifiesStoredPassword;
+
+    private const REMEMBER_MINUTES = 60 * 24 * 30; // 30 days
+
     public function index_login()
     {
-    
-        return view('Auth.login');
+        return view('Auth.login', [
+            'rememberOrg' => Cookie::get('si_remember_org', ''),
+            'rememberUser' => Cookie::get('si_remember_user', ''),
+            'rememberPass' => Cookie::get('si_remember_pass', ''),
+            'rememberChecked' => Cookie::get('si_remember_me') === '1',
+        ]);
     }
 
     public function process_login(Request $request)
@@ -23,6 +32,7 @@ class ProcessLogin extends Controller
             'pOrg_Code' => 'required|digits:4',
             'pUser_Name' => 'required|string|max:100',
             'pUser_Pass' => 'required|string|min:3',
+            'remember_me' => 'nullable|boolean',
         ], [
             'pOrg_Code.digits' => 'Organization Code must be exactly 4 digits',
             'pUser_Name.max' => 'User Name must not exceed 100 characters',
@@ -37,11 +47,13 @@ class ProcessLogin extends Controller
             }
 
             $org_schema = $sql[0]->db;
-            $db = Config::get('database.connections.mysql');
-            $db['database'] = $org_schema;
-            config()->set('database.connections.coops', $db);
+            Config::set('database.connections.coops.database', $org_schema);
+            DB::purge('coops');
 
-            $user = DB::connection('coops')->select("CALL USP_VALIDATE_USER_LOGIN(?, ?)", [$request->pUser_Name, $request->pUser_Pass]);
+            $user = DB::connection('coops')->select(
+                'CALL USP_VALIDATE_USER_LOGIN(?)',
+                [$request->pUser_Name]
+            );
 
             if (!$user || empty($user)) {
                 return response()->json(['status' => 'error', 'data' => 'Invalid credentials']);
@@ -53,26 +65,48 @@ class ProcessLogin extends Controller
                 return response()->json(['status' => 'error', 'data' => $userData->Message]);
             }
 
+            if (!$this->loginPasswordIsValid($userData->User_Pwd ?? '', $request->pUser_Pass)) {
+                return response()->json(['status' => 'error', 'data' => 'Invalid Password Please Enter A Valid Password !!']);
+            }
+
             session([
                 'user_id' => $userData->User_Id,
                 'user_code' => $userData->User_Code,
                 'user_name' => $userData->User_FullName,
                 'user_group_id' => $userData->UGrp_Id,
+                'is_admin' => isset($userData->Is_Admin) ? (bool)$userData->Is_Admin : ($userData->UGrp_Id == 1),
                 'branch_id' => $userData->Branch_Id,
                 'org_id' => $userData->Org_Id,
                 'org_code' => $userData->Org_Code,
                 'org_name' => $userData->Org_Name,
-                'branch_code' =>  $userData->Branch_Code,
-                'branch_name' =>  $userData->Branch_Name,
-                'org_schema' =>   $org_schema,
-                'year_id'     =>  $userData->Year_Id,      
-                'year_desc'   =>  $userData->Year_Desc,    
-                'year_start'  =>  $userData->Year_Start,   
-                'year_end'    =>  $userData->Year_End,  
-                'gst_have'   =>   $userData->Gst_Have,
-                'gst_type'   =>   $userData->Gst_Type,
+                'branch_code' => $userData->Branch_Code,
+                'branch_name' => $userData->Branch_Name,
+                'org_schema' => $org_schema,
+                'year_id' => $userData->Year_Id,
+                'year_desc' => $userData->Year_Desc,
+                'year_start' => $userData->Year_Start,
+                'year_end' => $userData->Year_End,
+                'gst_have' => $userData->Gst_Have,
+                'gst_type' => $userData->Gst_Type,
             ]);
-            return response()->json(['status' => 'success', 'data' => 'Login successful']);
+
+            $response = response()->json(['status' => 'success', 'data' => 'Login successful']);
+
+            if ($request->boolean('remember_me')) {
+                $response
+                    ->withCookie(cookie('si_remember_me', '1', self::REMEMBER_MINUTES))
+                    ->withCookie(cookie('si_remember_org', $request->pOrg_Code, self::REMEMBER_MINUTES))
+                    ->withCookie(cookie('si_remember_user', $request->pUser_Name, self::REMEMBER_MINUTES))
+                    ->withCookie(cookie('si_remember_pass', $request->pUser_Pass, self::REMEMBER_MINUTES));
+            } else {
+                $response
+                    ->withCookie(Cookie::forget('si_remember_me'))
+                    ->withCookie(Cookie::forget('si_remember_org'))
+                    ->withCookie(Cookie::forget('si_remember_user'))
+                    ->withCookie(Cookie::forget('si_remember_pass'));
+            }
+
+            return $response;
         } catch (Exception $e) {
             return response()->json(['status' => 'error', 'data' => $e->getMessage()]);
         }
@@ -110,10 +144,5 @@ class ProcessLogin extends Controller
     {
         session()->flush();
         return redirect()->route('login-index');
-    }
-
-    public function index_forgot_pass()
-    {
-        return view('Auth.forgot-password');
     }
 }

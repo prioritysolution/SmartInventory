@@ -8,6 +8,109 @@
     }
     #itemPickerTable tbody tr { cursor: pointer; }
     #itemPickerTable tbody tr:hover { background-color: #e8f4ff; }
+
+    .bill-container {
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 14px;
+        line-height: 1.4;
+        max-width: 420px;
+        margin: 0 auto;
+        color: #000;
+        word-wrap: break-word;
+    }
+
+    .bill-header {
+        text-align: center;
+        padding-bottom: 4px;
+    }
+
+    .bill-header h3 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: bold;
+        text-transform: uppercase;
+        line-height: 1.3;
+    }
+
+    .bill-header p {
+        margin: 4px 0 0 0;
+        font-size: 13px;
+    }
+
+    .bill-title {
+        text-align: center;
+        font-weight: bold;
+        text-decoration: underline;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        margin: 8px 0 10px;
+        font-size: 16px;
+    }
+
+    .bill-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin: 4px 0;
+        font-size: 13px;
+    }
+
+    .bill-customer,
+    .bill-agent {
+        margin: 6px 0;
+        font-size: 13px;
+    }
+
+    .bill-agent {
+        margin-bottom: 10px;
+    }
+
+    .items-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0;
+        font-size: 13px;
+    }
+
+    .items-table th,
+    .items-table td {
+        border: 1px dashed #000;
+        padding: 6px 8px;
+        text-align: left;
+        vertical-align: top;
+    }
+
+    .items-table th {
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+
+    .items-table .item-name {
+        word-break: break-word;
+    }
+
+    .items-table .text-right {
+        text-align: right;
+        white-space: nowrap;
+    }
+
+    .items-table .text-center {
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .bill-words {
+        font-size: 12px;
+        line-height: 1.3;
+    }
+
+    .bill-signature {
+        margin-top: 24px;
+        font-size: 13px;
+    }
+
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
 </style>
 @endpush
 
@@ -68,6 +171,7 @@
                 <div class="col-md-2">
                     <label class="form-label">Rate</label>
                     <input type="number" id="rate" class="form-control bg-light" readonly>
+                    <select class="form-control" id="rateSelect" style="display:none;"></select>
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
                     <button type="button" class="btn btn-success w-100" id="addItemBtn">Add</button>
@@ -113,6 +217,7 @@
             <input type="hidden" id="totalGst">
             <input type="hidden" id="saleMrp">
             <input type="hidden" id="itemSaleDate">
+            <input type="hidden" id="maxReturnQty">
             <input type="hidden" id="summaryTotalAmount">
             <input type="hidden" id="totalDiscountAmount">
             <input type="hidden" id="totalTaxableAmount">
@@ -154,18 +259,17 @@
 </div>
 
 {{-- Bill Modal --}}
-<div class="modal fade" id="billModal" tabindex="-1">
-    <div class="modal-dialog modal-sm" style="max-width:400px;">
+<div class="modal fade" id="billModal" tabindex="-1" role="dialog" aria-labelledby="billModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document" style="max-width: 480px;">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Sale Bill</h5>
-                <button type="button" data-bs-dismiss="modal"
-                    style="background:none;border:none;font-size:1.5rem;line-height:1;cursor:pointer;padding:0 0.5rem;">&times;</button>
+                <h5 class="modal-title" id="billModalLabel">Return Bill</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="billContent"></div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-primary" onclick="window.print()">
-                    <i class="fas fa-print"></i> Print
+                <button type="button" class="btn btn-primary" onclick="printBill()">
+                    <i class="fa fa-print"></i> Print
                 </button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
@@ -242,10 +346,87 @@
     const yearStart = "{{ $year_start }}";
     const yearEnd   = "{{ $year_end }}";
     const today     = "{{ date('Y-m-d') }}";
+    const ORG_NAME = @json(session('org_name', ''));
+    const BRANCH_NAME = @json(session('branch_name', ''));
+    const AGENT_NAME = @json(session('agent_name', ''));
+    const AGENT_CODE = @json(session('agent_code', ''));
 
     let itemsArray    = [];
     let currentSaleId = 0;
     let itemPickerDT  = null;
+    let returnableReady = false;
+
+    function ensureCustomer() {
+        if (!$('#partyId').val()) {
+            Swal.fire('Error', 'Please select a Customer before choosing an item', 'error');
+            return false;
+        }
+        return true;
+    }
+
+    function qtyOnCurrentBill(prodId) {
+        return itemsArray.reduce(function (sum, row) {
+            return String(row.item_id) === String(prodId)
+                ? sum + (parseFloat(row.quantity) || 0)
+                : sum;
+        }, 0);
+    }
+
+    function applyReturnableLimit(options) {
+        options = options || {};
+        const partyId = $('#partyId').val();
+        const prodId = $('#selectedItemId').val();
+        returnableReady = false;
+        if (!partyId || !prodId) return;
+        $.get(baseUrl + '/agent/customer-return/returnable-qty', {
+            party_id: partyId,
+            prod_id: prodId,
+            exclude_id: currentSaleId || 0
+        }, function (row) {
+            let remaining = parseFloat(row.Remaining_Qty) || 0;
+            remaining -= qtyOnCurrentBill(prodId);
+            if (remaining < 0) remaining = 0;
+            remaining = parseFloat(remaining.toFixed(2));
+            const sold = parseFloat(row.Sold_Qty) || 0;
+            $('#maxReturnQty').val(remaining);
+            $('#quantity').attr('max', remaining);
+            if (remaining <= 0) {
+                returnableReady = false;
+                if (sold <= 0) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Not sold to this customer',
+                        text: 'This product was not sold to the selected customer, so it cannot be returned.'
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'No returnable quantity',
+                        text: 'All sold quantity of this item has already been returned for this customer.'
+                    });
+                }
+                if (!options.keepItem) {
+                    clearItemSelection();
+                }
+                return;
+            }
+            returnableReady = true;
+            const currentQty = parseFloat($('#quantity').val());
+            if (!currentQty || currentQty <= 0 || currentQty > remaining) {
+                $('#quantity').val(remaining);
+            }
+            calculateAmounts();
+            if (options.focusQty) {
+                $('#quantity').focus();
+            }
+        }).fail(function (xhr) {
+            returnableReady = false;
+            Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load returnable quantity', 'error');
+            if (!options.keepItem) {
+                clearItemSelection();
+            }
+        });
+    }
 
     $(document).ready(function () {
 
@@ -260,6 +441,7 @@
 
         $('#itemSearchBtn').on('click', function (e) {
             e.preventDefault();
+            if (!ensureCustomer()) return;
             const code = $('#barcodeInput').val().trim();
             if (!code) {
                 openReturnItemPicker([]);
@@ -270,9 +452,9 @@
                 cat_id: 0,
                 sub_cat_id: 0
             }, function (data) {
-                openReturnItemPicker(data, code);
+                resolveReturnItemsOrOpenPicker(data, code);
             }).fail(function () {
-                Swal.fire('Error', 'Failed to load items', 'error');
+                openReturnItemPicker([], code);
             });
         });
 
@@ -334,6 +516,7 @@
             const prodId = $(this).data('id');
             const saleDate = $('#saleDate').val();
             if (!prodId) return;
+            if (!ensureCustomer()) return;
             if (!saleDate) {
                 Swal.fire('Error', 'Please select date first', 'error');
                 return;
@@ -350,6 +533,13 @@
         });
 
         $('#quantity').on('input', calculateAmounts);
+
+        $('#rateSelect').on('change', function () {
+            const selected = $(this).val();
+            $('#rate').val(selected);
+            $('#saleMrp').val(selected);
+            calculateAmounts();
+        });
 
         $('input[name="transMode"]').on('change', function () {
             if ($(this).val() === '2') {
@@ -439,11 +629,44 @@
         $('#cancelBtn').on('click', resetForm);
     });
 
+    function pickUniqueItem(data, code) {
+        if (!data || !data.length) return null;
+        const needle = String(code).toLowerCase();
+        const exact = data.filter(item => String(item.Prod_Code || '').toLowerCase() === needle);
+        if (exact.length === 1) return exact[0];
+        if (data.length === 1) return data[0];
+        return null;
+    }
+
+    function loadReturnItemByProdId(prodId) {
+        const saleDate = $('#saleDate').val();
+        if (!ensureCustomer()) return;
+        if (!saleDate) { Swal.fire('Error', 'Please select date first', 'error'); return; }
+        $.get(baseUrl + '/agent/customer-return/item-info', {
+            prod_id: prodId,
+            sale_date: saleDate
+        }).done(function (item) {
+            populateItemFields(item);
+        }).fail(function (xhr) {
+            Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load item details', 'error');
+        });
+    }
+
+    function resolveReturnItemsOrOpenPicker(data, code) {
+        const unique = pickUniqueItem(data, code);
+        if (unique) {
+            loadReturnItemByProdId(unique.Prod_Id);
+            return;
+        }
+        openReturnItemPicker(data || [], code);
+    }
+
     function lookupBarcode() {
         const barcode  = $('#barcodeInput').val().trim();
         const saleDate = $('#saleDate').val();
         if (!barcode) return;
         if (!saleDate) { Swal.fire('Error', 'Please select date first', 'error'); return; }
+        if (!ensureCustomer()) return;
 
         $.get(baseUrl + '/agent/customer-return/barcode', { barcode, sale_date: saleDate })
             .done(function (item) { populateItemFields(item); })
@@ -453,15 +676,9 @@
                     cat_id: 0,
                     sub_cat_id: 0
                 }, function (data) {
-                    if (data && data.length) {
-                        openReturnItemPicker(data, barcode);
-                    } else {
-                        Swal.fire('Not Found', 'No item found for: ' + barcode, 'warning');
-                        $('#barcodeInput').select();
-                    }
+                    resolveReturnItemsOrOpenPicker(data, barcode);
                 }).fail(function () {
-                    Swal.fire('Not Found', 'No item found for barcode: ' + barcode, 'warning');
-                    $('#barcodeInput').select();
+                    openReturnItemPicker([], barcode);
                 });
             });
     }
@@ -471,6 +688,7 @@
             Swal.fire('Error', 'Please select date first', 'error');
             return;
         }
+        if (!ensureCustomer()) return;
         $('#itemPickerLoader').hide();
         clearReturnItemPickerTable();
         $('#modalCateId').val('0');
@@ -537,9 +755,61 @@
         }, 0);
     }
 
+    function parseSaleRateValue(r) {
+        if (r == null) return NaN;
+        if (typeof r === 'object') return parseFloat(r.MRP ?? r.mrp ?? r.Rate ?? r.rate);
+        return parseFloat(r);
+    }
+
+    function applySaleRateOptions(saleRates, currentMrp) {
+        const rates = [];
+        (Array.isArray(saleRates) ? saleRates : []).forEach(function (r) {
+            const n = parseSaleRateValue(r);
+            if (n > 0 && rates.indexOf(n.toFixed(2)) === -1) {
+                rates.push(n.toFixed(2));
+            }
+        });
+        if (rates.length > 1) {
+            $('#rate').hide();
+            $('#rateSelect').empty().css('display', 'block');
+            rates.forEach(function (r) {
+                $('#rateSelect').append('<option value="' + r + '">' + r + '</option>');
+            });
+            const current = (parseFloat(currentMrp) > 0 ? parseFloat(currentMrp).toFixed(2) : rates[0]);
+            const selected = rates.indexOf(current) >= 0 ? current : rates[0];
+            $('#rateSelect').val(selected);
+            $('#rate').val(selected);
+            $('#saleMrp').val(selected);
+        } else {
+            resetRateSelect();
+            $('#rate').val(currentMrp);
+            $('#saleMrp').val(currentMrp);
+        }
+    }
+
+    function loadSaleRatesForItem(prodId, currentMrp) {
+        if (!prodId) return;
+        $.get(baseUrl + '/agent/customer-return/sale-rates', { prod_id: prodId })
+            .done(function (rows) {
+                if (String($('#selectedItemId').val()) !== String(prodId)) return;
+                applySaleRateOptions(rows, currentMrp);
+                calculateAmounts();
+            });
+    }
+
+    function resetRateSelect() {
+        $('#rateSelect').hide().empty();
+        $('#rate').show();
+    }
+
     function populateItemFields(item) {
-        const existing = itemsArray.find(i => i.item_id == item.Prod_Id);
-        if (existing) {
+        const existing = itemsArray.find(function (i) {
+            return String(i.item_id) === String(item.Prod_Id)
+                && parseFloat(i.rate) === parseFloat(item.MRP);
+        });
+        const saleRates = Array.isArray(item.Sale_Rates) ? item.Sale_Rates
+            : (Array.isArray(item.sale_rates) ? item.sale_rates : []);
+        if (existing && saleRates.length === 1) {
             Swal.fire('Warning', item.Prod_ShortNm + ' is already added', 'warning');
             $('#barcodeInput').val('').focus();
             return;
@@ -554,19 +824,15 @@
         $('#itemSelected').val(item.Prod_ShortNm);
         $('#unitId').val(item.Unit_Id);
         $('#unitDisplay').val(item.Unit_Name);
-        $('#rate').val(item.MRP);
+        applySaleRateOptions(saleRates, item.MRP);
+        loadSaleRatesForItem(item.Prod_Id, item.MRP);
         $('#discountPercent').val(item.Discount || 0);
         $('#cgstRate').val(cgst);
         $('#sgstRate').val(sgst);
-        $('#saleMrp').val(item.MRP);
         $('#itemSaleDate').val(item.Pack_Date || '');
         $('#quantity').val(1);
         calculateAmounts();
-
-        $('#barcodeInput').data('available-qty', item.Avil_Qnty);
-        if (item.Avil_Qnty <= 0) {
-            Swal.fire('Warning', 'This product is out of stock!', 'warning');
-        }
+        applyReturnableLimit({ focusQty: true });
 
         $('#saleDate').prop('disabled', true);
         $('#quantity').focus();
@@ -601,11 +867,26 @@
 
         const qty = parseFloat($('#quantity').val());
         if (!qty || qty <= 0) { Swal.fire('Error', 'Quantity must be > 0', 'error'); return false; }
-
-        const availableQty = parseFloat($('#barcodeInput').data('available-qty'));
-        if (availableQty <= 0) { Swal.fire('Error', 'This product is out of stock!', 'error'); return false; }
-        if (qty > availableQty) {
-            Swal.fire('Error', `You cannot sell this product as available quantity = ${availableQty}`, 'error');
+        const rate = parseFloat($('#rate').val());
+        const alreadyAdded = itemsArray.find(function (row) {
+            return String(row.item_id) === String($('#selectedItemId').val())
+                && parseFloat(row.rate) === rate;
+        });
+        if (alreadyAdded) {
+            Swal.fire('Error', 'This item at this rate is already added', 'error');
+            return false;
+        }
+        if (!returnableReady) {
+            Swal.fire('Error', 'Wait until returnable quantity is loaded, or this item has no remaining qty', 'error');
+            return false;
+        }
+        const maxReturnQty = parseFloat($('#maxReturnQty').val());
+        if (!isNaN(maxReturnQty) && maxReturnQty <= 0) {
+            Swal.fire('Error', 'No returnable quantity for this item against the selected customer', 'error');
+            return false;
+        }
+        if (!isNaN(maxReturnQty) && qty > maxReturnQty) {
+            Swal.fire('Error', `Return quantity cannot exceed remaining sold qty (${maxReturnQty})`, 'error');
             return false;
         }
         return true;
@@ -657,58 +938,195 @@
         $('#selectedItemId, #selectedHsnCode, #unitId, #itemSelected, #unitDisplay').val('');
         $('#rate, #quantity, #totalAmount, #netAmount').val('');
         $('#discountPercent, #discountAmount, #taxableAmount').val('');
-        $('#cgstRate, #cgstAmount, #sgstRate, #sgstAmount, #totalGst, #saleMrp, #itemSaleDate').val('');
+        $('#cgstRate, #cgstAmount, #sgstRate, #sgstAmount, #totalGst, #saleMrp, #itemSaleDate, #maxReturnQty').val('');
+        $('#quantity').removeAttr('max');
+        returnableReady = false;
+        resetRateSelect();
+    }
+
+    function pickVal(obj, keys, fallback) {
+        if (!obj) return fallback;
+        for (let i = 0; i < keys.length; i++) {
+            const val = obj[keys[i]];
+            if (val !== undefined && val !== null && val !== '') return val;
+        }
+        return fallback;
+    }
+
+    function fmtAmt(n) {
+        const val = parseFloat(n);
+        return isNaN(val) ? '0.00' : val.toFixed(2);
+    }
+
+    function fmtDate(d) {
+        return (window.siDate && siDate.toDisplay) ? siDate.toDisplay(d) : (d || '');
+    }
+
+    function numberToWords(amount) {
+        var num = Math.round((parseFloat(amount) || 0) * 100) / 100;
+        var rupees = Math.floor(num);
+        var paise = Math.round((num - rupees) * 100);
+        var ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+            'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+        var tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+        function twoDigits(n) {
+            if (n < 20) return ones[n];
+            return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+        }
+        function threeDigits(n) {
+            if (n < 100) return twoDigits(n);
+            return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + twoDigits(n % 100) : '');
+        }
+        function toWords(n) {
+            if (n === 0) return 'Zero';
+            var crore = Math.floor(n / 10000000);
+            var lakh = Math.floor((n % 10000000) / 100000);
+            var thousand = Math.floor((n % 100000) / 1000);
+            var rest = n % 1000;
+            var parts = [];
+            if (crore) parts.push(twoDigits(crore) + ' Crore');
+            if (lakh) parts.push(twoDigits(lakh) + ' Lakh');
+            if (thousand) parts.push(twoDigits(thousand) + ' Thousand');
+            if (rest) parts.push(threeDigits(rest));
+            return parts.join(' ');
+        }
+
+        var text = 'Rs. ' + toWords(rupees);
+        if (paise > 0) {
+            text += ' and ' + twoDigits(paise) + ' Paise';
+        }
+        return text + ' Only';
+    }
+
+    function generateBillHTML(billData) {
+        let itemsHtml = '';
+        const rows = billData.items && Array.isArray(billData.items) ? billData.items : [];
+        rows.forEach((item) => {
+            const name = pickVal(item, ['item_name', 'Item_Name', 'Prod_ShortNm', 'Prod_Name'], 'N/A');
+            const qty = pickVal(item, ['qty', 'Qty', 'quantity', 'Qnty'], '0');
+            const rate = pickVal(item, ['rate', 'Rate', 'MRP'], 0);
+            const amount = pickVal(item, ['amount', 'Amount', 'net_amount', 'Net_Amt', 'total_amount', 'Item_Total'], 0);
+            itemsHtml += `
+                <tr>
+                    <td class="item-name">${name}</td>
+                    <td class="text-center">${qty}</td>
+                    <td class="text-right">${fmtAmt(rate)}</td>
+                    <td class="text-right">${fmtAmt(amount)}</td>
+                </tr>`;
+        });
+
+        const discount = parseFloat(billData.Discount) || 0;
+        const roundOff = parseFloat(billData.Round_Off) || 0;
+        const totalAmount = parseFloat(billData.Tot_Amount) || 0;
+        const grossAmt = parseFloat(billData.Gross_Amt) || 0;
+        const agentLabel = billData.Agent_Name || [AGENT_NAME, AGENT_CODE].filter(Boolean).join(' - ');
+        let discPct = parseFloat(billData.Disc_Percent) || 0;
+        if (!discPct && grossAmt > 0 && discount > 0) {
+            discPct = (discount / grossAmt) * 100;
+        }
+        const discPctLabel = discPct > 0 ? fmtAmt(discPct) : '';
+
+        return `
+        <div class="bill-container">
+            <div class="bill-header">
+                <h3>${billData.Org_Name || ORG_NAME || 'Smart Inventory'}</h3>
+                ${(billData.Branch_Name || BRANCH_NAME) ? `<p>${billData.Branch_Name || BRANCH_NAME}</p>` : ''}
+            </div>
+            <div class="bill-title">BILL</div>
+            <div class="bill-meta">
+                <span>No. : ${billData.Invoice_No || 'N/A'}</span>
+                <span>Date : ${fmtDate(billData.Invoice_Date) || 'N/A'}</span>
+            </div>
+            <div class="bill-customer">Customer Name : ${billData.Cust_Name || 'Cash'}</div>
+            <div class="bill-agent">Agent Name : ${agentLabel}</div>
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th>ITEM</th>
+                        <th class="text-center" style="width:14%;">QTY</th>
+                        <th class="text-right" style="width:20%;">MRP</th>
+                        <th class="text-right" style="width:22%;">AMT</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${itemsHtml || '<tr><td colspan="4" class="text-center">No items</td></tr>'}
+                    <tr>
+                        <td colspan="3" class="text-right">Amount :</td>
+                        <td class="text-right">${fmtAmt(grossAmt || totalAmount)}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="3">(-) Disc @ ${discPctLabel}% :</td>
+                        <td class="text-right">${discount > 0 ? fmtAmt(discount) : ''}</td>
+                    </tr>
+                    ${roundOff != 0 ? `<tr>
+                        <td colspan="3">Round Off</td>
+                        <td class="text-right">${fmtAmt(roundOff)}</td>
+                    </tr>` : ''}
+                    <tr>
+                        <td colspan="3" class="bill-words">${numberToWords(totalAmount)}</td>
+                        <td class="text-right"><strong>${fmtAmt(totalAmount)}</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="bill-signature">Signature</div>
+        </div>`;
+    }
+
+    function printBill() {
+        const billHtml = document.getElementById('billContent').innerHTML;
+        let iframe = document.getElementById('printFrame');
+        if (iframe) iframe.remove();
+        iframe = document.createElement('iframe');
+        iframe.id = 'printFrame';
+        iframe.setAttribute('aria-hidden', 'true');
+        iframe.style.cssText = 'position:fixed;top:0;left:0;width:58mm;height:500mm;border:0;opacity:0;pointer-events:none;z-index:-1;';
+        document.body.appendChild(iframe);
+        const doc = iframe.contentWindow.document;
+        doc.open();
+        doc.write(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+@page { size: 58mm 400mm; margin: 2mm 1.5mm; }
+html, body { margin: 0; padding: 0; width: 58mm; }
+body { width: 58mm; }
+.bill-container { width: 54mm; max-width: 54mm; margin: 0 auto; font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #000; line-height: 1.25; word-wrap: break-word; }
+.bill-header { text-align:center; padding-bottom:2px; }
+.bill-header h3 { font-size:11px; font-weight:bold; text-transform:uppercase; margin:0; line-height:1.2; }
+.bill-header p { font-size:9px; margin:2px 0 0; }
+.bill-title { text-align:center; font-weight:bold; text-decoration:underline; text-transform:uppercase; letter-spacing:1px; margin:4px 0 6px; font-size:11px; }
+.bill-meta { display:block; overflow:hidden; margin:2px 0; font-size:9px; }
+.bill-meta span { display:inline-block; width:49%; vertical-align:top; }
+.bill-meta span:last-child { text-align:right; }
+.bill-customer, .bill-agent { margin:3px 0 6px; font-size:9px; }
+.items-table { width:100%; border-collapse:collapse; font-size:9px; }
+.items-table th, .items-table td { border:1px dashed #000; padding:2px 3px; text-align:left; vertical-align:top; }
+.items-table th { font-weight:bold; text-transform:uppercase; }
+.items-table .item-name { word-break:break-word; }
+.text-right { text-align:right; white-space:nowrap; }
+.text-center { text-align:center; white-space:nowrap; }
+.bill-words { font-size:8px; line-height:1.2; }
+.bill-signature { margin-top:14px; font-size:9px; }
+</style>
+</head>
+<body>${billHtml}</body>
+</html>`);
+        doc.close();
+        setTimeout(function () {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+        }, 150);
     }
 
     function showBillModal(billData) {
-        let itemsHtml = '', itemTotal = 0;
-        if (billData.items) {
-            billData.items.forEach((item, idx) => {
-                const amt = parseFloat(item.amount || 0);
-                itemTotal += amt;
-                itemsHtml += `<tr>
-                    <td>${idx + 1}</td>
-                    <td>${item.item_name}</td>
-                    <td>${parseFloat(item.qty).toFixed(2)}</td>
-                    <td>${parseFloat(item.rate).toFixed(2)}</td>
-                    <td>${amt.toFixed(2)}</td>
-                </tr>`;
-            });
+        if (!billData) {
+            Swal.fire('Error', 'No bill data available', 'error');
+            return;
         }
-        const discount  = parseFloat(billData.Discount || 0);
-        const netAmount = parseFloat(billData.Tot_Amount || itemTotal);
-
-        $('#billContent').html(`
-            <div style="font-family:Arial,sans-serif;font-size:12px;width:105mm;margin:0 auto;">
-                <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:8px;">
-                    <strong style="font-size:15px;">Sale Invoice</strong>
-                </div>
-                <p><strong>Invoice No:</strong> ${billData.Invoice_No || ''}</p>
-                <p><strong>Date:</strong> ${siDate.toDisplay(billData.Invoice_Date)}</p>
-                <p><strong>Customer:</strong> ${billData.Cust_Name || ''}</p>
-                <table style="width:100%;border-collapse:collapse;font-size:11px;margin:8px 0;">
-                    <thead>
-                        <tr style="background:#f0f0f0;">
-                            <th style="border:1px solid #000;padding:3px;">#</th>
-                            <th style="border:1px solid #000;padding:3px;">Item</th>
-                            <th style="border:1px solid #000;padding:3px;">Qty</th>
-                            <th style="border:1px solid #000;padding:3px;">Rate</th>
-                            <th style="border:1px solid #000;padding:3px;">Amt</th>
-                        </tr>
-                    </thead>
-                    <tbody>${itemsHtml}</tbody>
-                </table>
-                <div style="border-top:2px solid #000;padding-top:6px;">
-                    <p><strong>Item Total:</strong> ${itemTotal.toFixed(2)}</p>
-                    ${discount > 0 ? `<p><strong>Discount:</strong> ${discount.toFixed(2)}</p>` : ''}
-                    <p style="font-size:14px;font-weight:bold;"><strong>Net Amount:</strong> ${netAmount.toFixed(2)}</p>
-                </div>
-                <div style="text-align:center;margin-top:12px;border-top:1px dashed #000;padding-top:8px;font-size:10px;">
-                    <p>Thank you for your business!</p>
-                </div>
-            </div>
-        `);
-
+        document.getElementById('billContent').innerHTML = generateBillHTML(billData);
         new bootstrap.Modal(document.getElementById('billModal')).show();
     }
 
@@ -730,8 +1148,21 @@
 </script>
 
 <style>
+    #partyId + .select2-container { width: 100% !important; }
+    #partyId + .select2-container .select2-selection--single {
+        height: 40px !important;
+        min-height: 40px !important;
+        padding: 0 8px;
+        display: flex;
+        align-items: center;
+        border: 1px solid #e9ecef;
+    }
+    #partyId + .select2-container .select2-selection--single .select2-selection__rendered {
+        line-height: 38px !important;
+        padding-left: 4px;
+        padding-right: 8px;
+    }
     #partyId + .select2-container .select2-selection__arrow { display: none !important; }
-    #partyId + .select2-container .select2-selection--single { padding-right: 8px; }
 
     #qrCodeSection {
         display: none;
@@ -747,14 +1178,6 @@
         border: 1px solid #ddd;
         padding: 5px;
         display: block;
-    }
-
-    @media print {
-        body * { visibility: hidden; }
-        #billContent, #billContent * { visibility: visible; }
-        #billContent { position: absolute; left: 0; top: 0; width: 105mm; }
-        @page { size: A6 portrait; margin: 5mm; }
-        .modal-header, .modal-footer { display: none !important; }
     }
 </style>
 @endpush

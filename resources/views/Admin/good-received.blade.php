@@ -522,55 +522,64 @@
                 calculateAmounts();
             });
 
+            function applyGoodReceivedItem(item) {
+                const gst = item.GST_Data ? JSON.parse(item.GST_Data) : {
+                    CGST: 0,
+                    SGST: 0
+                };
+                clearItemSelection();
+                $('#productCodeInput').val(item.Prod_Code);
+                $('#selectedItemId').val(item.Prod_Id);
+                $('#selectedHsnCode').val(item.Gst_Id);
+                $('#itemSelected').val(item.Prod_ShortNm);
+                $('#unitId').val(item.Unit_Id);
+                $('#unitDisplay').val(item.Unit_Name);
+                const isWithGst = $('input[name="gstMode"]:checked').val() === '1';
+                $('#cgstRate').val(isWithGst ? gst.CGST : 0);
+                $('#sgstRate').val(isWithGst ? gst.SGST : 0);
+                $('#originalCgst').val(gst.CGST);
+                $('#originalSgst').val(gst.SGST);
+                $('#saleMargin').val(item.Sale_Margin ?? 0);
+                if (item.Is_Fmcg == 1) {
+                    showPackDateField(true);
+                } else {
+                    showPackDateField(false);
+                }
+                calcSaleMrp();
+                $('#quantity').focus();
+            }
+
+            function resolvePurchaseCode(data, code) {
+                const exactMatch = (data || []).find(item =>
+                    String(item.Prod_Code || '').toLowerCase() === String(code).toLowerCase()
+                );
+                const unique = exactMatch || ((data || []).length === 1 ? data[0] : null);
+                if (unique) {
+                    applyGoodReceivedItem(unique);
+                    return;
+                }
+                openItemPickerModal(data || [], true, code);
+            }
+
+            function lookupProductCode(code) {
+                $.get("{{ url('good-received/items') }}", {
+                    code: code,
+                    cat_id: 0,
+                    sub_cat_id: 0
+                }, function(data) {
+                    resolvePurchaseCode(data, code);
+                }).fail(function() {
+                    openItemPickerModal([], true, code);
+                });
+            }
+
             // Product code search
             $('#productCodeInput').on('keypress', function(e) {
                 if (e.which !== 13) return;
                 e.preventDefault();
                 const code = $(this).val().trim();
                 if (!code) return;
-
-                $.get("{{ url('good-received/items') }}", {
-                    code: code,
-                    cat_id: 0,
-                    sub_cat_id: 0
-                }, function(data) {
-                    const exactMatch = data.find(item => item.Prod_Code.toString().toLowerCase() ===
-                        code.toLowerCase());
-
-                    if (exactMatch) {
-                        const gst = exactMatch.GST_Data ? JSON.parse(exactMatch.GST_Data) : {
-                            CGST: 0,
-                            SGST: 0
-                        };
-                        clearItemSelection();
-                        $('#productCodeInput').val(exactMatch.Prod_Code);
-                        $('#selectedItemId').val(exactMatch.Prod_Id);
-                        $('#selectedHsnCode').val(exactMatch.Gst_Id);
-                        $('#itemSelected').val(exactMatch.Prod_ShortNm);
-                        $('#unitId').val(exactMatch.Unit_Id);
-                        $('#unitDisplay').val(exactMatch.Unit_Name);
-                        const isWithGst = $('input[name="gstMode"]:checked').val() === '1';
-                        $('#cgstRate').val(isWithGst ? gst.CGST : 0);
-                        $('#sgstRate').val(isWithGst ? gst.SGST : 0);
-                        $('#originalCgst').val(gst.CGST);
-                        $('#originalSgst').val(gst.SGST);
-                        $('#saleMargin').val(exactMatch.Sale_Margin ?? 0);
-                        if (exactMatch.Is_Fmcg == 1) {
-                            showPackDateField(true);
-                        } else {
-                            showPackDateField(false);
-                        }
-                        calcSaleMrp();
-                        $('#quantity').focus();
-                    } else if (data.length > 0) {
-                        // Partial match — open modal
-                        openItemPickerModal(data, true, code);
-                    } else {
-                        Swal.fire('Error', 'No item found with this code', 'error');
-                    }
-                }).fail(function() {
-                    Swal.fire('Error', 'Failed to load items', 'error');
-                });
+                lookupProductCode(code);
             });
 
 
@@ -583,15 +592,7 @@
                     openItemPickerModal([], false, '');
                     return;
                 }
-                $.get("{{ url('good-received/items') }}", {
-                    code: code,
-                    cat_id: 0,
-                    sub_cat_id: 0
-                }, function(data) {
-                    openItemPickerModal(data, true, code);
-                }).fail(function() {
-                    Swal.fire('Error', 'Failed to load items', 'error');
-                });
+                lookupProductCode(code);
             });
 
             // ── Modal category change → load subcategories (single binding) ──

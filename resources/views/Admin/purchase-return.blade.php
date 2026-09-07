@@ -572,6 +572,88 @@
         let reopenFindPurchase = true;
         let findPurchaseHeader = null;
         let findPurchaseItems = [];
+        let returnableReady = false;
+        let skipPartyReturnableRefresh = false;
+
+        function requireReturnParty() {
+            if (!$('#partyId').val()) {
+                Swal.fire('Error', 'Please select a Party before choosing an item', 'error');
+                return false;
+            }
+            return true;
+        }
+
+        function qtyOnCurrentBill(prodId) {
+            return itemsArray.reduce(function(sum, row) {
+                return String(row.item_id) === String(prodId)
+                    ? sum + (parseFloat(row.quantity) || 0)
+                    : sum;
+            }, 0);
+        }
+
+        function applyReturnableLimit(options) {
+            options = options || {};
+            const partyId = $('#partyId').val();
+            const prodId = $('#selectedItemId').val();
+            returnableReady = false;
+            if (!partyId || !prodId) {
+                return;
+            }
+            $.get("{{ url('purchase-return/returnable-qty') }}", {
+                party_id: partyId,
+                prod_id: prodId,
+                exclude_id: currentPurchaseId || 0
+            }, function(row) {
+                let remaining = parseFloat(row.Remaining_Qty) || 0;
+                remaining -= qtyOnCurrentBill(prodId);
+                if (remaining < 0) remaining = 0;
+                if (typeof options.billCap === 'number' && !isNaN(options.billCap)) {
+                    remaining = Math.min(remaining, Math.max(options.billCap, 0));
+                }
+                remaining = parseFloat(remaining.toFixed(2));
+                const purchased = parseFloat(row.Purchased_Qty) || 0;
+                $('#maxReturnQty').val(remaining);
+                $('#quantity').attr('max', remaining);
+                if (remaining <= 0) {
+                    returnableReady = false;
+                    if (purchased <= 0) {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'No item purchased from this party',
+                            text: 'This product was not purchased from the selected party, so it cannot be returned.'
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'No returnable quantity',
+                            text: 'All purchased quantity of this item has already been returned against this party.'
+                        });
+                    }
+                    if (!options.keepItem) {
+                        clearItemSelection();
+                    }
+                    return;
+                }
+                returnableReady = true;
+                const currentQty = parseFloat($('#quantity').val());
+                if (!currentQty || currentQty <= 0) {
+                    $('#quantity').val(remaining);
+                } else if (currentQty > remaining) {
+                    $('#quantity').val(remaining);
+                }
+                calculateAmounts();
+                if (options.focusQty) {
+                    $('#quantity').focus();
+                }
+            }).fail(function(xhr) {
+                returnableReady = false;
+                const msg = (xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load returnable quantity';
+                Swal.fire('Error', msg, 'error');
+                if (!options.keepItem) {
+                    clearItemSelection();
+                }
+            });
+        }
 
         function showPackDateField(show) {
             if (show) {
@@ -615,65 +697,71 @@
                 calculateAmounts();
             });
 
-            $('#productCodeInput').on('keypress', function(e) {
-                if (e.which !== 13) return;
-                e.preventDefault();
-                const code = $(this).val().trim();
-                if (!code) return;
+            function applyPurchaseReturnItem(item) {
+                const gst = item.GST_Data ? JSON.parse(item.GST_Data) : {
+                    CGST: 0,
+                    SGST: 0
+                };
+                const isWithGst = $('input[name="gstMode"]:checked').val() === '1';
+                clearItemSelection();
+                $('#productCodeInput').val(item.Prod_Code);
+                $('#selectedItemId').val(item.Prod_Id);
+                $('#selectedHsnCode').val(item.Gst_Id);
+                $('#itemSelected').val(item.Prod_ShortNm);
+                $('#unitId').val(item.Unit_Id);
+                $('#unitDisplay').val(item.Unit_Name);
+                $('#cgstRate').val(isWithGst ? gst.CGST : 0);
+                $('#sgstRate').val(isWithGst ? gst.SGST : 0);
+                if (item.Is_Fmcg == 1) {
+                    showPackDateField(true);
+                } else {
+                    showPackDateField(false);
+                }
+                applyReturnableLimit({ focusQty: true });
+            }
+
+            function resolvePurchaseReturnCode(data, code) {
+                const exactMatch = (data || []).find(item =>
+                    String(item.Prod_Code || '').toLowerCase() === String(code).toLowerCase()
+                );
+                const unique = exactMatch || ((data || []).length === 1 ? data[0] : null);
+                if (unique) {
+                    applyPurchaseReturnItem(unique);
+                    return;
+                }
+                openItemPickerModal(data || [], true, code);
+            }
+
+            function lookupReturnProductCode(code) {
                 $.get("{{ url('purchase-return/items') }}", {
                     code: code,
                     cat_id: 0,
                     sub_cat_id: 0
                 }, function(data) {
-                    const exactMatch = data.find(item => item.Prod_Code.toString().toLowerCase() ===
-                        code.toLowerCase());
-                    if (exactMatch) {
-                        const gst = exactMatch.GST_Data ? JSON.parse(exactMatch.GST_Data) : {
-                            CGST: 0,
-                            SGST: 0
-                        };
-                        const isWithGst = $('input[name="gstMode"]:checked').val() === '1';
-                        clearItemSelection();
-                        $('#productCodeInput').val(exactMatch.Prod_Code);
-                        $('#selectedItemId').val(exactMatch.Prod_Id);
-                        $('#selectedHsnCode').val(exactMatch.Gst_Id);
-                        $('#itemSelected').val(exactMatch.Prod_ShortNm);
-                        $('#unitId').val(exactMatch.Unit_Id);
-                        $('#unitDisplay').val(exactMatch.Unit_Name);
-                        $('#cgstRate').val(isWithGst ? gst.CGST : 0);
-                        $('#sgstRate').val(isWithGst ? gst.SGST : 0);
-                        if (exactMatch.Is_Fmcg == 1) {
-                            showPackDateField(true);
-                        } else {
-                            showPackDateField(false);
-                        }
-                        $('#quantity').focus();
-                    } else if (data.length > 0) {
-                        openItemPickerModal(data, true, code);
-                    } else {
-                        Swal.fire('Error', 'No item found with this code', 'error');
-                    }
+                    resolvePurchaseReturnCode(data, code);
                 }).fail(function() {
-                    Swal.fire('Error', 'Failed to load items', 'error');
+                    openItemPickerModal([], true, code);
                 });
+            }
+
+            $('#productCodeInput').on('keypress', function(e) {
+                if (e.which !== 13) return;
+                e.preventDefault();
+                if (!requireReturnParty()) return;
+                const code = $(this).val().trim();
+                if (!code) return;
+                lookupReturnProductCode(code);
             });
 
             $('#productSearchBtn').on('click', function(e) {
                 e.preventDefault();
+                if (!requireReturnParty()) return;
                 const code = $('#productCodeInput').val().trim();
                 if (!code) {
                     openItemPickerModal([], false, '');
                     return;
                 }
-                $.get("{{ url('purchase-return/items') }}", {
-                    code: code,
-                    cat_id: 0,
-                    sub_cat_id: 0
-                }, function(data) {
-                    openItemPickerModal(data, true, code);
-                }).fail(function() {
-                    Swal.fire('Error', 'Failed to load items', 'error');
-                });
+                lookupReturnProductCode(code);
             });
 
 
@@ -771,10 +859,29 @@
                 clearItemCalc();
                 $('#cgstRate').val(isWithGst ? cgst : 0);
                 $('#sgstRate').val(isWithGst ? sgst : 0);
-                $('#quantity').focus();
+                applyReturnableLimit({ focusQty: true });
             });
 
-            $('#quantity, #rate, #discountPercent').on('input', calculateAmounts);
+            $('#partyId').on('change', function() {
+                if (skipPartyReturnableRefresh) return;
+                if ($('#selectedItemId').val()) {
+                    applyReturnableLimit({ keepItem: true, focusQty: false });
+                }
+            });
+
+            $('#quantity, #rate, #discountPercent').on('input', function() {
+                if (this.id === 'quantity') {
+                    const maxReturnQty = parseFloat($('#maxReturnQty').val());
+                    const qty = parseFloat($(this).val());
+                    if (!isNaN(maxReturnQty) && !isNaN(qty) && qty > maxReturnQty) {
+                        $(this).val(maxReturnQty);
+                        Swal.fire('Error',
+                            'Return quantity cannot exceed remaining purchased qty (' + maxReturnQty + ')',
+                            'error');
+                    }
+                }
+                calculateAmounts();
+            });
 
             $('#summaryDiscPercent').on('input', function() {
                 if ($(this).prop('readonly')) return;
@@ -866,6 +973,7 @@
                 itemsArray.splice(index, 1);
                 renderItemsTable();
                 $('#addItemBtn').text('Update Item').data('editing', true);
+                applyReturnableLimit({ keepItem: true, focusQty: true });
             });
 
             $('#savePurchase').on('click', function() {
@@ -1265,7 +1373,9 @@
                 return false;
             }
             if (header && header.Party_Id) {
+                skipPartyReturnableRefresh = true;
                 $('#partyId').val(header.Party_Id).trigger('change');
+                skipPartyReturnableRefresh = false;
             }
             if (header && !$('#purchaseNo').val()) {
                 $('#purchaseNo').val(header.Ref_No || header.Invoice_No || '');
@@ -1278,8 +1388,6 @@
             $('#unitDisplay').val(item.Unit_Name);
             $('#quantity').val(remaining);
             $('#maxReturnQty').val(remaining);
-            $('#rate').val(item.Item_Rate);
-            $('#discountPercent').val(item.Disc_Prcnt || 0);
             const isWithGst = $('input[name="gstMode"]:checked').val() === '1';
             $('#cgstRate').val(isWithGst ? (item.CGST_Prcnt || 0) : 0);
             $('#sgstRate').val(isWithGst ? (item.SGST_Prcnt || 0) : 0);
@@ -1290,7 +1398,7 @@
                 showPackDateField(false);
             }
             calculateAmounts();
-            $('#quantity').focus();
+            applyReturnableLimit({ billCap: remaining, keepItem: true, focusQty: true });
             return true;
         }
 
@@ -1394,6 +1502,10 @@
                 Swal.fire('Error', 'Please select an item', 'error');
                 return false;
             }
+            if (!$('#partyId').val()) {
+                Swal.fire('Error', 'Please select a Party', 'error');
+                return false;
+            }
             const qty = parseFloat($('#quantity').val());
             const rate = parseFloat($('#rate').val());
             const discPct = parseFloat($('#discountPercent').val()) || 0;
@@ -1406,8 +1518,17 @@
                 Swal.fire('Error', 'Quantity cannot exceed 99999999.99', 'error');
                 return false;
             }
+            if (!returnableReady) {
+                Swal.fire('Error', 'Wait until returnable quantity is loaded, or this item has no remaining qty', 'error');
+                return false;
+            }
             const maxReturnQty = parseFloat($('#maxReturnQty').val());
-            if (!isNaN(maxReturnQty) && maxReturnQty > 0 && qty > maxReturnQty) {
+            if (isNaN(maxReturnQty) || maxReturnQty <= 0) {
+                Swal.fire('Error', 'No returnable quantity for this item against the selected party', 'error');
+                $('#quantity').focus();
+                return false;
+            }
+            if (qty > maxReturnQty) {
                 Swal.fire('Error', `Return quantity cannot exceed remaining purchased qty (${maxReturnQty})`, 'error');
                 $('#quantity').focus();
                 return false;
@@ -1499,9 +1620,11 @@
         }
 
         function clearItemSelection() {
+            returnableReady = false;
             $('#selectedItemId, #selectedHsnCode, #unitId, #maxReturnQty').val('');
             $('#itemSelected, #unitDisplay').val('');
             $('#cgstRate, #sgstRate').val('');
+            $('#quantity').removeAttr('max');
             clearItemCalc();
         }
 

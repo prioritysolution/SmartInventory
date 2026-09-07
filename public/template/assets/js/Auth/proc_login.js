@@ -20,6 +20,7 @@ function proc_login() {
     var pOrg_Code = $("#org_code").val();
     var pUser_Name = $("#auth_user").val();
     var pUser_Pass = $("#auth_pass").val();
+    var remember_me = $("#remember_me").is(":checked") ? 1 : 0;
 
     if (pOrg_Code == "") {
         Swal.fire({icon: 'warning', title: 'Warning', text: 'Please Enter Organization Code !!'});
@@ -34,22 +35,18 @@ function proc_login() {
             data: {
                 pOrg_Code: pOrg_Code,
                 pUser_Name: pUser_Name,
-                pUser_Pass: pUser_Pass
+                pUser_Pass: pUser_Pass,
+                remember_me: remember_me
             },
             dataType: "json",
-            // beforeSend: function () {
-            //     Swal.fire({title: 'Please wait...', allowOutsideClick: false, didOpen: () => {Swal.showLoading()}});
-            // },
             success: function (response) {
-                Swal.close();
                 if (response.status === "success") {
-                    window.location.href = baseUrl + "/Dashboard";
+                    window.navigateWithLoader(baseUrl + "/Dashboard");
                 } else {
                     Swal.fire({icon: 'error', title: 'Error', text: response.data || 'Something went wrong!'});
                 }
             },
             error: function (xhr, status, error) {
-                Swal.close();
                 if (xhr.status === 422) {
                     let errors = xhr.responseJSON.errors;
                     let errorMsg = Object.values(errors).flat().join('\n');

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\SearchesItemsByCode;
+use App\Http\Controllers\Concerns\VerifiesStoredPassword;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -10,6 +12,8 @@ use Illuminate\Support\Facades\Config;
 
 class MasterSetup extends Controller
 {
+    use SearchesItemsByCode;
+    use VerifiesStoredPassword;
 
     //product master
     public function index()
@@ -25,18 +29,17 @@ class MasterSetup extends Controller
 
     public function searchItem(Request $request)
     {
-        $searchTerm = $request->input('search');
         Config::set('database.connections.coops.database', session('org_schema'));
-        $items = DB::connection('coops')->select('CALL USP_SEARCH_ITEM(?)', [$searchTerm]);
+        DB::purge('coops');
 
-        $formattedItems = array_map(function ($item) {
-            return [
-                'Prod_Id'     => $item->Prod_Id,
-                'ItemDisplay' => $item->Item_Name
-            ];
-        }, $items);
+        $code = (string) ($request->input('code') ?? $request->input('search') ?? '');
+        $items = $this->searchItemsByCode(
+            (int) $request->input('cat_id', 0),
+            (int) $request->input('sub_cat_id', 0),
+            $code
+        );
 
-        return response()->json($formattedItems);
+        return response()->json($items);
     }
 
 
@@ -137,26 +140,28 @@ public function indexAgent(Request $request)
 
     public function storeAgent(Request $request)
     {
-        $request->validate([
+        $request->validate(array_merge([
             'agent_name' => 'required|string|max:50',
-            'address' => 'required|string|max:100',
+            'address' => 'nullable|string|max:100',
             'mobile' => 'required|digits:10',
             'join_date' => 'required|date|before_or_equal:today',
             'stock_limit' => 'nullable|numeric|min:0|max:99999999.99',
+            'credit_sell_limit' => 'nullable|numeric|min:0|max:99999999.99',
             'password' => 'nullable|string|min:6|max:20',
-        ]);
+        ], $this->addressMasterValidationRules()));
         try {
             Config::set('database.connections.coops.database', session('org_schema'));
             DB::connection('coops')->beginTransaction();
-            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_AGENT(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_AGENT(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                 0,
                 $request->input('agent_name'),
                 $request->input('address'),
                 $request->input('mobile'),
                 $request->input('join_date'),
                 $request->input('stock_limit'),
+                $request->input('credit_sell_limit'),
                 session('branch_id'),
-                $request->input('password'),
+                $request->filled('password') ? $this->hashPlainPassword($request->input('password')) : null,
                 1,
                 1
             ]);
@@ -165,6 +170,11 @@ public function indexAgent(Request $request)
                 DB::connection('coops')->rollBack();
                 return response()->json(['success' => false, 'message' => $result[0]->Message], 400);
             }
+            $agentCode = null;
+            if (!empty($result[0]->Message) && preg_match('/Agent Code is\s+(\S+)/i', $result[0]->Message, $m)) {
+                $agentCode = $m[1];
+            }
+            $this->syncEntityAddressMaster('agent', 0, $request, $agentCode);
             DB::connection('coops')->commit();
             return response()->json([
                 'success' => true,
@@ -180,26 +190,28 @@ public function indexAgent(Request $request)
     public function updateAgent(Request $request, $id)
     {
 
-        $request->validate([
+        $request->validate(array_merge([
             'agent_name' => 'required|string|max:50',
-            'address' => 'required|string|max:100',
+            'address' => 'nullable|string|max:100',
             'mobile' => 'required|digits:10',
             'join_date' => 'required|date|before_or_equal:today',
             'stock_limit' => 'nullable|numeric|min:0|max:99999999.99',
+            'credit_sell_limit' => 'nullable|numeric|min:0|max:99999999.99',
             'password' => 'nullable|string|min:6|max:20',
-        ]);
+        ], $this->addressMasterValidationRules()));
         try {
             Config::set('database.connections.coops.database', session('org_schema'));
             DB::connection('coops')->beginTransaction();
-            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_AGENT(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_AGENT(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                 $id,
                 $request->input('agent_name'),
                 $request->input('address'),
                 $request->input('mobile'),
                 $request->input('join_date'),
                 $request->input('stock_limit'),
+                $request->input('credit_sell_limit'),
                 session('branch_id'),
-                $request->input('password'),
+                $request->filled('password') ? $this->hashPlainPassword($request->input('password')) : null,
                 1,
                 2
             ]);
@@ -208,6 +220,7 @@ public function indexAgent(Request $request)
                 DB::connection('coops')->rollBack();
                 return response()->json(['success' => false, 'message' => $result[0]->Message], 400);
             }
+            $this->syncEntityAddressMaster('agent', $id, $request);
             DB::connection('coops')->commit();
             return response()->json([
                 'success' => true,
@@ -247,39 +260,41 @@ public function indexAgent(Request $request)
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         $branchId = session('branch_id');
-        $suppliers = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?,?)', [1, $branchId]);
+        $suppliers = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [1, $branchId, 0]);
         Log::channel('trading')->info('USP_GET_PARTY_LIST result', ['result' => $suppliers]);
         return view('Admin.supplier-master', compact('suppliers'))->with('pageTitle', 'Supplier Master');
     }
 
     public function storeSupplier(Request $request)
     {
-        $request->validate([
-            'party_code' => 'required|string|max:25',
+        $request->validate(array_merge([
             'party_name' => 'required|string|max:100',
-            'mobile_no' => 'required|digits:10',
+            'mobile_no' => 'nullable|digits:10',
             'contact_no' => 'nullable|digits:10',
             'mail_id' => 'nullable|email|max:50',
             'contact_person' => 'nullable|string|max:150',
             'designation' => 'nullable|string|max:50',
-            'address1' => 'required|string|max:200',
+            'address1' => 'nullable|string|max:200',
             'address2' => 'nullable|string|max:200',
             'city' => 'nullable|string|max:50',
             'district' => 'nullable|string|max:50',
             'state' => 'nullable|string|max:25',
-            'pin_code' => 'nullable|numeric|max_digits:10',
+            'pin_code' => 'nullable|string|max:10',
             'pan_no' => 'nullable|string|max:25|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
             'gstin' => 'nullable|string|max:25|regex:/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/',
             'state_code' => 'nullable|numeric|max:99',
             'credit_limit' => 'nullable|numeric|min:0|max:99999999.99',
-        ]);
+            'opening_balance' => 'nullable|numeric|min:0|max:999999999999.99',
+        ], $this->addressMasterValidationRules()));
 
         try {
             Config::set('database.connections.coops.database', session('org_schema'));
             DB::connection('coops')->beginTransaction();
-            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_PARTY(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $district = $this->addressMasterName('dist', $request->input('dist_id')) ?: $request->input('district');
+            $pinCode  = $this->addressMasterName('pin', $request->input('pin_id')) ?: $request->input('pin_code');
+            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_PARTY(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                 0,
-                $request->input('party_code'),
+                null,
                 $request->input('party_name'),
                 $request->input('mobile_no'),
                 $request->input('contact_no'),
@@ -289,14 +304,15 @@ public function indexAgent(Request $request)
                 $request->input('address1'),
                 $request->input('address2'),
                 $request->input('city'),
-                $request->input('district'),
+                $district,
                 $request->input('state'),
-                $request->input('pin_code'),
+                $pinCode,
                 $request->input('pan_no'),
                 $request->input('gstin'),
                 $request->input('state_code'),
                 date('Y-m-d'),
                 $request->input('credit_limit'),
+                $request->input('opening_balance', 0),
                 session('branch_id'),
                 session('user_id'),
                 1
@@ -315,8 +331,9 @@ public function indexAgent(Request $request)
                 }
 
                 if ($errorNo == 0) {
+                    $this->syncEntityAddressMaster('party', 0, $request, $result[0]->Party_Code ?? null);
                     DB::connection('coops')->commit();
-                    return response()->json(['message' => 'Supplier added successfully']);
+                    return response()->json(['message' => 'Supplier added successfully', 'party_code' => $result[0]->Party_Code ?? '']);
                 }
             }
 
@@ -331,30 +348,33 @@ public function indexAgent(Request $request)
 
     public function updateSupplier(Request $request, $id)
     {
-        $request->validate([
-            'party_code' => 'required|string|max:25',
+        $request->validate(array_merge([
+            'party_code' => 'nullable|string|max:25',
             'party_name' => 'required|string|max:100',
-            'mobile_no' => 'required|digits:10',
+            'mobile_no' => 'nullable|digits:10',
             'contact_no' => 'nullable|digits:10',
             'mail_id' => 'nullable|email|max:50',
             'contact_person' => 'nullable|string|max:150',
             'designation' => 'nullable|string|max:50',
-            'address1' => 'required|string|max:200',
+            'address1' => 'nullable|string|max:200',
             'address2' => 'nullable|string|max:200',
             'city' => 'nullable|string|max:50',
             'district' => 'nullable|string|max:50',
             'state' => 'nullable|string|max:25',
-            'pin_code' => 'nullable|numeric|max_digits:10',
+            'pin_code' => 'nullable|string|max:10',
             'pan_no' => 'nullable|string|max:25|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
             'gstin' => 'nullable|string|max:25|regex:/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/',
             'state_code' => 'nullable|numeric|max:99',
             'credit_limit' => 'nullable|numeric|min:0|max:99999999.99',
-        ]);
+            'opening_balance' => 'nullable|numeric|min:0|max:999999999999.99',
+        ], $this->addressMasterValidationRules()));
 
         try {
             Config::set('database.connections.coops.database', session('org_schema'));
             DB::connection('coops')->beginTransaction();
-            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_PARTY(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $district = $this->addressMasterName('dist', $request->input('dist_id')) ?: $request->input('district');
+            $pinCode  = $this->addressMasterName('pin', $request->input('pin_id')) ?: $request->input('pin_code');
+            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_PARTY(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                 $id,
                 null,
                 $request->input('party_name'),
@@ -366,14 +386,15 @@ public function indexAgent(Request $request)
                 $request->input('address1'),
                 $request->input('address2'),
                 $request->input('city'),
-                $request->input('district'),
+                $district,
                 $request->input('state'),
-                $request->input('pin_code'),
+                $pinCode,
                 $request->input('pan_no'),
                 $request->input('gstin'),
                 $request->input('state_code'),
                 date('Y-m-d'),
                 $request->input('credit_limit'),
+                $request->input('opening_balance', 0),
                 session('branch_id'),
                 session('user_id'),
                 2
@@ -391,6 +412,7 @@ public function indexAgent(Request $request)
                     return response()->json(['error' => $message], 422);
                 }
 
+                $this->syncEntityAddressMaster('party', $id, $request);
                 DB::connection('coops')->commit();
                 return response()->json(['message' => 'Supplier updated successfully']);
             }
@@ -411,39 +433,47 @@ public function indexAgent(Request $request)
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         $branchId = session('branch_id');
-        $customers = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?,?)', [2, $branchId]);
+        $customers = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [2, $branchId, 0]);
 
+        $pdo = DB::connection('coops')->getPdo();
+        $stmt = $pdo->prepare('CALL USP_GET_AGENT_LIST(?, ?, ?, ?)');
+        $stmt->execute([$branchId, '', 1, 0]);
+        $agents = $stmt->fetchAll(\PDO::FETCH_OBJ);
+        $stmt->closeCursor();
 
-        return view('Admin.customer-master', compact('customers'))->with('pageTitle', 'Customer Master');
+        return view('Admin.customer-master', compact('customers', 'agents'))->with('pageTitle', 'Customer Master');
     }
 
     public function storeCustomer(Request $request)
     {
-        $request->validate([
-            'party_code' => 'required|string|max:25',
+        $request->validate(array_merge([
             'party_name' => 'required|string|max:100',
-            'mobile_no' => 'required|digits:10',
+            'mobile_no' => 'nullable|digits:10',
             'alt_mobile_no' => 'nullable|digits:10',
             'mail_id' => 'nullable|email|max:50',
-            'address1' => 'required|string|max:200',
+            'address1' => 'nullable|string|max:200',
             'address2' => 'nullable|string|max:200',
             'city' => 'nullable|string|max:50',
             'district' => 'nullable|string|max:50',
             'state' => 'nullable|string|max:25',
-            'pin_code' => 'nullable|numeric|max_digits:10',
+            'pin_code' => 'nullable|string|max:10',
             'pan_no' => 'nullable|string|max:25|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
             'gstin' => 'nullable|string|max:25|regex:/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/',
             'state_code' => 'nullable|numeric|max:99',
             'credit_limit' => 'nullable|numeric|min:0|max:99999999.99',
-        ]);
+            'opening_balance' => 'nullable|numeric|min:0|max:999999999999.99',
+            'cust_agent_id' => 'nullable|integer|min:0',
+        ], $this->addressMasterValidationRules()));
 
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::connection('coops')->beginTransaction();
 
         try {
-            $result = DB::connection('coops')->select("CALL USP_ADD_EDIT_CUSTOMER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+            $district = $this->addressMasterName('dist', $request->input('dist_id')) ?: $request->district;
+            $pinCode  = $this->addressMasterName('pin', $request->input('pin_id')) ?: $request->pin_code;
+            $result = DB::connection('coops')->select("CALL USP_ADD_EDIT_CUSTOMER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
                 0,
-                $request->party_code,
+                null,
                 $request->party_name,
                 $request->mobile_no,
                 $request->alt_mobile_no,
@@ -451,14 +481,16 @@ public function indexAgent(Request $request)
                 $request->address1,
                 $request->address2,
                 $request->city,
-                $request->district,
+                $district,
                 $request->state,
-                $request->pin_code,
+                $pinCode,
                 $request->pan_no,
                 $request->gstin,
                 $request->state_code,
                 date('Y-m-d'),
                 $request->credit_limit,
+                $request->input('opening_balance', 0),
+                (int) $request->input('cust_agent_id', 0),
                 session('branch_id'),
                 session('user_id'),
                 1
@@ -476,8 +508,9 @@ public function indexAgent(Request $request)
                 }
 
                 if ($errorNo == 0) {
+                    $this->syncEntityAddressMaster('party', 0, $request, $result[0]->Party_Code ?? null);
                     DB::connection('coops')->commit();
-                    return response()->json(['message' => 'Customer added successfully']);
+                    return response()->json(['message' => 'Customer added successfully', 'party_code' => $result[0]->Party_Code ?? '']);
                 }
             }
 
@@ -493,30 +526,34 @@ public function indexAgent(Request $request)
 
     public function updateCustomer(Request $request, $id)
     {
-        $request->validate([
+        $request->validate(array_merge([
             'party_name' => 'required|string|max:250',
-            'mobile_no' => 'required|digits:10',
+            'mobile_no' => 'nullable|digits:10',
             'alt_mobile_no' => 'nullable|digits:10',
             'mail_id' => 'nullable|email|max:50',
-            'address1' => 'required|string|max:200',
+            'address1' => 'nullable|string|max:200',
             'address2' => 'nullable|string|max:200',
             'city' => 'nullable|string|max:50',
             'district' => 'nullable|string|max:50',
             'state' => 'nullable|string|max:25',
-            'pin_code' => 'nullable|numeric|max_digits:10',
+            'pin_code' => 'nullable|string|max:10',
             'pan_no' => 'nullable|string|max:25|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
             'gstin' => 'nullable|string|max:25|regex:/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/',
             'state_code' => 'nullable|numeric|max:99',
             'credit_limit' => 'nullable|numeric|min:0|max:99999999.99',
-        ]);
+            'opening_balance' => 'nullable|numeric|min:0|max:999999999999.99',
+            'cust_agent_id' => 'nullable|integer|min:0',
+        ], $this->addressMasterValidationRules()));
 
         try {
             Config::set('database.connections.coops.database', session('org_schema'));
 
 
             DB::connection('coops')->beginTransaction();
+            $district = $this->addressMasterName('dist', $request->input('dist_id')) ?: $request->input('district');
+            $pinCode  = $this->addressMasterName('pin', $request->input('pin_id')) ?: $request->input('pin_code');
 
-            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_CUSTOMER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_CUSTOMER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                 $id,
                 null,
                 $request->input('party_name'),
@@ -526,14 +563,16 @@ public function indexAgent(Request $request)
                 $request->input('address1'),
                 $request->input('address2'),
                 $request->input('city'),
-                $request->input('district'),
+                $district,
                 $request->input('state'),
-                $request->input('pin_code'),
+                $pinCode,
                 $request->input('pan_no'),
                 $request->input('gstin'),
                 $request->input('state_code'),
                 date('Y-m-d'),
                 $request->input('credit_limit'),
+                $request->input('opening_balance', 0),
+                (int) $request->input('cust_agent_id', 0),
                 session('branch_id'),
                 session('user_id'),
                 2
@@ -554,6 +593,7 @@ public function indexAgent(Request $request)
                 }
 
                 if ($errorNo == 0) {
+                    $this->syncEntityAddressMaster('party', $id, $request);
                     DB::connection('coops')->commit();
                     return response()->json([
                         'message' => 'Customer updated successfully'
@@ -598,20 +638,86 @@ public function indexAgent(Request $request)
         return view('Admin.member-share', compact('memberTypes', 'banks', 'shareConfig'))->with('pageTitle', 'Member & Share Management');
     }
 
-    public function storeMember(Request $request)
+    public function getMemberList()
     {
-        $request->validate([
+        Config::set('database.connections.coops.database', session('org_schema'));
+        $members = DB::connection('coops')->select('CALL USP_GET_MEMBER_LIST(?)', [session('branch_id')]);
+        return response()->json($members);
+    }
+
+    public function updateMember(Request $request, $id)
+    {
+        $request->validate(array_merge([
             'mem_type' => 'required|integer',
             'mem_name' => 'required|string|max:50',
             'gur_name' => 'required|string|max:50',
-            'address' => 'required|string|max:100',
-            'mob_no' => 'required|digits:10',
+            'address'  => 'nullable|string|max:100',
+            'mob_no'   => 'nullable|digits:10',
+            'adhar_no' => 'nullable|digits:12',
+            'voter_no' => 'nullable|string|max:25',
+            'pan_no'   => 'nullable|string|max:25|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
+            'adm_date' => 'required|date',
+            'share_no' => 'nullable|integer|min:0',
+        ], $this->addressMasterValidationRules()));
+        try {
+            Config::set('database.connections.coops.database', session('org_schema'));
+            DB::connection('coops')->beginTransaction();
+            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_MEMBER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+                $id,
+                $request->mem_type,
+                $request->mem_name,
+                $request->gur_name,
+                $request->address,
+                $request->mob_no,
+                $request->adhar_no,
+                $request->voter_no,
+                $request->pan_no,
+                $request->adm_date,
+                $request->input('adm_fees', 0),
+                $request->input('share_no', 0),
+                $request->input('share_amt', 0),
+                session('user_id'),
+                1, 0, null,
+                $request->input('rate_share', 0),
+                $request->input('tot_amt', 0),
+                null,
+                null,
+                session('year_id'),
+                session('branch_id'),
+                2
+            ]);
+            if (!empty($result)) {
+                $errorNo = $result[0]->Error_No ?? 0;
+                $message = $result[0]->Message ?? $result[0]->Messgae ?? '';
+                if ($errorNo < 0) {
+                    DB::connection('coops')->rollBack();
+                    return response()->json(['error' => $message], 422);
+                }
+            }
+            $this->syncEntityAddressMaster('member', $id, $request);
+            DB::connection('coops')->commit();
+            return response()->json(['message' => 'Member updated successfully']);
+        } catch (\Exception $e) {
+            DB::connection('coops')->rollBack();
+            Log::channel('trading')->error('Member update error: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to update member'], 500);
+        }
+    }
+
+    public function storeMember(Request $request)
+    {
+        $request->validate(array_merge([
+            'mem_type' => 'required|integer',
+            'mem_name' => 'required|string|max:50',
+            'gur_name' => 'required|string|max:50',
+            'address' => 'nullable|string|max:100',
+            'mob_no' => 'nullable|digits:10',
             'adhar_no' => 'nullable|digits:12',
             'voter_no' => 'nullable|string|max:25',
             'pan_no' => 'nullable|string|max:25|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
             'adm_date' => 'required|date||before_or_equal:today',
             'adm_fees' => 'required|numeric|min:0',
-            'share_no' => 'required|digits_between:1,6',
+            'share_no' => 'nullable|digits_between:0,6',
             'rate_share' => 'required|numeric|min:0',
             'share_amt' => 'required|numeric|min:0',
             'tot_amt' => 'required|numeric|min:0',
@@ -619,7 +725,8 @@ public function indexAgent(Request $request)
             'bank_id' => 'nullable|integer',
             'ref_mem_no' => 'nullable|string|max:25',
             'ref_voucher' => 'nullable|string|max:50',
-        ], [
+            'bank_remarks' => 'nullable|string|max:100',
+        ], $this->addressMasterValidationRules()), [
             'share_no.digits_between' => 'Number of Share maximum 999999.',
         ]);
 
@@ -631,7 +738,7 @@ public function indexAgent(Request $request)
         DB::connection('coops')->beginTransaction();
 
         try {
-            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_MEMBER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_MEMBER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                 0,
                 $request->mem_type,
                 $request->mem_name,
@@ -652,6 +759,7 @@ public function indexAgent(Request $request)
                 $request->rate_share,
                 $request->tot_amt,
                 $request->ref_voucher,
+                $request->input('bank_remarks'),
                 session('year_id'),
                 session('branch_id'),
                 1
@@ -669,6 +777,7 @@ public function indexAgent(Request $request)
                 }
 
                 if ($errorNo == 0) {
+                    $this->syncEntityAddressMaster('member', 0, $request, $result[0]->Member_Code ?? null);
                     DB::connection('coops')->commit();
                     return response()->json(['message' => $message ?: 'Member added successfully']);
                 }
@@ -932,6 +1041,137 @@ public function storeProdCategory(Request $request)
 
 
 
+    // Address Master
+    public function indexAddressMaster()
+    {
+        return view('Admin.address-master')->with('pageTitle', 'Address Master');
+    }
+
+    public function getAddressData($type)
+    {
+        if (!$this->addressTable($type)) {
+            return response()->json(['error' => 'Invalid address type'], 400);
+        }
+
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+
+        try {
+            $data = DB::connection('coops')->select('CALL USP_GET_ADDRESS_MASTER(?)', [$type]);
+            return response()->json($data);
+        } catch (\Exception $e) {
+            Log::channel('trading')->error('Address master load error: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load data'], 500);
+        }
+    }
+
+    public function storeAddressMaster(Request $request)
+    {
+        $request->validate(['type' => 'required|string', 'name' => 'required|string|max:100']);
+        if (!$this->addressTable($request->input('type'))) {
+            return response()->json(['error' => 'Invalid address type'], 400);
+        }
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+        try {
+            DB::connection('coops')->beginTransaction();
+            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_ADDRESS_MASTER(?, ?, ?, ?)', [
+                $request->input('type'),
+                0,
+                $request->input('name'),
+                1
+            ]);
+            if (!empty($result) && $result[0]->Error_No < 0) {
+                DB::connection('coops')->rollBack();
+                return response()->json(['error' => $result[0]->Message], 422);
+            }
+            DB::connection('coops')->commit();
+            return response()->json(['message' => $result[0]->Message ?? 'Added successfully']);
+        } catch (\Exception $e) {
+            DB::connection('coops')->rollBack();
+            Log::channel('trading')->error('Address master save error: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to save'], 500);
+        }
+    }
+
+    public function updateAddressMaster(Request $request, $type, $id)
+    {
+        $request->validate(['name' => 'required|string|max:100']);
+        if (!$this->addressTable($type)) {
+            return response()->json(['error' => 'Invalid address type'], 400);
+        }
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+        try {
+            DB::connection('coops')->beginTransaction();
+            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_ADDRESS_MASTER(?, ?, ?, ?)', [
+                $type,
+                $id,
+                $request->input('name'),
+                2
+            ]);
+            if (!empty($result) && $result[0]->Error_No < 0) {
+                DB::connection('coops')->rollBack();
+                return response()->json(['error' => $result[0]->Message], 422);
+            }
+            DB::connection('coops')->commit();
+            return response()->json(['message' => $result[0]->Message ?? 'Updated successfully']);
+        } catch (\Exception $e) {
+            DB::connection('coops')->rollBack();
+            Log::channel('trading')->error('Address master update error: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to update'], 500);
+        }
+    }
+
+    private function addressTable($type)
+    {
+        $map = [
+            'village' => ['table' => 'mst_village', 'pk' => 'Village_Id', 'col' => 'Village_Name'],
+            'ps'      => ['table' => 'mst_ps',      'pk' => 'Ps_Id',      'col' => 'Ps_Name'],
+            'post'    => ['table' => 'mst_post',    'pk' => 'Post_Id',    'col' => 'Post_Name'],
+            'pin'     => ['table' => 'mst_pin',     'pk' => 'Pin_Id',     'col' => 'Pin_Code'],
+            'dist'    => ['table' => 'mst_dist',    'pk' => 'Dist_Id',    'col' => 'Dist_Name'],
+        ];
+        return $map[$type] ?? null;
+    }
+
+    private function addressMasterValidationRules(): array
+    {
+        return [
+            'village_id' => 'required|integer|min:1',
+            'ps_id'      => 'required|integer|min:1',
+            'post_id'    => 'required|integer|min:1',
+            'pin_id'     => 'required|integer|min:1',
+            'dist_id'    => 'required|integer|min:1',
+        ];
+    }
+
+    private function addressMasterName(string $type, $id): ?string
+    {
+        if (!$this->addressTable($type) || !$id) {
+            return null;
+        }
+        $rows = DB::connection('coops')->select('CALL USP_GET_ADDRESS_NAME(?, ?)', [$type, (int) $id]);
+        return !empty($rows) && isset($rows[0]->Name) ? (string) $rows[0]->Name : null;
+    }
+
+    private function syncEntityAddressMaster(string $entity, $id, Request $request, ?string $code = null): void
+    {
+        if (!$id && !$code) {
+            return;
+        }
+        DB::connection('coops')->select('CALL USP_UPDATE_ENTITY_ADDRESS(?, ?, ?, ?, ?, ?, ?, ?)', [
+            $entity,
+            (int) ($id ?: 0),
+            $code,
+            (int) $request->input('village_id'),
+            (int) $request->input('ps_id'),
+            (int) $request->input('post_id'),
+            (int) $request->input('pin_id'),
+            (int) $request->input('dist_id'),
+        ]);
+    }
+
     // Chart of Accounts
 public function indexChartOfAccounts()
 {
@@ -1046,7 +1286,49 @@ public function updateGst(Request $request, $id)
     }
 }
 
+    public function indexCounterBalance()
+    {
+        Config::set('database.connections.coops.database', session('org_schema'));
+        $users = DB::connection('coops')->select('CALL USP_GET_USER_LIST(?)', [session('branch_id')]);
+        $rows  = DB::connection('coops')->select('CALL USP_GET_COUNTER_BALANCE()');
 
+        return view('Admin.counter-balance', [
+            'users'      => $users,
+            'rows'       => $rows,
+            'year_start' => session('year_start'),
+        ])->with('pageTitle', 'Counter Balance');
+    }
 
+    public function storeCounterBalance(Request $request)
+    {
+        $request->validate([
+            'counter_id' => 'required|integer|min:1',
+            'balance'    => 'required|numeric|min:0',
+        ]);
 
+        $balDate = session('year_start');
+
+        $mode = $request->input('id') ? 2 : 1;
+        try {
+            Config::set('database.connections.coops.database', session('org_schema'));
+            DB::connection('coops')->beginTransaction();
+            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_COUNTER_BALANCE(?,?,?,?,?)', [
+                $request->input('id') ?: 0,
+                (int) $request->input('counter_id'),
+                $request->input('balance'),
+                $balDate,
+                $mode,
+            ]);
+            if (!empty($result) && $result[0]->Error_No < 0) {
+                DB::connection('coops')->rollBack();
+                return response()->json(['error' => $result[0]->Message], 422);
+            }
+            DB::connection('coops')->commit();
+            return response()->json(['message' => $result[0]->Message ?? 'Saved successfully']);
+        } catch (\Exception $e) {
+            DB::connection('coops')->rollBack();
+            Log::channel('trading')->error('Counter balance save error: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to save counter balance'], 500);
+        }
+    }
 }

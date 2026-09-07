@@ -51,10 +51,17 @@
                                     data-district="{{ $customer->District }}"
                                     data-state="{{ $customer->State }}"
                                     data-pin="{{ $customer->PinCode }}"
+                                    data-village="{{ $customer->Village_Id ?? '' }}"
+                                    data-ps="{{ $customer->Ps_Id ?? '' }}"
+                                    data-post="{{ $customer->Post_Id ?? '' }}"
+                                    data-pin-id="{{ $customer->Pin_Id ?? '' }}"
+                                    data-dist="{{ $customer->Dist_Id ?? '' }}"
                                     data-pan="{{ $customer->Pan_No }}"
                                     data-gst="{{ $customer->GstIn }}"
                                     data-statecode="{{ $customer->State_Cd }}"
-                                    data-credit="{{ $customer->Credit_Limit }}">
+                                    data-credit="{{ $customer->Credit_Limit }}"
+                                    data-opening="{{ $customer->Opening_Bal }}"
+                                    data-agent="{{ $customer->Cust_Agent_Id ?? '' }}">
                                     Edit
                                 </button>
                                 <button class="btn btn-danger btn-sm deleteRow"
@@ -75,7 +82,7 @@
 </div>
 
 <!-- Customer Modal -->
-<div class="modal fade" id="customerModal" tabindex="-1">
+<div class="modal fade" id="customerModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
 <div class="modal-dialog modal-xl" style="max-width: 95%;">
 <div class="modal-content" style="min-height: 60vh;">
 
@@ -88,15 +95,20 @@
 <input type="hidden" id="partyId">
 <div class="row g-4">
     <div class="col-md-3 mb-3">
-        <label class="form-label">Party Code<span class="text-danger">*</span></label>
-        <input type="text" class="form-control form-control-lg " id="partyCode" maxlength="25" autocomplete="off">
-    </div>
-    <div class="col-md-3 mb-3">
         <label class="form-label">Party Name<span class="text-danger">*</span></label>
         <input type="text" class="form-control form-control-lg" id="partyName" maxlength="250" autocomplete="off">
     </div>
     <div class="col-md-3 mb-3">
-        <label class="form-label">Mobile No<span class="text-danger">*</span></label>
+        <label class="form-label">Select Agent</label>
+        <select class="form-select form-control-lg" id="custAgentId">
+            <option value="">Select Agent</option>
+            @foreach ($agents as $agent)
+                <option value="{{ $agent->Agent_Id }}">{{ $agent->Agent_Code }} - {{ $agent->Agent_Name }}</option>
+            @endforeach
+        </select>
+    </div>
+    <div class="col-md-3 mb-3">
+        <label class="form-label">Mobile No</label>
         <input type="text" class="form-control form-control-lg" id="mobileNo" maxlength="10" autocomplete="off"
             oninput="this.value = this.value.replace(/[^0-9]/g, '')">
     </div>
@@ -110,28 +122,21 @@
         <input type="email" class="form-control form-control-lg" id="mailId" maxlength="50" autocomplete="off">
     </div>
     <div class="col-md-3 mb-3">
-        <label class="form-label">Address 1<span class="text-danger">*</span></label>
+        <label class="form-label">Address 1</label>
         <input type="text" class="form-control form-control-lg" id="address1" maxlength="200" autocomplete="off">
     </div>
     <div class="col-md-3 mb-3">
         <label class="form-label">Address 2</label>
         <input type="text" class="form-control form-control-lg" id="address2" maxlength="200" autocomplete="off">
     </div>
+    @include('Admin.partials.address-master-fields')
     <div class="col-md-3 mb-3">
         <label class="form-label">City</label>
         <input type="text" class="form-control form-control-lg" id="city" maxlength="50" autocomplete="off">
     </div>
     <div class="col-md-3 mb-3">
-        <label class="form-label">District</label>
-        <input type="text" class="form-control form-control-lg" id="district" maxlength="50" autocomplete="off">
-    </div>
-    <div class="col-md-3 mb-3">
         <label class="form-label">State</label>
         <input type="text" class="form-control form-control-lg" id="state" maxlength="25" autocomplete="off">
-    </div>
-    <div class="col-md-3 mb-3">
-        <label class="form-label">Pin Code</label>
-        <input type="text" class="form-control form-control-lg" id="pinCode" maxlength="10" autocomplete="off">
     </div>
     <div class="col-md-3 mb-3">
         <label class="form-label">Pan No</label>
@@ -149,6 +154,10 @@
         <label class="form-label">Credit Limit</label>
         <input type="number" step="0.01" class="form-control form-control-lg" id="creditLimit" autocomplete="off">
     </div>
+    <div class="col-md-3 mb-3">
+        <label class="form-label">Opening Balance</label>
+        <input type="number" step="0.01" min="0" class="form-control form-control-lg" id="openingBalance" autocomplete="off">
+    </div>
 </div>
 </div>
 
@@ -163,26 +172,33 @@
 @endsection
 
 @push('scripts')
+<script src="{{ asset('template/assets/js/address-master-form.js') }}?v=1"></script>
 <script>
 $(document).ready(function () {
 
     $(document).on('click', '.editRow', function () {
         $('#partyId').val($(this).data('id'));
-        $('#partyCode').val($(this).data('code')).prop('readonly', true);
         $('#partyName').val($(this).data('name'));
+        $('#custAgentId').val($(this).data('agent') || '');
         $('#mobileNo').val($(this).data('mobile'));
         $('#altMobileNo').val($(this).data('altmobile'));
         $('#mailId').val($(this).data('email'));
         $('#address1').val($(this).data('address1'));
         $('#address2').val($(this).data('address2'));
         $('#city').val($(this).data('city'));
-        $('#district').val($(this).data('district'));
         $('#state').val($(this).data('state'));
-        $('#pinCode').val($(this).data('pin'));
+        AddressMasterForm.setValues('', {
+            village_id: $(this).data('village'),
+            ps_id: $(this).data('ps'),
+            post_id: $(this).data('post'),
+            pin_id: $(this).data('pin-id'),
+            dist_id: $(this).data('dist')
+        });
         $('#panNo').val($(this).data('pan'));
         $('#gstin').val($(this).data('gst'));
         $('#stateCode').val($(this).data('statecode'));
         $('#creditLimit').val($(this).data('credit'));
+        $('#openingBalance').val($(this).data('opening'));
         $('#modalTitle').text('Edit Customer');
         $('#saveCustomer').text('Update');
         $('#customerModal').modal('show');
@@ -218,9 +234,8 @@ $(document).ready(function () {
         let partyId = $('#partyId').val();
         let url = partyId ? `/customer-master/${partyId}` : "{{ route('customer-master.store') }}";
 
-        let data = {
+        let data = Object.assign({
             _token: "{{ csrf_token() }}",
-            party_code:   $('#partyCode').val(),
             party_name:   $('#partyName').val(),
             mobile_no:    $('#mobileNo').val(),
             alt_mobile_no: $('#altMobileNo').val(),
@@ -228,14 +243,16 @@ $(document).ready(function () {
             address1:     $('#address1').val(),
             address2:     $('#address2').val(),
             city:         $('#city').val(),
-            district:     $('#district').val(),
+            district:     AddressMasterForm.selectedName('', 'dist'),
             state:        $('#state').val(),
-            pin_code:     $('#pinCode').val(),
+            pin_code:     AddressMasterForm.selectedName('', 'pin'),
             pan_no:       $('#panNo').val(),
             gstin:        $('#gstin').val(),
             state_code:   $('#stateCode').val(),
-            credit_limit: $('#creditLimit').val()
-        };
+            credit_limit: $('#creditLimit').val(),
+            opening_balance: $('#openingBalance').val(),
+            cust_agent_id: $('#custAgentId').val() || 0
+        }, AddressMasterForm.collect(''));
 
         if (partyId) data._method = 'PUT';
 
@@ -245,7 +262,8 @@ $(document).ready(function () {
             data: data,
             success: function (res) {
                 $('#customerModal').modal('hide');
-                Swal.fire('Success', res.message, 'success').then(() => location.reload());
+                let msg = res.message + (res.party_code ? '<br><b>Party Code: ' + res.party_code + '</b>' : '');
+                Swal.fire({ title: 'Success', html: msg, icon: 'success' }).then(() => location.reload());
             },
             error: function (xhr) {
                 $('#saveCustomer').prop('disabled', false).text(partyId ? 'Update' : 'Save');
@@ -263,19 +281,19 @@ $(document).ready(function () {
 });
 
 function validateForm() {
-    if (!$('#partyCode').val()) { Swal.fire('Validation Error', 'Party Code required', 'error'); return false; }
     if (!$('#partyName').val()) { Swal.fire('Validation Error', 'Party Name required', 'error'); return false; }
-    if (!$('#mobileNo').val())  { Swal.fire('Validation Error', 'Mobile No required', 'error');  return false; }
-    if (!$('#address1').val())  { Swal.fire('Validation Error', 'Address 1 required', 'error');  return false; }
+    if ($('#mobileNo').val() && !/^\d{10}$/.test($('#mobileNo').val())) { Swal.fire('Validation Error', 'Mobile No must be 10 digits', 'error'); return false; }
+    if (!AddressMasterForm.validate('')) return false;
     return true;
 }
 
 function openAddModal() {
     $('#partyId').val('');
-    $('#partyCode').val('').prop('readonly', false);
     $('#partyName, #mobileNo, #altMobileNo, #mailId').val('');
-    $('#address1, #address2, #city, #district, #state, #pinCode').val('');
-    $('#panNo, #gstin, #creditLimit').val('');
+    $('#custAgentId').val('');
+    $('#address1, #address2, #city, #state').val('');
+    AddressMasterForm.clearValues('');
+    $('#panNo, #gstin, #creditLimit, #openingBalance').val('');
       $('#stateCode').val('19');
     $('#modalTitle').text('Add New Customer');
     $('#saveCustomer').text('Save');

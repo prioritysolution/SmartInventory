@@ -242,13 +242,23 @@ $(document).ready(function () {
                 url: "{{ url('barcode-label/generate') }}",
                 method: 'POST',
                 data: { stock_id: stockId, stock_date: stockDate, _token: '{{ csrf_token() }}' },
-                success: function () {
+                success: function (res) {
                     dtTable.row($btn.closest('tr')).remove().draw();
                     if (dtTable.data().count() === 0) {
                         dtTable.destroy(); dtTable = null;
                         $('#openingStockContainer').html('<p class="text-center text-muted py-3">No pending items</p>');
                     }
-                    Swal.fire({ icon: 'success', title: 'Barcode Generated Successfully', timer: 1000, showConfirmButton: false,width: '400px' });
+                    Swal.fire({ icon: 'success', title: 'Barcode Generated Successfully', timer: 1500, showConfirmButton: false, width: '400px' })
+                        .then(() => {
+                            const params = new URLSearchParams({
+                                barcode:  res.barcode,
+                                name:     prodName,
+                                mrp:      res.mrp ?? 0,
+                                packdate: stockDate ?? '',
+                                qty:      1
+                            });
+                            window.location.href = "{{ url('print-barcode') }}?" + params.toString();
+                        });
                 },
                 error: function (xhr) {
                     Swal.fire('Error', xhr.responseJSON?.error ?? 'Failed to generate barcode', 'error');
@@ -332,14 +342,25 @@ $(document).ready(function () {
                 url: "{{ url('barcode-label/generate') }}",
                 method: 'POST',
                 data: { stock_id: stockId, stock_date: today, _token: '{{ csrf_token() }}' },
-                success: function () {
+                success: function (res) {
                     dtModalItems.row($btn.closest('tr')).remove().draw();
                     if (purchaseItemsMap[tradingId]) {
                         purchaseItemsMap[tradingId].items = purchaseItemsMap[tradingId].items.filter(
                             it => it.Stock_Id != stockId
                         );
                     }
-                    Swal.fire({ icon: 'success', title: 'Barcode Generated Successfully', timer: 1000, showConfirmButton: false,width: '400px'});
+                    Swal.fire({ icon: 'success', title: 'Barcode Generated Successfully', timer: 1500, showConfirmButton: false, width: '400px' })
+                        .then(() => {
+                            const params = new URLSearchParams({
+                                barcode:  res.barcode,
+                                name:     prodName,
+                                mrp:      res.mrp ?? 0,
+                                packdate: today ?? '',
+                                qty:      1,
+                                mode:     2
+                            });
+                            window.location.href = "{{ url('print-barcode') }}?" + params.toString();
+                        });
                     if (dtModalItems.data().count() === 0) {
                         reloadPurchaseOnClose = true;
                         $('#purchaseItemsModal').modal('hide');

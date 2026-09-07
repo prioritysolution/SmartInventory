@@ -23,7 +23,7 @@ function proc_agent_login() {
         },
         success: function(response) {
             if (response.success) {
-                window.location.href = baseUrl + '/agent/dashboard';
+                window.navigateWithLoader(baseUrl + '/agent/dashboard');
             } else {
                 Swal.fire('Error', response.message, 'error');
                 loginBtn.prop('disabled', false).text(originalText);
