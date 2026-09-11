@@ -91,6 +91,21 @@ class AppServiceProvider extends ServiceProvider
                     ];
                 }
 
+                $creditAlerts = DB::connection('coops')->select('CALL USP_GET_CREDIT_LIMIT_ALERTS(?)', [0]);
+                foreach ($creditAlerts as $row) {
+                    $notifications[] = (object) [
+                        'title'   => 'Credit Sell Limit',
+                        'message' => trim(($row->Agent_Name ?? 'Agent') . ' (' . ($row->Agent_Code ?? '') . ')')
+                            . ' unsettled ₹' . number_format((float) ($row->Unsettled_Amt ?? 0), 2)
+                            . ' crossed credit sell limit ₹' . number_format((float) ($row->Credit_Sell_Limit ?? 0), 2),
+                        'when'    => 'Today',
+                        'url'     => route('agent-settlement'),
+                        'icon'    => 'fa fa-exclamation-circle',
+                        'bg'      => '#fdecec',
+                        'color'   => '#dc3545',
+                    ];
+                }
+
                 $reorderAlerts = DB::connection('coops')->select('CALL USP_GET_REORDER_ALERTS(?, ?)', [
                     $branchId,
                     $yearId,
@@ -163,6 +178,7 @@ class AppServiceProvider extends ServiceProvider
                     'PENDING' => ['icon' => 'fa fa-clipboard', 'bg' => '#fff6e5', 'color' => '#d39e00', 'route' => 'agent.requisition'],
                     'RETURN' => ['icon' => 'fa fa-undo', 'bg' => '#e7f6fb', 'color' => '#0aa2c0', 'route' => 'agent.customer'],
                     'LOW_STOCK' => ['icon' => 'fa fa-exclamation-triangle', 'bg' => '#fdecec', 'color' => '#dc3545', 'route' => 'agent.report.stock', 'params' => ['today' => 1]],
+                    'CREDIT_LIMIT' => ['icon' => 'fa fa-exclamation-circle', 'bg' => '#fdecec', 'color' => '#dc3545', 'route' => 'agent.settlement'],
                 ];
 
                 foreach ($rows as $row) {
@@ -189,6 +205,24 @@ class AppServiceProvider extends ServiceProvider
                         'icon'    => $style['icon'],
                         'bg'      => $style['bg'],
                         'color'   => $style['color'],
+                    ];
+                }
+
+                $creditAlerts = DB::connection('coops')->select(
+                    'CALL USP_GET_CREDIT_LIMIT_ALERTS(?)',
+                    [session('agent_id')]
+                );
+                foreach ($creditAlerts as $row) {
+                    $notifications[] = (object) [
+                        'message' => 'You have crossed your credit sell limit. Unsettled amount ₹'
+                            . number_format((float) ($row->Unsettled_Amt ?? 0), 2)
+                            . '. Credit sell limit is ₹'
+                            . number_format((float) ($row->Credit_Sell_Limit ?? 0), 2) . '.',
+                        'when'    => 'Today',
+                        'url'     => menuLinkRoute($agentMenuLinks, 'agent.settlement') ?? route('agent.settlement'),
+                        'icon'    => 'fa fa-exclamation-circle',
+                        'bg'      => '#fdecec',
+                        'color'   => '#dc3545',
                     ];
                 }
             } catch (\Exception $e) {

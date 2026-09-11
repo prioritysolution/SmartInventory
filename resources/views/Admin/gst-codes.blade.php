@@ -134,7 +134,7 @@
             });
 
             $('#saveGst').click(function() {
-                if (!IS_ADMIN) {
+                if (!IS_ADMIN && $('#gstId').val()) {
                     Swal.fire('Access Denied', 'You do not have permission to perform this action.', 'warning');
                     return;
                 }

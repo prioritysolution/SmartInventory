@@ -232,8 +232,11 @@
             });
 
             $('#saveBtn').on('click', function() {
+                if (!IS_ADMIN && editMode) {
+                    Swal.fire('Access Denied', 'You do not have permission to perform this action.', 'warning');
+                    return;
+                }
                 if (editMode) {
-                    if (!IS_ADMIN) { Swal.fire('Access Denied', 'You do not have permission.', 'warning'); return; }
                     if (!validateForm()) return;
                     $(this).prop('disabled', true).text('Updating...');
                     const id = $('#edit_mem_id').val();
@@ -257,6 +260,11 @@
                             rate_share: $('#rate_share').val(),
                             share_amt: $('#share_amt').val(),
                             tot_amt:   $('#tot_amt').val(),
+                            ref_mem_no: $('#ref_mem_no').val().trim(),
+                            trans_mode: $('input[name="trans_mode"]:checked').val(),
+                            bank_id:   $('#bank_id').val() || 0,
+                            ref_voucher: $('#ref_voucher').val().trim(),
+                            bank_remarks: $('#bank_remarks').val().trim(),
                         }, AddressMasterForm.collect('')),
                         success: function(res) {
                             $('#saveBtn').prop('disabled', false).text('Update');
@@ -368,6 +376,7 @@
                                         data-voter="${m.Voter_No ?? ''}"
                                         data-pan="${m.Pan_No ?? ''}"
                                         data-admdate="${m.Adm_Date ?? ''}"
+                                        data-created="${m.Created_Date ?? ''}"
                                         data-transmode="${m.Trans_Mode ?? 1}"
                                         data-share="${m.Share_No ?? 0}"
                                         data-bankid="${m.Bank_Id ?? 0}"
@@ -421,7 +430,7 @@
                 $('#adhar_no').val($(this).data('adhar'));
                 $('#voter_no').val($(this).data('voter'));
                 $('#pan_no').val($(this).data('pan'));
-                const admDate = $(this).data('admdate');
+                const admDate = String($(this).data('admdate') || '');
                 const today   = '{{ date('Y-m-d') }}';
                 const lockAdm = admDate !== today;
                 $('#adm_date').val(admDate);
@@ -442,20 +451,18 @@
                 calcShareTotals();
                 $('#saveBtn').text('Update');
                 $('#share_no, #ref_voucher, #bank_remarks').prop('readonly', lockAdm);
-                $('#adm_date').prop('disabled', true);
+                $('#adm_date').prop('disabled', lockAdm);
                 $('#adm_fees, #rate_share, #share_amt, #tot_amt').prop('disabled', lockAdm);
                 $('input[name="trans_mode"]').prop('disabled', lockAdm);
                 $('#bank_id').prop('disabled', lockAdm);
                 if (!lockAdm && transMode != 2) $('#bank_dropdown_block, #bank_remarks_block').hide();
-                $('#memberListModal').modal('hide');
-                $('html, body').animate({ scrollTop: 0 }, 300);
-                if (!IS_ADMIN) {
-                    $('#mem_type, #mem_name, #gur_name, #mob_no, #address, #adhar_no, #voter_no, #pan_no').prop('disabled', true);
-                    $('#village_id, #ps_id, #post_id, #pin_id, #dist_id').prop('disabled', true);
+                if (lockAdm) {
                     $('#adm_date, #share_no, #ref_voucher, #bank_remarks, #adm_fees, #rate_share, #share_amt, #tot_amt').prop('disabled', true);
                     $('input[name="trans_mode"]').prop('disabled', true);
                     $('#bank_id').prop('disabled', true);
                 }
+                $('#memberListModal').modal('hide');
+                $('html, body').animate({ scrollTop: 0 }, 300);
             });
         });
 

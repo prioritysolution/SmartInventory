@@ -9,14 +9,8 @@
                 <div class="card-body">
                     <div class="row g-3">
                         <div class="col-md-3">
-                            <label class="form-label">From Date<span class="text-danger">*</span></label>
-                            <input type="date" class="form-control" id="frmDate"
-                                min="{{ $year_start }}" max="{{ $year_end }}"
-                                value="{{ $year_start }}">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">To Date<span class="text-danger">*</span></label>
-                            <input type="date" class="form-control" id="toDate"
+                            <label class="form-label">Date<span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="asOnDate"
                                 min="{{ $year_start }}" max="{{ $year_end }}"
                                 value="{{ min($year_end, date('Y-m-d')) }}">
                         </div>

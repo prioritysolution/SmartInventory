@@ -117,23 +117,19 @@ class AccountsReports extends Controller
 
     public function cashBookSearch(Request $request)
     {
-        $frm = $request->input('frm_date');
-        $to = $request->input('to_date');
-        if (!$frm || !$to) {
-            return response()->json(['message' => 'Select from date and to date'], 422);
+        $asOn = $request->input('as_on_date');
+        if (!$asOn) {
+            return response()->json(['message' => 'Select date'], 422);
         }
-        if ($frm > $to) {
-            return response()->json(['message' => 'From date cannot be after to date'], 422);
-        }
-        if ($frm < session('year_start') || $to > session('year_end')) {
+        if ($asOn < session('year_start') || $asOn > session('year_end')) {
             return response()->json(['message' => 'Date must be within the accounting year'], 422);
         }
 
         Config::set('database.connections.coops.database', session('org_schema'));
         $rows = DB::connection('coops')->select('CALL USP_RPT_CASH_BOOK(?, ?, ?)', [
             (int) session('year_id'),
-            $frm,
-            $to,
+            $asOn,
+            $asOn,
         ]);
 
         return response()->json($rows);
@@ -151,23 +147,19 @@ class AccountsReports extends Controller
 
     public function journalBookSearch(Request $request)
     {
-        $frm = $request->input('frm_date');
-        $to = $request->input('to_date');
-        if (!$frm || !$to) {
-            return response()->json(['message' => 'Select from date and to date'], 422);
+        $asOn = $request->input('as_on_date');
+        if (!$asOn) {
+            return response()->json(['message' => 'Select date'], 422);
         }
-        if ($frm > $to) {
-            return response()->json(['message' => 'From date cannot be after to date'], 422);
-        }
-        if ($frm < session('year_start') || $to > session('year_end')) {
+        if ($asOn < session('year_start') || $asOn > session('year_end')) {
             return response()->json(['message' => 'Date must be within the accounting year'], 422);
         }
 
         Config::set('database.connections.coops.database', session('org_schema'));
         $rows = DB::connection('coops')->select('CALL USP_RPT_JOURNAL_BOOK(?, ?, ?)', [
             (int) session('year_id'),
-            $frm,
-            $to,
+            $asOn,
+            $asOn,
         ]);
 
         return response()->json($rows);

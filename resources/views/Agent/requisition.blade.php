@@ -575,7 +575,7 @@ function renderItemTable() {
 }
 
 
-    function saveRequisition() {
+    function saveRequisition(confirmOverLimit) {
         const date = $('#indentDate').val();
         if (!date)            { Swal.fire('Error', 'Please select a date', 'error'); return; }
         if (date < yearStart || date > yearEnd) {
@@ -593,9 +593,26 @@ function renderItemTable() {
                 indent_id: $('#indentId').val() || 0,
                 date:      date,
                 remarks:   $('#remarks').val(),
-                items:     itemList
+                items:     itemList,
+                confirm_over_limit: confirmOverLimit ? 1 : 0
             }),
             success: function (res) {
+                if (res.needs_confirm && res.warning) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'You have crossed your requisition limit',
+                        text: res.warning,
+                        showCancelButton: true,
+                        confirmButtonText: 'Continue',
+                        cancelButtonText: 'Cancel',
+                        reverseButtons: true
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            saveRequisition(true);
+                        }
+                    });
+                    return;
+                }
                 Swal.fire('Success', res.message, 'success').then(() => resetForm());
             },
             error: function (xhr) {

@@ -95,6 +95,10 @@ $(document).ready(function () {
     $('#cancelBtn').on('click', clearForm);
 
     $('#saveBtn').click(function () {
+        if (!IS_ADMIN && $('#rowId').val()) {
+            Swal.fire('Access Denied', 'You do not have permission to perform this action.', 'warning');
+            return;
+        }
         if (!$('#counterId').val()) {
             Swal.fire('Validation Error', 'Select counter', 'error');
             return;

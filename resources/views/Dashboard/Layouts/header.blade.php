@@ -146,11 +146,14 @@
         }
 
         .sidebar .sidebar-menu > ul > li > a > i {
-            font-size: 18px;
+            font-family: "Font Awesome 6 Free" !important;
+            font-weight: 900 !important;
+            font-size: 16px;
             min-width: 22px;
             flex-shrink: 0;
             line-height: 1.2;
-            margin-top: 2px;
+            margin-top: 0;
+            color: #5b6b7c;
         }
 
         .report-scroll,

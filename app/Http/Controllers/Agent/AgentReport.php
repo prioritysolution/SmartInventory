@@ -298,10 +298,12 @@ class AgentReport extends Controller
     {
         $request->validate([
             'coin'   => 'nullable|integer|min:0',
+            'rs_5'   => 'nullable|integer|min:0',
             'rs_10'  => 'nullable|integer|min:0',
             'rs_20'  => 'nullable|integer|min:0',
             'rs_50'  => 'nullable|integer|min:0',
             'rs_100' => 'nullable|integer|min:0',
+            'rs_200' => 'nullable|integer|min:0',
             'rs_500' => 'nullable|integer|min:0',
             'settle_date' => 'nullable|date',
         ]);
@@ -311,12 +313,23 @@ class AgentReport extends Controller
 
         $agentId = (int) session('agent_id');
         $coin = (int) $request->input('coin', 0);
+        $rs5 = (int) $request->input('rs_5', 0);
         $rs10 = (int) $request->input('rs_10', 0);
         $rs20 = (int) $request->input('rs_20', 0);
         $rs50 = (int) $request->input('rs_50', 0);
         $rs100 = (int) $request->input('rs_100', 0);
+        $rs200 = (int) $request->input('rs_200', 0);
         $rs500 = (int) $request->input('rs_500', 0);
-        $denomTotal = (float) ($coin + ($rs10 * 10) + ($rs20 * 20) + ($rs50 * 50) + ($rs100 * 100) + ($rs500 * 500));
+        $denomTotal = (float) (
+            $coin
+            + ($rs5 * 5)
+            + ($rs10 * 10)
+            + ($rs20 * 20)
+            + ($rs50 * 50)
+            + ($rs100 * 100)
+            + ($rs200 * 200)
+            + ($rs500 * 500)
+        );
         $cashTotal = $this->getPendingSettlementCashTotal($agentId);
 
         // Existing token: skip denom validation (view only). New token: denom must match cash.
@@ -359,15 +372,17 @@ class AgentReport extends Controller
 
         if ($token !== '' && !$alreadyExists) {
             $denomResult = DB::connection('coops')->select(
-                'CALL USP_SAVE_AGENT_SETTLE_DENOM(?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'CALL USP_SAVE_AGENT_SETTLE_DENOM(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     $agentId,
                     $request->input('settle_date') ?: date('Y-m-d'),
                     $coin,
+                    $rs5,
                     $rs10,
                     $rs20,
                     $rs50,
                     $rs100,
+                    $rs200,
                     $rs500,
                     $token,
                 ]
@@ -453,10 +468,12 @@ class AgentReport extends Controller
             'agent_id'    => (int) ($row->Agent_Id ?? 0),
             'settle_date' => $row->Settle_Date ?? null,
             'coin'        => (int) ($row->Coin ?? 0),
+            'rs_5'        => (int) ($row->Rs_5 ?? 0),
             'rs_10'       => (int) ($row->Rs_10 ?? 0),
             'rs_20'       => (int) ($row->Rs_20 ?? 0),
             'rs_50'       => (int) ($row->Rs_50 ?? 0),
             'rs_100'      => (int) ($row->Rs_100 ?? 0),
+            'rs_200'      => (int) ($row->Rs_200 ?? 0),
             'rs_500'      => (int) ($row->Rs_500 ?? 0),
             'token'       => $row->Token ?? $token,
             'denom_total' => (float) ($row->Denom_Total ?? 0),

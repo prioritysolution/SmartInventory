@@ -309,7 +309,7 @@
 
             /* Save */
             $('#saveGroup').click(function() {
-                if (!IS_ADMIN) {
+                if (!IS_ADMIN && $('#grp_id').val()) {
                     Swal.fire('Access Denied', 'You do not have permission to perform this action.', 'warning');
                     return;
                 }

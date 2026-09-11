@@ -141,6 +141,60 @@ class Accounting extends Controller
         return $this->storePartyVoucher($request, 2);
     }
 
+    public function supplierPaymentLedger(Request $request)
+    {
+        return $this->partyLedger($request, 1, 'Select a supplier');
+    }
+
+    public function customerCollectionLedger(Request $request)
+    {
+        return $this->partyLedger($request, 2, 'Select a customer');
+    }
+
+    private function partyLedger(Request $request, int $partyType, string $emptyMessage)
+    {
+        $partyId = (int) $request->input('party_id', 0);
+        if ($partyId <= 0) {
+            return response()->json(['message' => $emptyMessage], 422);
+        }
+
+        $asOn = $request->input('as_on_date') ?: date('Y-m-d');
+        $yearStart = session('year_start');
+        $yearEnd = session('year_end');
+        if ($asOn < $yearStart) {
+            $asOn = $yearStart;
+        }
+        if ($asOn > $yearEnd) {
+            $asOn = $yearEnd;
+        }
+        if ($asOn > date('Y-m-d')) {
+            $asOn = date('Y-m-d');
+        }
+
+        Config::set('database.connections.coops.database', session('org_schema'));
+        $rows = DB::connection('coops')->select('CALL USP_RPT_PARTY_LEDGER(?, ?, ?, ?, ?)', [
+            $yearStart,
+            $asOn,
+            (int) (session('branch_id') ?: 0),
+            $partyType,
+            $partyId,
+        ]);
+
+        $due = 0.0;
+        if (!empty($rows)) {
+            $last = $rows[count($rows) - 1];
+            $due = (float) ($last->Balance_Amt ?? 0);
+        }
+
+        return response()->json([
+            'rows' => $rows,
+            'due' => round($due, 2),
+            'payable' => round(max(0, $due), 2),
+            'as_on_date' => $asOn,
+            'from_date' => $yearStart,
+        ]);
+    }
+
     public function detailsPartyVoucher($id)
     {
         Config::set('database.connections.coops.database', session('org_schema'));

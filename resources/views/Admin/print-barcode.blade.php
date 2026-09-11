@@ -76,11 +76,11 @@
 
             <div class="mb-3 px-3">
                 <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-primary btn-tab active" data-mode="1">
-                        <i class="fa fa-box me-1"></i> Opening Stock
-                    </button>
-                    <button type="button" class="btn btn-outline-primary btn-tab" data-mode="2">
+                    <button type="button" class="btn btn-primary btn-tab active" data-mode="2">
                         <i class="fa fa-shopping-cart me-1"></i> Purchase
+                    </button>
+                    <button type="button" class="btn btn-outline-primary btn-tab" data-mode="1">
+                        <i class="fa fa-box me-1"></i> Opening Stock
                     </button>
                 </div>
             </div>
@@ -90,7 +90,7 @@
                 {{-- LEFT: Table --}}
                 <div class="col-lg-7">
 
-                    <div id="openingStockSection">
+                    <div id="openingStockSection" style="display:none;">
                         <div class="card">
                             <div class="card-header bg-light py-2">
                                 <strong>Print Barcode — Opening Stock</strong>
@@ -101,7 +101,7 @@
                         </div>
                     </div>
 
-                    <div id="purchaseSection" style="display:none;">
+                    <div id="purchaseSection">
                         <div class="card">
                             <div class="card-header bg-light py-2">
                                 <strong>Print Barcode — Purchase</strong>
@@ -323,16 +323,16 @@
                 }
             }
 
-            loadList(1);
+            loadList(2);
 
             // Auto-preview from query params (redirect from barcode-label)
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('barcode')) {
-                const mode = parseInt(urlParams.get('mode') ?? 1);
-                if (mode === 2) {
+                const mode = parseInt(urlParams.get('mode') ?? 2);
+                if (mode === 1) {
                     $('.btn-tab').removeClass('btn-primary active').addClass('btn-outline-primary');
-                    $('[data-mode="2"]').removeClass('btn-outline-primary').addClass('btn-primary active');
-                    loadList(2);
+                    $('[data-mode="1"]').removeClass('btn-outline-primary').addClass('btn-primary active');
+                    loadList(1);
                 }
                 selectedProduct = {
                     code:     urlParams.get('barcode'),

@@ -1388,6 +1388,10 @@
             $('#unitDisplay').val(item.Unit_Name);
             $('#quantity').val(remaining);
             $('#maxReturnQty').val(remaining);
+            const purchaseRate = parseFloat(item.Item_Rate);
+            $('#rate').val(!isNaN(purchaseRate) ? purchaseRate.toFixed(2) : '');
+            const purchaseDisc = parseFloat(item.Disc_Prcnt);
+            $('#discountPercent').val(!isNaN(purchaseDisc) ? purchaseDisc : 0);
             const isWithGst = $('input[name="gstMode"]:checked').val() === '1';
             $('#cgstRate').val(isWithGst ? (item.CGST_Prcnt || 0) : 0);
             $('#sgstRate').val(isWithGst ? (item.SGST_Prcnt || 0) : 0);

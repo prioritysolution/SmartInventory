@@ -209,10 +209,12 @@ Route::get('/good-received/subcats', [Purchase::class, 'getSubCats'])->name('goo
   Route::get('/supplier-payment', [Accounting::class, 'indexSupplierPayment'])->name('supplier-payment');
   Route::post('/supplier-payment/save', [Accounting::class, 'storeSupplierPayment'])->name('supplier-payment.store');
   Route::get('/supplier-payment/details/{id}', [Accounting::class, 'detailsPartyVoucher'])->name('supplier-payment.details');
+  Route::get('/supplier-payment/ledger', [Accounting::class, 'supplierPaymentLedger'])->name('supplier-payment.ledger');
 
   Route::get('/customer-collection', [Accounting::class, 'indexCustomerCollection'])->name('customer-collection');
   Route::post('/customer-collection/save', [Accounting::class, 'storeCustomerCollection'])->name('customer-collection.store');
   Route::get('/customer-collection/details/{id}', [Accounting::class, 'detailsPartyVoucher'])->name('customer-collection.details');
+  Route::get('/customer-collection/ledger', [Accounting::class, 'customerCollectionLedger'])->name('customer-collection.ledger');
 
   // Inventory Reports
   Route::get('/stock-summary', [InventoryReports::class, 'stockSummary'])->name('stock-summary');

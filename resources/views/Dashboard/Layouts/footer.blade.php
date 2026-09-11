@@ -39,44 +39,27 @@
 
 <script>
 if (!IS_ADMIN) {
+    function denyMasterSave(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+        Swal.fire('Access Denied', 'You do not have permission to perform this action.', 'warning');
+        return false;
+    }
+
+    // Allow Add / Save. Block only Update (edit) and delete.
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('button, a.btn, [role="button"]');
+        if (!btn) return;
+        const label = (btn.innerText || btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (label !== 'update') return;
+        denyMasterSave(e);
+    }, true);
+
     $(window).on('load', function () {
-
-        // Block all save/update/delete buttons
-        $(document).off('click', '[data-admin-only]').on('click', '[data-admin-only]', function (e) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            Swal.fire('Access Denied', 'You do not have permission to perform this action.', 'warning');
-            return false;
-        });
-
-        $(document).on('click',
-            '#saveCategory, #saveSupplier, #saveCustomer, #saveUser, ' +
-            '#saveUnit, #saveSubCategory, #saveGst, #saveMember, #saveGroup, ' +
-            '#saveCounterBalance, #saveAccountingYear, #saveYear, #saveAgent',
-            function (e) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                Swal.fire('Access Denied', 'You do not have permission to perform this action.', 'warning');
-                return false;
-            }
-        );
-
-        // Block edit row clicks — open modal as view-only (disable all inputs & save btn)
-        $(document).on('click', '.editRow', function () {
-            setTimeout(function () {
-                $('input, select, textarea').not('[type="hidden"]').prop('disabled', true);
-                $('[data-admin-only], #saveCategory, #saveSupplier, #saveCustomer, #saveUser').prop('disabled', true).addClass('d-none');
-            }, 100);
-        });
-
-        // Block delete buttons
         $(document).on('click', '.deleteRow', function (e) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            Swal.fire('Access Denied', 'You do not have permission to perform this action.', 'warning');
-            return false;
+            return denyMasterSave(e);
         });
-
     });
 }
 </script>

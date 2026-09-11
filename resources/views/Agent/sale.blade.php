@@ -1326,15 +1326,27 @@ body { width: 58mm; }
                     },
                     success: function(res) {
                         const snapshot = captureBillSnapshot();
-                        Swal.fire('Success', res.message, 'success').then(() => {
-                            const bill = mergeBillData(res.bill_data, snapshot);
-                            if (!bill.Invoice_No) {
-                                const m = (res.message || '').match(/No Is\s+(.+)$/i);
-                                if (m) bill.Invoice_No = m[1].trim();
-                            }
-                            showBillModal(bill);
-                            resetForm();
-                        });
+                        const showSaved = () => {
+                            Swal.fire('Success', res.message, 'success').then(() => {
+                                const bill = mergeBillData(res.bill_data, snapshot);
+                                if (!bill.Invoice_No) {
+                                    const m = (res.message || '').match(/No Is\s+(.+)$/i);
+                                    if (m) bill.Invoice_No = m[1].trim();
+                                }
+                                showBillModal(bill);
+                                resetForm();
+                            });
+                        };
+                        if (res.warning) {
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'You have crossed your credit sell limit',
+                                text: res.warning,
+                                confirmButtonText: 'OK'
+                            }).then(showSaved);
+                            return;
+                        }
+                        showSaved();
                     },
                     error: function(xhr) {
                         $('#saveSale').prop('disabled', false).text('Save');

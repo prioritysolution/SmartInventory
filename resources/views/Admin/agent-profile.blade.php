@@ -126,7 +126,7 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">Mobile No <span class="text-danger">*</span></label>
+                            <label class="form-label fw-semibold">Mobile No</label>
                             <input type="text" class="form-control form-control-lg" id="mobile" maxlength="10"
                                 oninput="this.value = this.value.replace(/[^0-9]/g, '')" autocomplete="off"
                                 placeholder="10-digit mobile number">
@@ -274,11 +274,7 @@
                 return false;
             }
             if (!AddressMasterForm.validate('')) return false;
-            if (!$('#mobile').val()) {
-                Swal.fire('Validation Error', 'Mobile required', 'error');
-                return false;
-            }
-            if (!/^\d{10}$/.test($('#mobile').val())) {
+            if ($('#mobile').val().trim() && !/^\d{10}$/.test($('#mobile').val())) {
                 Swal.fire('Validation Error', 'Mobile must be exactly 10 digits', 'error');
                 return false;
             }

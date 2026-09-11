@@ -167,7 +167,24 @@ class AgentRequisition extends Controller
                 );
             }
 
-            $result = DB::connection('coops')->select('CALL USP_AGENT_REQUISITION(?, ?, ?, ?, ?, ?, ?, ?)', [
+            $warning = $this->stockLimitWarning(
+                (int) session('agent_id'),
+                (string) $request->date,
+                $request->items
+            );
+
+            if ($warning && !$request->boolean('confirm_over_limit')) {
+                DB::connection('coops')->rollBack();
+                return response()->json([
+                    'success' => false,
+                    'needs_confirm' => true,
+                    'warning' => $warning,
+                ]);
+            }
+
+            $pdo = DB::connection('coops')->getPdo();
+            $stmt = $pdo->prepare('CALL USP_AGENT_REQUISITION(?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt->execute([
                 $request->indent_id,
                 session('agent_id'),
                 $request->date,
@@ -177,6 +194,8 @@ class AgentRequisition extends Controller
                 $request->indent_id ? 2 : 1,
                 AgentIndentType::ISSUE,
             ]);
+            $result = $stmt->fetchAll(\PDO::FETCH_OBJ);
+            $stmt->closeCursor();
 
             if ($result[0]->Error_No < 0) {
                 DB::connection('coops')->rollBack();
@@ -184,10 +203,68 @@ class AgentRequisition extends Controller
             }
 
             DB::connection('coops')->commit();
-            return response()->json(['success' => true, 'message' => $result[0]->Message]);
+
+            return response()->json([
+                'success' => true,
+                'message' => $result[0]->Message,
+                'warning' => $warning,
+            ]);
         } catch (\Exception $e) {
             DB::connection('coops')->rollBack();
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Warn when old stock value + this indent exceeds the agent's stock limit.
+     * Table work stays in USP_CHK_AGENT_STOCK_LIMIT. Does not block the save.
+     */
+    private function stockLimitWarning(int $agentId, string $date, array $items): ?string
+    {
+        try {
+            $pairs = [];
+            foreach ($items as $item) {
+                $row = is_array($item) ? $item : (array) $item;
+                $prodId = (int) ($row['item_id'] ?? $row['Prod_Id'] ?? 0);
+                $qty = (float) ($row['qnty'] ?? $row['qty'] ?? $row['Quantity'] ?? 0);
+                if ($prodId <= 0 || $qty <= 0) {
+                    continue;
+                }
+                $pairs[] = $prodId . ':' . $qty;
+            }
+
+            $pdo = DB::connection('coops')->getPdo();
+            $stmt = $pdo->prepare('CALL USP_CHK_AGENT_STOCK_LIMIT(?, ?, ?)');
+            $stmt->execute([$agentId, $date, implode(',', $pairs)]);
+            $row = $stmt->fetch(\PDO::FETCH_OBJ);
+            $stmt->closeCursor();
+
+            $limit = (float) ($row->Stock_Limit ?? 0);
+            if ($limit <= 0) {
+                return null;
+            }
+
+            $oldStock = (float) ($row->Old_Stock ?? 0);
+            $indentValue = (float) ($row->Indent_Value ?? 0);
+            $total = $oldStock + $indentValue;
+            if ($total <= $limit) {
+                return null;
+            }
+
+            if ($oldStock > $limit) {
+                return 'You have crossed your requisition limit. Old stock ₹'
+                    . number_format($oldStock, 2)
+                    . '. Stock limit is ₹' . number_format($limit, 2) . '.';
+            }
+
+            return 'You have crossed your requisition limit. Old stock ₹'
+                . number_format($oldStock, 2)
+                . ' + this indent ₹' . number_format($indentValue, 2)
+                . ' = ₹' . number_format($total, 2)
+                . '. Stock limit is ₹' . number_format($limit, 2) . '.';
+        } catch (\Exception $e) {
+            Log::error('Agent stock limit warning error: ' . $e->getMessage());
+            return null;
         }
     }
 }

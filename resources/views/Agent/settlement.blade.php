@@ -117,13 +117,92 @@
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         word-break: break-all;
     }
-    .token-denom {
-        font-size: 0.78rem;
-        color: #334155;
-        background: #f8fafc;
-        border-radius: 6px;
+    .denom-box {
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #fff;
+        max-width: 260px;
+        margin: 10px auto 0;
+        text-align: left;
+    }
+    .denom-box .denom-row {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        min-height: 42px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .denom-box .denom-row:last-child {
+        border-bottom: 0;
+    }
+    .denom-box .denom-note {
+        padding: 8px 12px;
+        font-size: 1rem;
+        font-weight: 700;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        color: #0f172a;
+        text-align: center;
+    }
+    .denom-box .denom-sep {
+        width: 1px;
+        align-self: stretch;
+        background: #94a3b8;
+    }
+    .denom-box .denom-qty {
+        padding: 0;
+        text-align: center;
+        height: 100%;
+    }
+    .denom-box .denom-qty input {
+        width: 100%;
+        height: 100%;
+        min-height: 42px;
+        margin: 0;
+        display: block;
         padding: 8px 10px;
-        line-height: 1.45;
+        border: 0;
+        border-radius: 0;
+        outline: none;
+        box-shadow: none;
+        background: transparent;
+        text-align: center;
+        font-size: 1rem;
+        font-weight: 600;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        color: #0f172a;
+        -moz-appearance: textfield;
+    }
+    .denom-box .denom-qty input:focus {
+        background: #f8fafc;
+        outline: none;
+        box-shadow: none;
+    }
+    .denom-box .denom-qty input::-webkit-outer-spin-button,
+    .denom-box .denom-qty input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+    .denom-box .denom-qty-val {
+        display: block;
+        padding: 8px 12px;
+        font-size: 1rem;
+        font-weight: 600;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        color: #0f172a;
+    }
+    .token-denom {
+        padding: 0;
+        background: transparent;
+        border: 0;
+    }
+    .token-denom .denom-box {
+        margin: 0;
+        max-width: 100%;
+    }
+    .token-denom .denom-total-line {
+        margin-top: 8px;
+        padding: 0 2px;
     }
     .settlement-mode-box {
         border: 1px solid #e5e7eb;
@@ -144,25 +223,6 @@
         font-size: 1.35rem;
         font-weight: 700;
         color: #0f172a;
-    }
-    .denom-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        text-align: left;
-        margin-top: 10px;
-    }
-    .denom-grid label {
-        display: block;
-        font-size: 0.8rem;
-        margin-bottom: 4px;
-        color: #475569;
-    }
-    .denom-grid input {
-        width: 100%;
-        padding: 6px 8px;
-        border: 1px solid #cbd5e1;
-        border-radius: 6px;
     }
     .denom-total-line {
         margin-top: 12px;
@@ -195,18 +255,50 @@
     function denomTotal(d) {
         d = d || {};
         return (parseInt(d.coin, 10) || 0)
+            + ((parseInt(d.rs_5, 10) || 0) * 5)
             + ((parseInt(d.rs_10, 10) || 0) * 10)
             + ((parseInt(d.rs_20, 10) || 0) * 20)
             + ((parseInt(d.rs_50, 10) || 0) * 50)
             + ((parseInt(d.rs_100, 10) || 0) * 100)
+            + ((parseInt(d.rs_200, 10) || 0) * 200)
             + ((parseInt(d.rs_500, 10) || 0) * 500);
     }
 
-    function denomHtml(d) {
+    function denomPairs(d) {
+        if (!d) return [];
+        return [
+            [500, d.rs_500],
+            [200, d.rs_200],
+            [100, d.rs_100],
+            [50, d.rs_50],
+            [20, d.rs_20],
+            [10, d.rs_10],
+            [5, d.rs_5],
+            [1, d.coin]
+        ];
+    }
+
+    function denomLines(d) {
+        return denomPairs(d).map(([note, qty]) => note + '|' + (parseInt(qty, 10) || 0));
+    }
+
+    function denomBoxHtml(d, withTotal) {
         if (!d) return '';
-        return `Coin: ${d.coin || 0} &nbsp;|&nbsp; ₹10: ${d.rs_10 || 0} &nbsp;|&nbsp; ₹20: ${d.rs_20 || 0}<br>
-                ₹50: ${d.rs_50 || 0} &nbsp;|&nbsp; ₹100: ${d.rs_100 || 0} &nbsp;|&nbsp; ₹500: ${d.rs_500 || 0}<br>
-                <b>Denom Total: ₹ ${fmtAmt(d.denom_total ?? denomTotal(d))}</b>`;
+        const rows = denomPairs(d).map(([note, qty]) => `
+            <div class="denom-row">
+                <div class="denom-note">${note}</div>
+                <div class="denom-sep"></div>
+                <div class="denom-qty"><span class="denom-qty-val">${parseInt(qty, 10) || 0}</span></div>
+            </div>
+        `).join('');
+        const total = withTotal
+            ? `<div class="denom-total-line"><span>Total</span><span>₹ ${fmtAmt(d.denom_total ?? denomTotal(d))}</span></div>`
+            : '';
+        return `<div class="denom-box">${rows}</div>${total}`;
+    }
+
+    function denomHtml(d) {
+        return denomBoxHtml(d, true);
     }
 
     function setActiveDenom(denom) {
@@ -296,7 +388,7 @@
 
     function showTokenPopup(message, token, alreadyExists, denom) {
         const denomBlock = denom
-            ? `<div class="mt-3 text-start small border rounded p-2 bg-light">${denomHtml(denom)}</div>`
+            ? `<div class="mt-3 text-start">${denomHtml(denom)}</div>`
             : '';
         Swal.fire({
             title: alreadyExists ? 'Existing Token' : 'Token Generated',
@@ -322,13 +414,15 @@
             title: 'Cash Denomination',
             html: `
                 <div class="text-start small mb-2">Cash Total: <b>₹ ${fmtAmt(cashTotal)}</b> <span class="text-muted">(denomination must match exactly)</span></div>
-                <div class="denom-grid">
-                    <div><label>Coin (₹1)</label><input type="number" min="0" step="1" id="swal_coin" value="0"></div>
-                    <div><label>₹ 10</label><input type="number" min="0" step="1" id="swal_rs10" value="0"></div>
-                    <div><label>₹ 20</label><input type="number" min="0" step="1" id="swal_rs20" value="0"></div>
-                    <div><label>₹ 50</label><input type="number" min="0" step="1" id="swal_rs50" value="0"></div>
-                    <div><label>₹ 100</label><input type="number" min="0" step="1" id="swal_rs100" value="0"></div>
-                    <div><label>₹ 500</label><input type="number" min="0" step="1" id="swal_rs500" value="0"></div>
+                <div class="denom-box">
+                    <div class="denom-row"><div class="denom-note">500</div><div class="denom-sep"></div><div class="denom-qty"><input type="text" inputmode="numeric" autocomplete="off" id="swal_rs500"></div></div>
+                    <div class="denom-row"><div class="denom-note">200</div><div class="denom-sep"></div><div class="denom-qty"><input type="text" inputmode="numeric" autocomplete="off" id="swal_rs200"></div></div>
+                    <div class="denom-row"><div class="denom-note">100</div><div class="denom-sep"></div><div class="denom-qty"><input type="text" inputmode="numeric" autocomplete="off" id="swal_rs100"></div></div>
+                    <div class="denom-row"><div class="denom-note">50</div><div class="denom-sep"></div><div class="denom-qty"><input type="text" inputmode="numeric" autocomplete="off" id="swal_rs50"></div></div>
+                    <div class="denom-row"><div class="denom-note">20</div><div class="denom-sep"></div><div class="denom-qty"><input type="text" inputmode="numeric" autocomplete="off" id="swal_rs20"></div></div>
+                    <div class="denom-row"><div class="denom-note">10</div><div class="denom-sep"></div><div class="denom-qty"><input type="text" inputmode="numeric" autocomplete="off" id="swal_rs10"></div></div>
+                    <div class="denom-row"><div class="denom-note">5</div><div class="denom-sep"></div><div class="denom-qty"><input type="text" inputmode="numeric" autocomplete="off" id="swal_rs5"></div></div>
+                    <div class="denom-row"><div class="denom-note">1</div><div class="denom-sep"></div><div class="denom-qty"><input type="text" inputmode="numeric" autocomplete="off" id="swal_coin"></div></div>
                 </div>
                 <div class="denom-total-line">
                     <span>Denomination Total</span>
@@ -338,17 +432,22 @@
             showCancelButton: true,
             confirmButtonText: 'Generate Token',
             cancelButtonText: 'Cancel',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
             focusConfirm: false,
             didOpen: () => {
                 const cashRounded = Math.round((parseFloat(cashTotal) || 0) * 100) / 100;
+                const denomInputs = '#swal_rs500, #swal_rs200, #swal_rs100, #swal_rs50, #swal_rs20, #swal_rs10, #swal_rs5, #swal_coin';
                 const recalc = () => {
                     const d = {
-                        coin: $('#swal_coin').val(),
-                        rs_10: $('#swal_rs10').val(),
-                        rs_20: $('#swal_rs20').val(),
-                        rs_50: $('#swal_rs50').val(),
+                        rs_500: $('#swal_rs500').val(),
+                        rs_200: $('#swal_rs200').val(),
                         rs_100: $('#swal_rs100').val(),
-                        rs_500: $('#swal_rs500').val()
+                        rs_50: $('#swal_rs50').val(),
+                        rs_20: $('#swal_rs20').val(),
+                        rs_10: $('#swal_rs10').val(),
+                        rs_5: $('#swal_rs5').val(),
+                        coin: $('#swal_coin').val()
                     };
                     const total = Math.round(denomTotal(d) * 100) / 100;
                     const $el = $('#swal_denom_total');
@@ -361,17 +460,22 @@
                         $el.css('color', '#16a34a');
                     }
                 };
-                $('#swal_coin, #swal_rs10, #swal_rs20, #swal_rs50, #swal_rs100, #swal_rs500').on('input', recalc);
+                $(denomInputs).on('input', function () {
+                    this.value = String(this.value || '').replace(/\D/g, '');
+                    recalc();
+                });
                 recalc();
             },
             preConfirm: () => {
                 const data = {
-                    coin: parseInt($('#swal_coin').val(), 10) || 0,
-                    rs_10: parseInt($('#swal_rs10').val(), 10) || 0,
-                    rs_20: parseInt($('#swal_rs20').val(), 10) || 0,
-                    rs_50: parseInt($('#swal_rs50').val(), 10) || 0,
-                    rs_100: parseInt($('#swal_rs100').val(), 10) || 0,
                     rs_500: parseInt($('#swal_rs500').val(), 10) || 0,
+                    rs_200: parseInt($('#swal_rs200').val(), 10) || 0,
+                    rs_100: parseInt($('#swal_rs100').val(), 10) || 0,
+                    rs_50: parseInt($('#swal_rs50').val(), 10) || 0,
+                    rs_20: parseInt($('#swal_rs20').val(), 10) || 0,
+                    rs_10: parseInt($('#swal_rs10').val(), 10) || 0,
+                    rs_5: parseInt($('#swal_rs5').val(), 10) || 0,
+                    coin: parseInt($('#swal_coin').val(), 10) || 0,
                     settle_date: new Date().toISOString().slice(0, 10)
                 };
                 const total = Math.round(denomTotal(data) * 100) / 100;
@@ -467,21 +571,18 @@
             ? (currentDenom.denom_total ?? denomTotal(currentDenom))
             : 0;
         const denomPrint = (currentDenom && totals.cash > 0 && denomTotalAmt > 0) ? `
-            <table class="summary">
-                <tr>
-                    <td><div class="lbl">Coin</div><div class="amt">${currentDenom.coin || 0}</div></td>
-                    <td><div class="lbl">₹10</div><div class="amt">${currentDenom.rs_10 || 0}</div></td>
-                    <td><div class="lbl">₹20</div><div class="amt">${currentDenom.rs_20 || 0}</div></td>
-                </tr>
-                <tr>
-                    <td><div class="lbl">₹50</div><div class="amt">${currentDenom.rs_50 || 0}</div></td>
-                    <td><div class="lbl">₹100</div><div class="amt">${currentDenom.rs_100 || 0}</div></td>
-                    <td><div class="lbl">₹500</div><div class="amt">${currentDenom.rs_500 || 0}</div></td>
-                </tr>
-                <tr>
-                    <td colspan="3"><div class="lbl">Denomination Total</div><div class="amt">₹ ${fmtAmt(denomTotalAmt)}</div></td>
-                </tr>
-            </table>` : '';
+            <div style="margin-top:14px;max-width:240px;">
+                <div style="font-weight:bold;margin-bottom:6px;">Cash Denomination</div>
+                <table style="width:100%;border-collapse:collapse;border:1px solid #000;">
+                    ${denomPairs(currentDenom).map(([note, qty]) => `
+                        <tr>
+                            <td style="width:50%;border:1px solid #000;padding:6px 10px;text-align:center;font-family:monospace;font-weight:bold;">${note}</td>
+                            <td style="width:50%;border:1px solid #000;padding:6px 10px;text-align:center;font-family:monospace;">${parseInt(qty, 10) || 0}</td>
+                        </tr>
+                    `).join('')}
+                </table>
+                <div style="margin-top:6px;font-weight:bold;">Total: ₹ ${fmtAmt(denomTotalAmt)}</div>
+            </div>` : '';
         const html = `<!DOCTYPE html><html><head><title>Office Settlement</title>
             <style>
                 * { box-sizing: border-box; }
@@ -563,8 +664,8 @@
                 data: Object.assign({ _token: csrfToken }, denom),
                 success: function (res) {
                     setActiveToken(res.settle_token || '', res.denomination || {
-                        coin: denom.coin, rs_10: denom.rs_10, rs_20: denom.rs_20,
-                        rs_50: denom.rs_50, rs_100: denom.rs_100, rs_500: denom.rs_500,
+                        coin: denom.coin, rs_5: denom.rs_5, rs_10: denom.rs_10, rs_20: denom.rs_20,
+                        rs_50: denom.rs_50, rs_100: denom.rs_100, rs_200: denom.rs_200, rs_500: denom.rs_500,
                         denom_total: denomTotal(denom), token: res.settle_token
                     });
                     showTokenPopup(res.message || '', res.settle_token || '', !!res.already_exists, currentDenom);

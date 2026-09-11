@@ -105,7 +105,7 @@
                     </div>
                     <div class="d-flex gap-2 justify-content-end">
                         <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
-                        <button type="button" class="btn btn-primary" id="saveBtn" data-admin-only="true">Save</button>
+                        <button type="button" class="btn btn-primary" id="saveBtn">Save</button>
                     </div>
                 </div>
             </div>
@@ -367,14 +367,13 @@
 
             $('#saveBtn').on('click', function() {
 
-                if (!IS_ADMIN) {
-                    Swal.fire('Access Denied', 'You do not have permission to perform this action.', 'warning');
+                const isUpdate = !!$('#product_id').val();
+                if (!IS_ADMIN && isUpdate) {
+                    Swal.fire('Access Denied', 'You do not have permission to edit a product.', 'warning');
                     return;
                 }
 
                 if (!validateForm()) return;
-
-                const isUpdate = !!$('#product_id').val();
                 $(this).prop('disabled', true).text(isUpdate ? 'Updating...' : 'Saving...');
 
                 $.ajax({

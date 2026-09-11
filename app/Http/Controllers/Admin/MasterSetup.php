@@ -77,6 +77,9 @@ class MasterSetup extends Controller
             'prod_life' => 'nullable|integer|min:0|max:30000',
         ]);
         $mode = $request->input('product_id') ? 2 : 1;
+        if ($mode === 2 && !session('is_admin')) {
+            return response()->json(['success' => false, 'message' => 'You do not have permission to edit a product.'], 403);
+        }
         try {
             Config::set('database.connections.coops.database', session('org_schema'));
             DB::connection('coops')->beginTransaction();
@@ -143,7 +146,7 @@ public function indexAgent(Request $request)
         $request->validate(array_merge([
             'agent_name' => 'required|string|max:50',
             'address' => 'nullable|string|max:100',
-            'mobile' => 'required|digits:10',
+            'mobile' => 'nullable|digits:10',
             'join_date' => 'required|date|before_or_equal:today',
             'stock_limit' => 'nullable|numeric|min:0|max:99999999.99',
             'credit_sell_limit' => 'nullable|numeric|min:0|max:99999999.99',
@@ -156,7 +159,7 @@ public function indexAgent(Request $request)
                 0,
                 $request->input('agent_name'),
                 $request->input('address'),
-                $request->input('mobile'),
+                $request->filled('mobile') ? $request->input('mobile') : null,
                 $request->input('join_date'),
                 $request->input('stock_limit'),
                 $request->input('credit_sell_limit'),
@@ -193,7 +196,7 @@ public function indexAgent(Request $request)
         $request->validate(array_merge([
             'agent_name' => 'required|string|max:50',
             'address' => 'nullable|string|max:100',
-            'mobile' => 'required|digits:10',
+            'mobile' => 'nullable|digits:10',
             'join_date' => 'required|date|before_or_equal:today',
             'stock_limit' => 'nullable|numeric|min:0|max:99999999.99',
             'credit_sell_limit' => 'nullable|numeric|min:0|max:99999999.99',
@@ -206,7 +209,7 @@ public function indexAgent(Request $request)
                 $id,
                 $request->input('agent_name'),
                 $request->input('address'),
-                $request->input('mobile'),
+                $request->filled('mobile') ? $request->input('mobile') : null,
                 $request->input('join_date'),
                 $request->input('stock_limit'),
                 $request->input('credit_sell_limit'),
@@ -647,6 +650,10 @@ public function indexAgent(Request $request)
 
     public function updateMember(Request $request, $id)
     {
+        if (!session('is_admin')) {
+            return response()->json(['error' => 'You do not have permission to perform this action.'], 403);
+        }
+
         $request->validate(array_merge([
             'mem_type' => 'required|integer',
             'mem_name' => 'required|string|max:50',
@@ -656,12 +663,27 @@ public function indexAgent(Request $request)
             'adhar_no' => 'nullable|digits:12',
             'voter_no' => 'nullable|string|max:25',
             'pan_no'   => 'nullable|string|max:25|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
-            'adm_date' => 'required|date',
+            'adm_date' => 'required|date|before_or_equal:today',
+            'adm_fees' => 'required|numeric|min:0',
             'share_no' => 'nullable|integer|min:0',
+            'rate_share' => 'required|numeric|min:0',
+            'share_amt' => 'required|numeric|min:0',
+            'tot_amt' => 'required|numeric|min:0',
+            'trans_mode' => 'required|in:1,2',
+            'bank_id' => 'nullable|integer',
+            'ref_mem_no' => 'nullable|string|max:25',
+            'ref_voucher' => 'nullable|string|max:50',
+            'bank_remarks' => 'nullable|string|max:100',
         ], $this->addressMasterValidationRules()));
+
+        if ($request->trans_mode == 2 && empty($request->bank_id)) {
+            return response()->json(['error' => 'Please select a bank'], 422);
+        }
+
         try {
             Config::set('database.connections.coops.database', session('org_schema'));
             DB::connection('coops')->beginTransaction();
+            $message = 'Member updated successfully';
             $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_MEMBER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                 $id,
                 $request->mem_type,
@@ -677,11 +699,13 @@ public function indexAgent(Request $request)
                 $request->input('share_no', 0),
                 $request->input('share_amt', 0),
                 session('user_id'),
-                1, 0, null,
+                $request->trans_mode,
+                $request->bank_id ?: 0,
+                $request->ref_mem_no,
                 $request->input('rate_share', 0),
                 $request->input('tot_amt', 0),
-                null,
-                null,
+                $request->ref_voucher,
+                $request->input('bank_remarks'),
                 session('year_id'),
                 session('branch_id'),
                 2
@@ -696,7 +720,7 @@ public function indexAgent(Request $request)
             }
             $this->syncEntityAddressMaster('member', $id, $request);
             DB::connection('coops')->commit();
-            return response()->json(['message' => 'Member updated successfully']);
+            return response()->json(['message' => $message ?: 'Member updated successfully']);
         } catch (\Exception $e) {
             DB::connection('coops')->rollBack();
             Log::channel('trading')->error('Member update error: ' . $e->getMessage());

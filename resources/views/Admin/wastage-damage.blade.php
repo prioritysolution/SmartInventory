@@ -125,9 +125,9 @@
                                     autocomplete="off">
                             </div>
                             <div class="col-md-4 mb-3">
-                                <label class="form-label">Purchase Rate</label>
-                                <input type="number" class="form-control calc-label" id="purchaseRate" readonly
-                                    step="0.01">
+                                <label class="form-label">Purchase Rate<span class="text-danger">*</span></label>
+                                <input type="number" class="form-control" id="purchaseRate" step="0.01" min="0.01"
+                                    autocomplete="off">
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label class="form-label">Total Amt</label>
@@ -360,7 +360,8 @@
                 $('#itemSelected').val(item.Prod_ShortNm);
                 $('#unitId').val(item.Unit_Id);
                 $('#unitDisplay').val(item.Unit_Name || info.Unit_Name || '');
-                $('#purchaseRate').val(fmt(info.Purchase_Rate));
+                const lastRate = parseFloat(info.Purchase_Rate) || 0;
+                $('#purchaseRate').val(lastRate > 0 ? fmt(lastRate) : '');
                 $('#availQty').val(info.Avil_Qnty ?? 0);
                 calcLine();
                 $('#quantity').focus();
@@ -459,7 +460,7 @@
             });
         }
 
-        $('#quantity').on('input', calcLine);
+        $('#quantity, #purchaseRate').on('input', calcLine);
 
         $('#productCodeInput').on('keypress', function(e) {
             if (e.which !== 13) return;
@@ -552,7 +553,7 @@
                 return;
             }
             if (rate <= 0) {
-                Swal.fire('Error', 'Last purchase rate not found for this product', 'error');
+                Swal.fire('Error', 'Enter purchase rate', 'error');
                 return;
             }
             if (qty > avail) {

@@ -39,16 +39,16 @@
 
         <div class="mb-3">
             <div class="btn-group" role="group">
-                <button type="button" class="btn btn-primary btn-tab active" data-mode="1">
-                    <i class="fa fa-box me-1"></i> Opening Stock
-                </button>
-                <button type="button" class="btn btn-outline-primary btn-tab" data-mode="2">
+                <button type="button" class="btn btn-primary btn-tab active" data-mode="2">
                     <i class="fa fa-shopping-cart me-1"></i> Purchase
+                </button>
+                <button type="button" class="btn btn-outline-primary btn-tab" data-mode="1">
+                    <i class="fa fa-box me-1"></i> Opening Stock
                 </button>
             </div>
         </div>
 
-        <div id="openingStockSection">
+        <div id="openingStockSection" style="display:none;">
             <div class="card">
                 <div class="card-header bg-light py-2">
                     <strong>Pending Barcode — Opening Stock</strong>
@@ -59,7 +59,7 @@
             </div>
         </div>
 
-        <div id="purchaseSection" style="display:none;">
+        <div id="purchaseSection">
             <div class="card">
                 <div class="card-header bg-light py-2">
                     <strong>Pending Barcode — Purchase</strong>
@@ -212,7 +212,7 @@ $(document).ready(function () {
         }
     }
 
-    loadPending(1);
+    loadPending(2);
 
     $(document).on('click', '.btn-tab', function () {
         $('.btn-tab').removeClass('btn-primary active').addClass('btn-outline-primary');

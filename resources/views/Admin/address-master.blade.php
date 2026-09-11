@@ -89,7 +89,7 @@
                                     <tr>
                                         <th>Sl</th>
                                         <th id="colHeader">Name</th>
-                                        <th class="text-center" id="actionCol" style="display:none;">Action</th>
+                                        <th class="text-center" id="actionCol">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tableBody"></tbody>
@@ -160,13 +160,11 @@
         $('#panelTitle').text(cfg.title);
         $('#colHeader').text(cfg.col);
 
-        if (IS_ADMIN) {
-            $('#addNewBtn').show();
-            $('#actionCol').show();
-        } else {
-            $('#addNewBtn').hide();
-            $('#actionCol').hide();
+        $('#addNewBtn').show();
+        if (!$('#actionCol').length) {
+            $('#addressTable thead tr').append('<th class="text-center" id="actionCol">Action</th>');
         }
+        $('#actionCol').show();
 
         if (addrDT) { addrDT.destroy(); addrDT = null; }
         $('#tableBody').html('');
@@ -175,13 +173,12 @@
             $('#loadingSpinner').hide();
             let body = '';
             data.forEach((r, i) => {
-                const editBtn = IS_ADMIN
-                    ? `<button class="btn btn-primary btn-sm" onclick="openEditModal(${r.Id}, '${r.Name.replace(/'/g, "\\'")}')">Edit</button>`
-                    : '';
+                const name = String(r.Name ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                const editBtn = `<button type="button" class="btn btn-primary btn-sm editRow" onclick="openEditModal(${r.Id}, '${name}')">Edit</button>`;
                 body += `<tr>
                     <td>${i + 1}</td>
                     <td>${r.Name ?? ''}</td>
-                    ${IS_ADMIN ? `<td class="text-center">${editBtn}</td>` : ''}
+                    <td class="text-center">${editBtn}</td>
                 </tr>`;
             });
             $('#tableBody').html(body);
@@ -209,7 +206,6 @@
     }
 
     function openAddModal() {
-        if (!IS_ADMIN) { Swal.fire('Access Denied', 'You do not have permission.', 'warning'); return; }
         $('#editId').val('');
         $('#editType').val(currentSection);
         $('#inputName').val('');
@@ -220,7 +216,6 @@
     }
 
     function openEditModal(id, name) {
-        if (!IS_ADMIN) { Swal.fire('Access Denied', 'You do not have permission.', 'warning'); return; }
         $('#editId').val(id);
         $('#editType').val(currentSection);
         $('#inputName').val(name);
@@ -234,6 +229,11 @@
         const name = $('#inputName').val().trim();
         const type = $('#editType').val();
         const id   = $('#editId').val();
+
+        if (!IS_ADMIN && id) {
+            Swal.fire('Access Denied', 'You do not have permission to perform this action.', 'warning');
+            return;
+        }
 
         if (!name) { Swal.fire('Validation Error', sectionConfig[type].col + ' is required', 'error'); return; }
 

@@ -84,36 +84,16 @@
 
             <div class="card mb-3 d-none" id="denomCard">
                 <div class="card-body">
-                    <h6 class="mb-3">Cash Denomination (from Agent)</h6>
-                    <div class="table-responsive">
-                        <table class="table table-bordered table-sm mb-0">
-                            <thead class="thead-light">
-                                <tr>
-                                    <th>Date</th>
-                                    <th class="text-end">Coin</th>
-                                    <th class="text-end">₹10</th>
-                                    <th class="text-end">₹20</th>
-                                    <th class="text-end">₹50</th>
-                                    <th class="text-end">₹100</th>
-                                    <th class="text-end">₹500</th>
-                                    <th class="text-end">Total</th>
-                                    <th>Token</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td id="denomDate">-</td>
-                                    <td class="text-end" id="denomCoin">0</td>
-                                    <td class="text-end" id="denom10">0</td>
-                                    <td class="text-end" id="denom20">0</td>
-                                    <td class="text-end" id="denom50">0</td>
-                                    <td class="text-end" id="denom100">0</td>
-                                    <td class="text-end" id="denom500">0</td>
-                                    <td class="text-end fw-bold" id="denomTotal">₹ 0.00</td>
-                                    <td id="denomToken">-</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                        <div>
+                            <h6 class="mb-2">Cash Denomination (from Agent)</h6>
+                            <div class="denom-box" id="denomPipeLines"></div>
+                            <div class="mt-2 fw-bold">Total: <span id="denomTotal">₹ 0.00</span></div>
+                        </div>
+                        <div class="text-muted small">
+                            <div>Date: <span id="denomDate">-</span></div>
+                            <div>Token: <span id="denomToken">-</span></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -141,6 +121,42 @@
     .settlement-mode-box .mode-amount {
         font-size: 1.35rem;
         font-weight: 700;
+        color: #0f172a;
+    }
+    .denom-box {
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #fff;
+        max-width: 240px;
+    }
+    .denom-box .denom-row {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        min-height: 40px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .denom-box .denom-row:last-child { border-bottom: 0; }
+    .denom-box .denom-note {
+        padding: 8px 12px;
+        font-size: 1rem;
+        font-weight: 700;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        text-align: center;
+        color: #0f172a;
+    }
+    .denom-box .denom-sep {
+        width: 1px;
+        align-self: stretch;
+        background: #94a3b8;
+    }
+    .denom-box .denom-qty {
+        padding: 8px 12px;
+        text-align: center;
+        font-size: 1rem;
+        font-weight: 600;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         color: #0f172a;
     }
 </style>
@@ -200,13 +216,25 @@
             $('#denomCard').addClass('d-none');
             return;
         }
+        const rows = [
+            [500, denom.rs_500],
+            [200, denom.rs_200],
+            [100, denom.rs_100],
+            [50, denom.rs_50],
+            [20, denom.rs_20],
+            [10, denom.rs_10],
+            [5, denom.rs_5],
+            [1, denom.coin]
+        ].map(([note, qty]) => `
+            <div class="denom-row">
+                <div class="denom-note">${note}</div>
+                <div class="denom-sep"></div>
+                <div class="denom-qty">${parseInt(qty, 10) || 0}</div>
+            </div>
+        `).join('');
+
+        $('#denomPipeLines').html(rows);
         $('#denomDate').text(denom.settle_date ? siDate.toDisplay(denom.settle_date) : '-');
-        $('#denomCoin').text(denom.coin || 0);
-        $('#denom10').text(denom.rs_10 || 0);
-        $('#denom20').text(denom.rs_20 || 0);
-        $('#denom50').text(denom.rs_50 || 0);
-        $('#denom100').text(denom.rs_100 || 0);
-        $('#denom500').text(denom.rs_500 || 0);
         $('#denomTotal').text('₹ ' + fmtAmt(denom.denom_total || 0));
         $('#denomToken').text(denom.token || '-');
         $('#denomCard').removeClass('d-none');

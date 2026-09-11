@@ -3,6 +3,18 @@
 @push('style')
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link href="{{ asset('template/assets/css/select2-custom.css') }}" rel="stylesheet" />
+    <style>
+        #supplierLedgerScroll {
+            max-height: 220px;
+            overflow-y: auto;
+        }
+        #supplierLedgerScroll thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: #f8f9fa;
+        }
+    </style>
 @endpush
 
 @section('content')
@@ -40,6 +52,12 @@
                                         </option>
                                     @endforeach
                                 </select>
+                                @if (in_array($routePrefix, ['supplier-payment', 'customer-collection'], true))
+                                    <div class="d-flex justify-content-between align-items-center mt-1">
+                                        <small class="text-muted" id="supplierDueHint">Due: —</small>
+                                        <button type="button" class="btn btn-link btn-sm p-0" id="viewSupplierLedger" disabled>View Ledger</button>
+                                    </div>
+                                @endif
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Amount<span class="text-danger">*</span></label>
@@ -131,11 +149,69 @@
             </div>
         </div>
     </div>
+
+    @if (in_array($routePrefix, ['supplier-payment', 'customer-collection'], true))
+        @php
+            $ledgerTitle = $routePrefix === 'customer-collection' ? 'Customer Ledger' : 'Supplier Ledger';
+            $ledgerDueCaption = $routePrefix === 'customer-collection'
+                ? 'Amount still receivable (Due)'
+                : 'Amount still payable (Due)';
+            $ledgerEmpty = $routePrefix === 'customer-collection' ? 'Select a customer' : 'Select a supplier';
+        @endphp
+        <div class="modal fade" id="supplierLedgerModal" tabindex="-1" data-bs-backdrop="static">
+            <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="supplierLedgerTitle">{{ $ledgerTitle }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <div class="text-muted" id="supplierLedgerPeriod"></div>
+                                <div class="fw-semibold">{{ $ledgerDueCaption }}</div>
+                            </div>
+                            <div class="text-end">
+                                <div class="fs-4 fw-bold" id="supplierDueAmount">0.00</div>
+                            </div>
+                        </div>
+                        <div class="table-responsive" id="supplierLedgerScroll">
+                            <table class="table table-bordered table-sm mb-0">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th>Sl</th>
+                                        <th>Date</th>
+                                        <th>Particulars</th>
+                                        <th>Mode</th>
+                                        <th class="text-end">Debit</th>
+                                        <th class="text-end">Credit</th>
+                                        <th class="text-end">Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="supplierLedgerBody">
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted">{{ $ledgerEmpty }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-primary" id="useSupplierDue" disabled>Use Due Amount</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 @endsection
 
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
+        let skipSupplierLedger = false;
+        let partyPayable = 0;
+        let editOriginalAmount = 0;
         $(document).ready(function() {
             $('#partyId').select2({
                 placeholder: '-- {{ $partyLabel }} --',
@@ -149,6 +225,91 @@
             $('input[name="transMode"]').on('change', toggleBank);
             $('#cancelBtn').on('click', resetForm);
 
+            @if (in_array($routePrefix, ['supplier-payment', 'customer-collection'], true))
+            const ledgerUrl = "{{ route($routePrefix . '.ledger') }}";
+            const ledgerTitlePrefix = "{{ $routePrefix === 'customer-collection' ? 'Customer Ledger' : 'Supplier Ledger' }}";
+
+            function fmtLedgerAmt(n) {
+                const v = parseFloat(n);
+                if (!v) return '';
+                return v.toFixed(2);
+            }
+
+            function fmtLedgerDate(val) {
+                if (!val) return '';
+                if (window.siDate && siDate.toDisplay) return siDate.toDisplay(val);
+                const parts = String(val).substring(0, 10).split('-');
+                return parts.length === 3 ? parts[2] + '/' + parts[1] + '/' + parts[0] : val;
+            }
+
+            function openSupplierLedger() {
+                const partyId = $('#partyId').val();
+                if (!partyId) return;
+                const name = $('#partyId option:selected').text();
+                $('#supplierLedgerTitle').text(ledgerTitlePrefix + ' — ' + name);
+                $('#supplierLedgerPeriod').text('');
+                $('#supplierDueAmount').text('...');
+                $('#supplierLedgerBody').html('<tr><td colspan="7" class="text-center">Loading...</td></tr>');
+                $('#useSupplierDue').prop('disabled', true);
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('supplierLedgerModal')).show();
+
+                $.get(ledgerUrl, {
+                    party_id: partyId,
+                    as_on_date: $('#voucherDate').val()
+                }).done(function(res) {
+                    partyPayable = parseFloat(res.payable) || 0;
+                    $('#supplierDueAmount').text(partyPayable.toFixed(2));
+                    $('#supplierDueHint').text('Due: ₹ ' + partyPayable.toFixed(2));
+                    $('#supplierLedgerPeriod').text('From ' + fmtLedgerDate(res.from_date) + ' to ' + fmtLedgerDate(res.as_on_date));
+                    const rows = res.rows || [];
+                    if (!rows.length) {
+                        $('#supplierLedgerBody').html('<tr><td colspan="7" class="text-center text-muted">No ledger found</td></tr>');
+                        return;
+                    }
+                    let html = '';
+                    rows.forEach(function(row, idx) {
+                        const bold = parseInt(row.Row_Kind, 10) === 1 ? ' class="fw-bold"' : '';
+                        html += `<tr${bold}>
+                            <td>${idx + 1}</td>
+                            <td>${fmtLedgerDate(row.Trans_Date)}</td>
+                            <td>${row.Particulars || ''}</td>
+                            <td>${row.Mode_Name || ''}</td>
+                            <td class="text-end">${fmtLedgerAmt(row.Debit_Amt)}</td>
+                            <td class="text-end">${fmtLedgerAmt(row.Credit_Amt)}</td>
+                            <td class="text-end">${row.Balance_Label || ''}</td>
+                        </tr>`;
+                    });
+                    $('#supplierLedgerBody').html(html);
+                    $('#useSupplierDue').prop('disabled', partyPayable <= 0);
+                }).fail(function(xhr) {
+                    $('#supplierDueAmount').text('0.00');
+                    $('#supplierDueHint').text('Due: —');
+                    $('#supplierLedgerBody').html('<tr><td colspan="7" class="text-center text-danger">' +
+                        (xhr.responseJSON?.message || 'Failed to load ledger') + '</td></tr>');
+                });
+            }
+
+            $('#partyId').on('change', function() {
+                const partyId = $(this).val();
+                $('#viewSupplierLedger').prop('disabled', !partyId);
+                if (!partyId) {
+                    partyPayable = 0;
+                    $('#supplierDueHint').text('Due: —');
+                    return;
+                }
+                if (skipSupplierLedger) return;
+                openSupplierLedger();
+            });
+
+            $('#viewSupplierLedger').on('click', openSupplierLedger);
+            $('#useSupplierDue').on('click', function() {
+                if (partyPayable > 0) {
+                    $('#amount').val(partyPayable.toFixed(2));
+                }
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('supplierLedgerModal')).hide();
+            });
+            @endif
+
             $(document).on('click', '.editRow', function() {
                 const id = $(this).data('id');
                 $.get("{{ url($routePrefix . '/details') }}/" + id, function(d) {
@@ -156,7 +317,10 @@
                     $('#voucherNo').val(d.Vou_No);
                     $('#vouNoDiv').show();
                     $('#voucherDate').val(d.Vou_Date);
+                    skipSupplierLedger = true;
                     $('#partyId').val(d.Party_Id).trigger('change');
+                    skipSupplierLedger = false;
+                    editOriginalAmount = parseFloat(d.Amount) || 0;
                     $('#amount').val(d.Amount);
                     $('#particulars').val(d.Particulars);
                     $('#refVouchNo').val(d.Ref_Vou_No);
@@ -200,30 +364,66 @@
                 }
 
                 const isEdit = parseInt($('#vouchId').val() || 0, 10) > 0;
-                $(this).prop('disabled', true).text(isEdit ? 'Updating...' : 'Saving...');
-                $.ajax({
-                    url: "{{ route($routePrefix . '.store') }}",
-                    type: 'POST',
-                    data: {
-                        _token: "{{ csrf_token() }}",
-                        vouch_id: $('#vouchId').val() || 0,
-                        voucher_date: $('#voucherDate').val(),
-                        party_id: $('#partyId').val(),
-                        trans_mode: $('input[name="transMode"]:checked').val(),
-                        amount: $('#amount').val(),
-                        particulars: $('#particulars').val().trim(),
-                        ref_vouch_no: $('#refVouchNo').val().trim(),
-                        bank_id: $('#bankAccountId').val() || 0
-                    },
-                    success: function(res) {
-                        Swal.fire('Success', res.message, 'success').then(() => location.reload());
-                    },
-                    error: function(xhr) {
-                        $('#saveVoucher').prop('disabled', false).text(isEdit ? 'Update' : 'Save');
-                        Swal.fire('Error', xhr.responseJSON?.error || xhr.responseJSON?.message ||
-                            'Failed to save', 'error');
+                const saveData = {
+                    _token: "{{ csrf_token() }}",
+                    vouch_id: $('#vouchId').val() || 0,
+                    voucher_date: $('#voucherDate').val(),
+                    party_id: $('#partyId').val(),
+                    trans_mode: $('input[name="transMode"]:checked').val(),
+                    amount: $('#amount').val(),
+                    particulars: $('#particulars').val().trim(),
+                    ref_vouch_no: $('#refVouchNo').val().trim(),
+                    bank_id: $('#bankAccountId').val() || 0
+                };
+
+                function postVoucher() {
+                    $('#saveVoucher').prop('disabled', true).text(isEdit ? 'Updating...' : 'Saving...');
+                    $.ajax({
+                        url: "{{ route($routePrefix . '.store') }}",
+                        type: 'POST',
+                        data: saveData,
+                        success: function(res) {
+                            Swal.fire('Success', res.message, 'success').then(() => location.reload());
+                        },
+                        error: function(xhr) {
+                            $('#saveVoucher').prop('disabled', false).text(isEdit ? 'Update' : 'Save');
+                            Swal.fire('Error', xhr.responseJSON?.error || xhr.responseJSON?.message ||
+                                'Failed to save', 'error');
+                        }
+                    });
+                }
+
+                @if (in_array($routePrefix, ['supplier-payment', 'customer-collection'], true))
+                const dueWord = "{{ $routePrefix === 'customer-collection' ? 'receivable' : 'payable' }}";
+                $.get(ledgerUrl, {
+                    party_id: saveData.party_id,
+                    as_on_date: saveData.voucher_date
+                }).done(function(res) {
+                    const currentDue = parseFloat(res.payable) || 0;
+                    const allowed = currentDue + (isEdit ? editOriginalAmount : 0);
+                    partyPayable = currentDue;
+                    $('#supplierDueHint').text('Due: ₹ ' + currentDue.toFixed(2));
+                    if (amt > allowed + 0.009) {
+                        Swal.fire({
+                            title: 'Amount is more than due',
+                            text: 'Due is ₹ ' + allowed.toFixed(2) + '. You entered ₹ ' + amt.toFixed(2) +
+                                '. Do you want to save more than the amount still ' + dueWord + '?',
+                            icon: 'warning',
+                            showCancelButton: true,
+                            confirmButtonText: 'OK',
+                            cancelButtonText: 'Cancel'
+                        }).then(function(result) {
+                            if (result.isConfirmed) postVoucher();
+                        });
+                        return;
                     }
+                    postVoucher();
+                }).fail(function() {
+                    Swal.fire('Error', 'Failed to check due amount', 'error');
                 });
+                @else
+                postVoucher();
+                @endif
             });
         });
 
@@ -241,7 +441,15 @@
             $('#voucherNo').val('');
             $('#vouNoDiv').hide();
             $('#voucherDate').val('{{ date('Y-m-d') }}');
+            skipSupplierLedger = true;
             $('#partyId, #bankAccountId').val('').trigger('change');
+            skipSupplierLedger = false;
+            partyPayable = 0;
+            editOriginalAmount = 0;
+            if ($('#supplierDueHint').length) {
+                $('#supplierDueHint').text('Due: —');
+                $('#viewSupplierLedger').prop('disabled', true);
+            }
             $('#amount, #particulars, #refVouchNo').val('');
             $('#transCash').prop('checked', true);
             $('#bankSelectDiv').hide();

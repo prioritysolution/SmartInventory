@@ -53,6 +53,42 @@ if (!function_exists('menuLinkRoute')) {
     }
 }
 
+if (!function_exists('sidebarMenuIcon')) {
+    function sidebarMenuIcon(?string $icon, ?string $route = null, ?string $name = null): string
+    {
+        $icon = trim((string) $icon);
+        $route = trim((string) $route);
+        $name = strtolower(trim((string) $name));
+
+        if ($route === 'user-dashboard' || $name === 'dashboard') {
+            return 'fa-solid fa-house';
+        }
+
+        $mapped = [
+            'isax isax-home-2' => 'fa-solid fa-house',
+            'isax isax-setting-2' => 'fa-solid fa-gear',
+            'isax isax-box-add' => 'fa-solid fa-box',
+            'isax isax-shop' => 'fa-solid fa-cart-shopping',
+            'isax isax-layer' => 'fa-solid fa-layer-group',
+            'isax isax-wallet-3' => 'fa-solid fa-wallet',
+            'isax isax-scan' => 'fa-solid fa-barcode',
+            'isax isax-profile-2user' => 'fa-solid fa-user-gear',
+            'isax isax-chart-2' => 'fa-solid fa-chart-column',
+            'isax isax-document-text' => 'fa-solid fa-file-lines',
+        ];
+
+        if (isset($mapped[$icon])) {
+            return $mapped[$icon];
+        }
+
+        if ($icon !== '' && !str_starts_with($icon, 'isax')) {
+            return $icon;
+        }
+
+        return 'fa-solid fa-circle';
+    }
+}
+
 if (!function_exists('buildAdminSidebarMenu')) {
     function buildAdminSidebarMenu(array $menuData): array
     {
@@ -61,10 +97,11 @@ if (!function_exists('buildAdminSidebarMenu')) {
         foreach ($menuData as $item) {
             $isParent = $item->Child_Id === null || $item->Child_Id === '';
             if ($isParent && $item->Parraint_Name) {
-                $menu[$item->Parraint_Id] = (object) [
+                $route = data_get($item, 'Parraint_Route') ?: null;
+                $menu[(string) $item->Parraint_Id] = (object) [
                     'name' => $item->Parraint_Name,
-                    'icon' => data_get($item, 'Parraint_Icon') ?: 'isax isax-box',
-                    'route' => data_get($item, 'Parraint_Route') ?: null,
+                    'icon' => sidebarMenuIcon(data_get($item, 'Parraint_Icon'), $route, $item->Parraint_Name),
+                    'route' => $route,
                     'children' => [],
                 ];
             }
@@ -72,8 +109,8 @@ if (!function_exists('buildAdminSidebarMenu')) {
 
         foreach ($menuData as $item) {
             $isParent = $item->Child_Id === null || $item->Child_Id === '';
-            if (!$isParent && isset($menu[$item->Parraint_Id]) && $item->Child_Name) {
-                $menu[$item->Parraint_Id]->children[] = (object) [
+            if (!$isParent && isset($menu[(string) $item->Parraint_Id]) && $item->Child_Name) {
+                $menu[(string) $item->Parraint_Id]->children[] = (object) [
                     'id' => $item->Child_Id,
                     'name' => $item->Child_Name,
                     'route' => $item->Child_Route ?: null,

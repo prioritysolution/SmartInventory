@@ -228,6 +228,11 @@ class AgentSale extends Controller
             $roundOff    = floatval($request->input('round_off', 0));
             $netAmt      = floatval($request->input('net_amt', 0));
             $saleId      = intval($request->input('sale_id', 0));
+            $warning     = $this->creditSellLimitWarning(
+                (int) session('agent_id'),
+                $netAmt,
+                $saleId
+            );
 
             $result = $conn->select('CALL USP_ADD_EDIT_AGENT_SALE(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                 $saleId,
@@ -261,6 +266,7 @@ class AgentSale extends Controller
             return response()->json([
                 'success'   => true,
                 'message'   => $result[0]->Message ?? 'Sale saved successfully',
+                'warning'   => $warning,
                 'bill_data' => $billData,
                 'show_bill' => true,
             ]);
@@ -269,6 +275,48 @@ class AgentSale extends Controller
             $conn->rollBack();
             Log::error('Agent Sale Error: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to save sale'], 500);
+        }
+    }
+
+    /**
+     * Warn when the agent's unsettled sales (cash, bank, credit) plus this sale
+     * exceed the credit sell limit. Does not block the sale.
+     */
+    private function creditSellLimitWarning(int $agentId, float $saleAmt, int $saleId): ?string
+    {
+        try {
+            $pdo = DB::connection('coops')->getPdo();
+            $stmt = $pdo->prepare('CALL USP_CHK_AGENT_CREDIT_SELL_LIMIT(?, ?, ?)');
+            $stmt->execute([$agentId, $saleAmt, $saleId]);
+            $row = $stmt->fetch(\PDO::FETCH_OBJ);
+            $stmt->closeCursor();
+
+            $limit = (float) ($row->Credit_Sell_Limit ?? 0);
+            if ($limit <= 0) {
+                return null;
+            }
+
+            $unsettled = (float) ($row->Unsettled_Amt ?? 0);
+            $sale = (float) ($row->Sale_Amt ?? $saleAmt);
+            $total = $unsettled + $sale;
+            if ($total <= $limit) {
+                return null;
+            }
+
+            if ($unsettled > $limit) {
+                return 'You have crossed your credit sell limit. Unsettled amount ₹'
+                    . number_format($unsettled, 2)
+                    . '. Credit sell limit is ₹' . number_format($limit, 2) . '.';
+            }
+
+            return 'You have crossed your credit sell limit. Unsettled amount ₹'
+                . number_format($unsettled, 2)
+                . ' + this sale ₹' . number_format($sale, 2)
+                . ' = ₹' . number_format($total, 2)
+                . '. Credit sell limit is ₹' . number_format($limit, 2) . '.';
+        } catch (\Exception $e) {
+            Log::error('Agent credit sell limit warning error: ' . $e->getMessage());
+            return null;
         }
     }
 
