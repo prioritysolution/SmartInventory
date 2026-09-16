@@ -31,7 +31,7 @@
                     <!-- Date & Agent -->
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label">Date<span class="text-danger">*</span></label>
+                            <label class="form-label">Issue Date<span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="indentDate" min="{{ session('year_start') }}"
                                 max="{{ session('year_end') }}" value="{{ date('Y-m-d') }}">
                         </div>
@@ -40,8 +40,10 @@
                             <select class="form-select select2-agent" id="agentId">
                                 <option value="">Select Agent</option>
                                 @foreach ($agents as $agent)
-                                    <option value="{{ $agent->Agent_Id }}">{{ $agent->Agent_Name }}
-                                        ({{ $agent->Agent_Code }})
+                                    <option value="{{ $agent->Agent_Id }}"
+                                        data-name="{{ $agent->Agent_Name }}"
+                                        data-code="{{ $agent->Agent_Code }}">
+                                        {{ $agent->Agent_Name }} ({{ $agent->Agent_Code }})
                                     </option>
                                 @endforeach
                             </select>
@@ -295,6 +297,9 @@
         let currentTotalQty = 0;
         let issueMrpOptions = [];
         let issueTotalQty = 0;
+        const orgName = @json(session('org_name'));
+        const branchName = @json(session('branch_name'));
+        const generatedBy = @json(session('user_name', 'User'));
 
         $(document).ready(function() {
 
@@ -659,7 +664,8 @@
                 }
 
                 $('#selectedIndentId').val(indentId);
-                $('#indentDate').val(date).prop('disabled', true);
+                // Use today's date as issue date (not old requisition date)
+                $('#indentDate').val('{{ date('Y-m-d') }}').prop('disabled', false);
                 indentItems = items.map(it => ({
                     indent_sl: it.Indent_Sl || 0,
                     barcode: '',
@@ -956,7 +962,9 @@
                 mrp,
                 available_qty: availableQty,
                 pack_date: packDate || '',
-                quantity: qty
+                quantity: qty,
+                requested_qty: qty,
+                issued: true
             });
             $('#indentDate').prop('disabled', true);
             renderItemsTable();
@@ -1209,6 +1217,160 @@
             $('#quantity').removeAttr('max');
         }
 
+        function fmtPrintQty(n) {
+            const v = parseFloat(n);
+            if (isNaN(v)) return '0';
+            return Number.isInteger(v) ? String(v) : v.toFixed(2);
+        }
+
+        function printIndentBill() {
+            const $agent = $('#agentId option:selected');
+            const agentName = $agent.data('name') || $agent.text() || '';
+            const agentCode = $agent.data('code') || '';
+            const issueDateRaw = $('#indentDate').val();
+            const issueDate = (window.siDate && siDate.toDisplay)
+                ? siDate.toDisplay(issueDateRaw)
+                : issueDateRaw;
+            const indentType = $('input[name="indentType"]:checked').val();
+            const formLabel = indentType === '1' ? 'Requisition Issue' : 'New Indent';
+
+            let rowsHtml = '';
+            let totalAmount = 0;
+            indentItems.forEach(function(item, i) {
+                const issueQty = parseFloat(item.quantity) || 0;
+                const unit = item.unit_name ? (' ' + item.unit_name) : '';
+                const mrpVal = parseMrpValue(item.mrp);
+                const mrp = mrpVal > 0 ? mrpKey(item.mrp) : '-';
+                totalAmount += mrpVal * issueQty;
+                rowsHtml += `<tr>
+                    <td class="c">${i + 1}</td>
+                    <td>${item.product_name || ''}</td>
+                    <td class="c">${mrp}</td>
+                    <td class="r">${fmtPrintQty(issueQty)}${unit}</td>
+                </tr>`;
+            });
+
+            const billHtml = `
+            <div class="sheet">
+                <div class="org">
+                    <h2>${orgName || 'Smart Inventory'}</h2>
+                    ${branchName ? `<p class="branch">${branchName}</p>` : ''}
+                    <h3 class="title">Agent Indent Bill</h3>
+                </div>
+                <table class="meta">
+                    <tr><td class="lbl">Issue Date</td><td>: ${issueDate || ''}</td>
+                        <td class="lbl">Form</td><td>: ${formLabel}</td></tr>
+                    <tr><td class="lbl">Agent Name</td><td>: ${agentName}</td>
+                        <td class="lbl">Agent Code</td><td>: ${agentCode}</td></tr>
+                </table>
+                <table class="items">
+                    <thead>
+                        <tr>
+                            <th style="width:40px;">Sl</th>
+                            <th>Requisition Item</th>
+                            <th style="width:90px;">MRP</th>
+                            <th style="width:130px;">Issue Quantity</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rowsHtml || '<tr><td colspan="4" class="c">No items</td></tr>'}
+                    </tbody>
+                </table>
+                <div class="total-wrap">Total Amount : ${totalAmount.toFixed(2)}</div>
+                <div class="sign-wrap">
+                    <div class="sign-box"><div class="sign-line">Authorized Signature</div></div>
+                    <div class="sign-box"><div class="sign-line">Agent Signature</div></div>
+                </div>
+                <div class="print-foot">Generated By : ${generatedBy || 'User'}</div>
+            </div>`;
+
+            let iframe = document.getElementById('indentPrintFrame');
+            if (iframe) {
+                if (iframe.dataset.blobUrl) {
+                    URL.revokeObjectURL(iframe.dataset.blobUrl);
+                }
+                iframe.remove();
+            }
+
+            iframe = document.createElement('iframe');
+            iframe.id = 'indentPrintFrame';
+            iframe.setAttribute('aria-hidden', 'true');
+            iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;';
+            document.body.appendChild(iframe);
+
+            const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title></title>
+            <style>
+                @page { size: A4; margin: 14mm 12mm 18mm 12mm; }
+                html, body { margin: 0; padding: 0; }
+                body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #000; }
+                .sheet { width: 100%; min-height: 100%; position: relative; padding-bottom: 28px; box-sizing: border-box; }
+                .print-foot {
+                    position: fixed;
+                    left: 0;
+                    bottom: 4mm;
+                    font-size: 11px;
+                    text-align: left;
+                }
+                .org { text-align: center; width: 100%; margin: 0 0 14px 0; }
+                .org h2 { margin: 0 0 4px; font-size: 20px; text-transform: uppercase; text-align: center; }
+                .org .branch { margin: 0 0 10px; font-size: 12px; text-align: center; }
+                .org .title {
+                    display: block;
+                    width: 100%;
+                    margin: 10px 0 0;
+                    padding: 0;
+                    font-size: 16px;
+                    font-weight: bold;
+                    text-align: center;
+                    text-decoration: underline;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;
+                }
+                .meta { width: 100%; margin-bottom: 14px; }
+                .meta td { padding: 3px 0; vertical-align: top; }
+                .meta .lbl { width: 110px; font-weight: bold; }
+                table.items { width: 100%; border-collapse: collapse; margin-top: 4px; }
+                table.items th, table.items td { border: 1px solid #000; padding: 6px 8px; }
+                table.items th { background: #f2f2f2; text-align: center; }
+                .c { text-align: center; }
+                .r { text-align: right; white-space: nowrap; }
+                .total-wrap {
+                    margin-top: 12px;
+                    text-align: right;
+                    font-size: 14px;
+                    font-weight: bold;
+                }
+                .sign-wrap { display: flex; justify-content: space-between; margin-top: 70px; padding: 0 10px; }
+                .sign-box { width: 40%; text-align: center; }
+                .sign-line { border-top: 1px solid #000; margin-top: 50px; padding-top: 6px; font-weight: bold; }
+                @media print {
+                    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    .print-foot { position: fixed; left: 0; bottom: 4mm; }
+                }
+            </style></head><body>${billHtml}</body></html>`;
+
+            const blobUrl = URL.createObjectURL(new Blob([fullHtml], { type: 'text/html' }));
+            iframe.dataset.blobUrl = blobUrl;
+            iframe.onload = function() {
+                setTimeout(function() {
+                    const prevTitle = document.title;
+                    document.title = ' ';
+                    const restoreTitle = function() {
+                        document.title = prevTitle;
+                        window.removeEventListener('focus', restoreTitle);
+                    };
+                    window.addEventListener('focus', restoreTitle);
+                    try {
+                        iframe.contentWindow.document.title = '';
+                    } catch (e) {}
+                    iframe.contentWindow.focus();
+                    iframe.contentWindow.print();
+                    setTimeout(restoreTitle, 1500);
+                }, 100);
+            };
+            iframe.src = blobUrl;
+        }
+
         function saveIndent() {
             if (!$('#indentDate').val()) {
                 Swal.fire('Error', 'Date is required', 'error');
@@ -1257,6 +1419,7 @@
                 method: 'POST',
                 data: saveData,
                 success: function(response) {
+                    printIndentBill();
                     Swal.fire('Success!', response.message || 'Agent indent saved successfully', 'success')
                         .then(function() {
                             window.location.reload();
