@@ -9,7 +9,7 @@
         </div>
 
         <div class="row">
-            <!-- Left: 5 boxes -->
+            <!-- Left: 4 boxes -->
             <div class="col-md-3">
                 <div class="d-flex flex-column gap-3">
                     <div class="card chart-box cursor-pointer border-2" id="box-village" onclick="loadSection('village')">
@@ -41,18 +41,7 @@
                             </div>
                             <div>
                                 <h6 class="mb-0">Post Office</h6>
-                                <small class="text-muted">Manage post offices</small>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card chart-box cursor-pointer border-2" id="box-pin" onclick="loadSection('pin')">
-                        <div class="card-body d-flex align-items-center gap-3" style="min-height:90px;">
-                            <div class="avatar avatar-md bg-danger-subtle rounded">
-                                <i class="fa-solid fa-location-dot text-danger fs-18"></i>
-                            </div>
-                            <div>
-                                <h6 class="mb-0">PIN Code</h6>
-                                <small class="text-muted">Manage PIN codes</small>
+                                <small class="text-muted">Manage post + PIN</small>
                             </div>
                         </div>
                     </div>
@@ -86,11 +75,7 @@
                         <div class="table-responsive">
                             <table id="addressTable" class="table table-nowrap table-bordered" style="display:none;">
                                 <thead class="thead-light">
-                                    <tr>
-                                        <th>Sl</th>
-                                        <th id="colHeader">Name</th>
-                                        <th class="text-center" id="actionCol">Action</th>
-                                    </tr>
+                                    <tr id="addressTableHead"></tr>
                                 </thead>
                                 <tbody id="tableBody"></tbody>
                             </table>
@@ -116,6 +101,11 @@
                 <div class="mb-3">
                     <label class="form-label" id="inputLabel">Name <span class="text-danger">*</span></label>
                     <input type="text" class="form-control" id="inputName" maxlength="100" autocomplete="off">
+                </div>
+                <div class="mb-3 d-none" id="pinCodeWrap">
+                    <label class="form-label">PIN Code <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="inputPinCode" maxlength="10" autocomplete="off"
+                        placeholder="Enter PIN code">
                 </div>
             </div>
             <div class="modal-footer">
@@ -143,7 +133,6 @@
         village : { title: 'Village',        col: 'Village Name' },
         ps      : { title: 'Police Station', col: 'PS Name'      },
         post    : { title: 'Post Office',    col: 'Post Name'    },
-        pin     : { title: 'PIN Code',       col: 'PIN Code'     },
         dist    : { title: 'District',       col: 'District Name'},
     };
 
@@ -158,15 +147,20 @@
 
         const cfg = sectionConfig[type];
         $('#panelTitle').text(cfg.title);
-        $('#colHeader').text(cfg.col);
-
         $('#addNewBtn').show();
-        if (!$('#actionCol').length) {
-            $('#addressTable thead tr').append('<th class="text-center" id="actionCol">Action</th>');
-        }
-        $('#actionCol').show();
 
-        if (addrDT) { addrDT.destroy(); addrDT = null; }
+        if (addrDT) {
+            addrDT.destroy();
+            addrDT = null;
+        }
+
+        const isPost = type === 'post';
+        let headHtml = `<th>Sl</th><th>${cfg.col}</th>`;
+        if (isPost) {
+            headHtml += '<th>PIN Code</th>';
+        }
+        headHtml += '<th class="text-center">Action</th>';
+        $('#addressTableHead').html(headHtml);
         $('#tableBody').html('');
 
         $.get("{{ url('address-master/data') }}/" + type, function(data) {
@@ -174,10 +168,14 @@
             let body = '';
             data.forEach((r, i) => {
                 const name = String(r.Name ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                const editBtn = `<button type="button" class="btn btn-primary btn-sm editRow" onclick="openEditModal(${r.Id}, '${name}')">Edit</button>`;
+                const pin = String(r.Pin_Code ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                const editBtn = isPost
+                    ? `<button type="button" class="btn btn-primary btn-sm editRow" onclick="openEditModal(${r.Id}, '${name}', '${pin}')">Edit</button>`
+                    : `<button type="button" class="btn btn-primary btn-sm editRow" onclick="openEditModal(${r.Id}, '${name}')">Edit</button>`;
                 body += `<tr>
                     <td>${i + 1}</td>
                     <td>${r.Name ?? ''}</td>
+                    ${isPost ? `<td>${r.Pin_Code ?? ''}</td>` : ''}
                     <td class="text-center">${editBtn}</td>
                 </tr>`;
             });
@@ -209,19 +207,23 @@
         $('#editId').val('');
         $('#editType').val(currentSection);
         $('#inputName').val('');
+        $('#inputPinCode').val('');
         $('#inputLabel').text(sectionConfig[currentSection].col + ' *');
         $('#modalTitle').text('Add New ' + sectionConfig[currentSection].title);
         $('#saveBtn').text('Save');
+        $('#pinCodeWrap').toggleClass('d-none', currentSection !== 'post');
         $('#addressModal').modal('show');
     }
 
-    function openEditModal(id, name) {
+    function openEditModal(id, name, pinCode) {
         $('#editId').val(id);
         $('#editType').val(currentSection);
         $('#inputName').val(name);
+        $('#inputPinCode').val(pinCode || '');
         $('#inputLabel').text(sectionConfig[currentSection].col + ' *');
         $('#modalTitle').text('Edit ' + sectionConfig[currentSection].title);
         $('#saveBtn').text('Update');
+        $('#pinCodeWrap').toggleClass('d-none', currentSection !== 'post');
         $('#addressModal').modal('show');
     }
 
@@ -229,6 +231,7 @@
         const name = $('#inputName').val().trim();
         const type = $('#editType').val();
         const id   = $('#editId').val();
+        const pinCode = $('#inputPinCode').val().trim();
 
         if (!IS_ADMIN && id) {
             Swal.fire('Access Denied', 'You do not have permission to perform this action.', 'warning');
@@ -236,14 +239,25 @@
         }
 
         if (!name) { Swal.fire('Validation Error', sectionConfig[type].col + ' is required', 'error'); return; }
+        if (type === 'post' && !pinCode) {
+            Swal.fire('Validation Error', 'PIN Code is required', 'error');
+            return;
+        }
 
         $(this).prop('disabled', true).text(id ? 'Updating...' : 'Saving...');
 
+        const payload = {
+            _token: '{{ csrf_token() }}',
+            name: name,
+            pin_code: pinCode
+        };
+
         if (id) {
+            payload._method = 'PUT';
             $.ajax({
                 url: `/address-master/${type}/${id}`,
                 type: 'POST',
-                data: { _token: '{{ csrf_token() }}', _method: 'PUT', name: name },
+                data: payload,
                 success: function(res) {
                     $('#saveBtn').prop('disabled', false).text('Update');
                     $('#addressModal').modal('hide');
@@ -255,10 +269,11 @@
                 }
             });
         } else {
+            payload.type = type;
             $.ajax({
                 url: "{{ route('address-master.store') }}",
                 type: 'POST',
-                data: { _token: '{{ csrf_token() }}', type: type, name: name },
+                data: payload,
                 success: function(res) {
                     $('#saveBtn').prop('disabled', false).text('Save');
                     $('#addressModal').modal('hide');

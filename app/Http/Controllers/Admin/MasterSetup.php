@@ -288,14 +288,12 @@ public function indexAgent(Request $request)
             'state_code' => 'nullable|numeric|max:99',
             'credit_limit' => 'nullable|numeric|min:0|max:99999999.99',
             'opening_balance' => 'nullable|numeric|min:0|max:999999999999.99',
-        ], $this->addressMasterValidationRules()));
+        ], $this->addressMasterValidationRules(false)));
 
         try {
             Config::set('database.connections.coops.database', session('org_schema'));
             DB::connection('coops')->beginTransaction();
-            $district = $this->addressMasterName('dist', $request->input('dist_id')) ?: $request->input('district');
-            $pinCode  = $this->addressMasterName('pin', $request->input('pin_id')) ?: $request->input('pin_code');
-            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_PARTY(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_PARTY(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                 0,
                 null,
                 $request->input('party_name'),
@@ -307,9 +305,11 @@ public function indexAgent(Request $request)
                 $request->input('address1'),
                 $request->input('address2'),
                 $request->input('city'),
-                $district,
                 $request->input('state'),
-                $pinCode,
+                (int) $request->input('village_id', 0),
+                (int) $request->input('ps_id', 0),
+                (int) $request->input('post_id', 0),
+                (int) $request->input('dist_id', 0),
                 $request->input('pan_no'),
                 $request->input('gstin'),
                 $request->input('state_code'),
@@ -334,7 +334,6 @@ public function indexAgent(Request $request)
                 }
 
                 if ($errorNo == 0) {
-                    $this->syncEntityAddressMaster('party', 0, $request, $result[0]->Party_Code ?? null);
                     DB::connection('coops')->commit();
                     return response()->json(['message' => 'Supplier added successfully', 'party_code' => $result[0]->Party_Code ?? '']);
                 }
@@ -370,14 +369,12 @@ public function indexAgent(Request $request)
             'state_code' => 'nullable|numeric|max:99',
             'credit_limit' => 'nullable|numeric|min:0|max:99999999.99',
             'opening_balance' => 'nullable|numeric|min:0|max:999999999999.99',
-        ], $this->addressMasterValidationRules()));
+        ], $this->addressMasterValidationRules(false)));
 
         try {
             Config::set('database.connections.coops.database', session('org_schema'));
             DB::connection('coops')->beginTransaction();
-            $district = $this->addressMasterName('dist', $request->input('dist_id')) ?: $request->input('district');
-            $pinCode  = $this->addressMasterName('pin', $request->input('pin_id')) ?: $request->input('pin_code');
-            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_PARTY(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_PARTY(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                 $id,
                 null,
                 $request->input('party_name'),
@@ -389,9 +386,11 @@ public function indexAgent(Request $request)
                 $request->input('address1'),
                 $request->input('address2'),
                 $request->input('city'),
-                $district,
                 $request->input('state'),
-                $pinCode,
+                (int) $request->input('village_id', 0),
+                (int) $request->input('ps_id', 0),
+                (int) $request->input('post_id', 0),
+                (int) $request->input('dist_id', 0),
                 $request->input('pan_no'),
                 $request->input('gstin'),
                 $request->input('state_code'),
@@ -415,7 +414,6 @@ public function indexAgent(Request $request)
                     return response()->json(['error' => $message], 422);
                 }
 
-                $this->syncEntityAddressMaster('party', $id, $request);
                 DB::connection('coops')->commit();
                 return response()->json(['message' => 'Supplier updated successfully']);
             }
@@ -466,15 +464,13 @@ public function indexAgent(Request $request)
             'credit_limit' => 'nullable|numeric|min:0|max:99999999.99',
             'opening_balance' => 'nullable|numeric|min:0|max:999999999999.99',
             'cust_agent_id' => 'nullable|integer|min:0',
-        ], $this->addressMasterValidationRules()));
+        ], $this->addressMasterValidationRules(false)));
 
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::connection('coops')->beginTransaction();
 
         try {
-            $district = $this->addressMasterName('dist', $request->input('dist_id')) ?: $request->district;
-            $pinCode  = $this->addressMasterName('pin', $request->input('pin_id')) ?: $request->pin_code;
-            $result = DB::connection('coops')->select("CALL USP_ADD_EDIT_CUSTOMER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+            $result = DB::connection('coops')->select("CALL USP_ADD_EDIT_CUSTOMER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
                 0,
                 null,
                 $request->party_name,
@@ -484,9 +480,11 @@ public function indexAgent(Request $request)
                 $request->address1,
                 $request->address2,
                 $request->city,
-                $district,
                 $request->state,
-                $pinCode,
+                (int) $request->input('village_id', 0),
+                (int) $request->input('ps_id', 0),
+                (int) $request->input('post_id', 0),
+                (int) $request->input('dist_id', 0),
                 $request->pan_no,
                 $request->gstin,
                 $request->state_code,
@@ -511,7 +509,6 @@ public function indexAgent(Request $request)
                 }
 
                 if ($errorNo == 0) {
-                    $this->syncEntityAddressMaster('party', 0, $request, $result[0]->Party_Code ?? null);
                     DB::connection('coops')->commit();
                     return response()->json(['message' => 'Customer added successfully', 'party_code' => $result[0]->Party_Code ?? '']);
                 }
@@ -546,17 +543,14 @@ public function indexAgent(Request $request)
             'credit_limit' => 'nullable|numeric|min:0|max:99999999.99',
             'opening_balance' => 'nullable|numeric|min:0|max:999999999999.99',
             'cust_agent_id' => 'nullable|integer|min:0',
-        ], $this->addressMasterValidationRules()));
+        ], $this->addressMasterValidationRules(false)));
 
         try {
             Config::set('database.connections.coops.database', session('org_schema'));
 
 
             DB::connection('coops')->beginTransaction();
-            $district = $this->addressMasterName('dist', $request->input('dist_id')) ?: $request->input('district');
-            $pinCode  = $this->addressMasterName('pin', $request->input('pin_id')) ?: $request->input('pin_code');
-
-            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_CUSTOMER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_CUSTOMER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                 $id,
                 null,
                 $request->input('party_name'),
@@ -566,9 +560,11 @@ public function indexAgent(Request $request)
                 $request->input('address1'),
                 $request->input('address2'),
                 $request->input('city'),
-                $district,
                 $request->input('state'),
-                $pinCode,
+                (int) $request->input('village_id', 0),
+                (int) $request->input('ps_id', 0),
+                (int) $request->input('post_id', 0),
+                (int) $request->input('dist_id', 0),
                 $request->input('pan_no'),
                 $request->input('gstin'),
                 $request->input('state_code'),
@@ -596,7 +592,6 @@ public function indexAgent(Request $request)
                 }
 
                 if ($errorNo == 0) {
-                    $this->syncEntityAddressMaster('party', $id, $request);
                     DB::connection('coops')->commit();
                     return response()->json([
                         'message' => 'Customer updated successfully'
@@ -1073,7 +1068,13 @@ public function storeProdCategory(Request $request)
 
     public function getAddressData($type)
     {
-        if (!$this->addressTable($type)) {
+        $typeMap = [
+            'village' => 1,
+            'ps'      => 2,
+            'post'    => 3,
+            'dist'    => 4,
+        ];
+        if (!isset($typeMap[$type])) {
             return response()->json(['error' => 'Invalid address type'], 400);
         }
 
@@ -1081,7 +1082,7 @@ public function storeProdCategory(Request $request)
         DB::purge('coops');
 
         try {
-            $data = DB::connection('coops')->select('CALL USP_GET_ADDRESS_MASTER(?)', [$type]);
+            $data = DB::connection('coops')->select('CALL USP_GET_ADDRESS_MASTER(?)', [$typeMap[$type]]);
             return response()->json($data);
         } catch (\Exception $e) {
             Log::channel('trading')->error('Address master load error: ' . $e->getMessage());
@@ -1091,7 +1092,12 @@ public function storeProdCategory(Request $request)
 
     public function storeAddressMaster(Request $request)
     {
-        $request->validate(['type' => 'required|string', 'name' => 'required|string|max:100']);
+        $type = $request->input('type');
+        $rules = ['type' => 'required|string', 'name' => 'required|string|max:100'];
+        if ($type === 'post') {
+            $rules['pin_code'] = 'required|string|max:10';
+        }
+        $request->validate($rules);
         if (!$this->addressTable($request->input('type'))) {
             return response()->json(['error' => 'Invalid address type'], 400);
         }
@@ -1099,11 +1105,12 @@ public function storeProdCategory(Request $request)
         DB::purge('coops');
         try {
             DB::connection('coops')->beginTransaction();
-            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_ADDRESS_MASTER(?, ?, ?, ?)', [
+            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_ADDRESS_MASTER(?, ?, ?, ?, ?)', [
                 $request->input('type'),
                 0,
                 $request->input('name'),
-                1
+                1,
+                $request->input('pin_code', ''),
             ]);
             if (!empty($result) && $result[0]->Error_No < 0) {
                 DB::connection('coops')->rollBack();
@@ -1120,7 +1127,11 @@ public function storeProdCategory(Request $request)
 
     public function updateAddressMaster(Request $request, $type, $id)
     {
-        $request->validate(['name' => 'required|string|max:100']);
+        $rules = ['name' => 'required|string|max:100'];
+        if ($type === 'post') {
+            $rules['pin_code'] = 'required|string|max:10';
+        }
+        $request->validate($rules);
         if (!$this->addressTable($type)) {
             return response()->json(['error' => 'Invalid address type'], 400);
         }
@@ -1128,11 +1139,12 @@ public function storeProdCategory(Request $request)
         DB::purge('coops');
         try {
             DB::connection('coops')->beginTransaction();
-            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_ADDRESS_MASTER(?, ?, ?, ?)', [
+            $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_ADDRESS_MASTER(?, ?, ?, ?, ?)', [
                 $type,
                 $id,
                 $request->input('name'),
-                2
+                2,
+                $request->input('pin_code', ''),
             ]);
             if (!empty($result) && $result[0]->Error_No < 0) {
                 DB::connection('coops')->rollBack();
@@ -1153,26 +1165,32 @@ public function storeProdCategory(Request $request)
             'village' => ['table' => 'mst_village', 'pk' => 'Village_Id', 'col' => 'Village_Name'],
             'ps'      => ['table' => 'mst_ps',      'pk' => 'Ps_Id',      'col' => 'Ps_Name'],
             'post'    => ['table' => 'mst_post',    'pk' => 'Post_Id',    'col' => 'Post_Name'],
-            'pin'     => ['table' => 'mst_pin',     'pk' => 'Pin_Id',     'col' => 'Pin_Code'],
             'dist'    => ['table' => 'mst_dist',    'pk' => 'Dist_Id',    'col' => 'Dist_Name'],
         ];
         return $map[$type] ?? null;
     }
 
-    private function addressMasterValidationRules(): array
+    private function addressMasterValidationRules(bool $required = true): array
     {
+        $rule = $required ? 'required|integer|min:1' : 'nullable|integer|min:0';
         return [
-            'village_id' => 'required|integer|min:1',
-            'ps_id'      => 'required|integer|min:1',
-            'post_id'    => 'required|integer|min:1',
-            'pin_id'     => 'required|integer|min:1',
-            'dist_id'    => 'required|integer|min:1',
+            'village_id' => $rule,
+            'ps_id'      => $rule,
+            'post_id'    => $rule,
+            'dist_id'    => $rule,
         ];
     }
 
     private function addressMasterName(string $type, $id): ?string
     {
-        if (!$this->addressTable($type) || !$id) {
+        if (!$id) {
+            return null;
+        }
+        if ($type === 'post_pin' || ($type === 'pin')) {
+            $rows = DB::connection('coops')->select('CALL USP_GET_ADDRESS_NAME(?, ?)', ['post_pin', (int) $id]);
+            return !empty($rows) && isset($rows[0]->Name) ? (string) $rows[0]->Name : null;
+        }
+        if (!$this->addressTable($type)) {
             return null;
         }
         $rows = DB::connection('coops')->select('CALL USP_GET_ADDRESS_NAME(?, ?)', [$type, (int) $id]);
@@ -1191,7 +1209,7 @@ public function storeProdCategory(Request $request)
             (int) $request->input('village_id'),
             (int) $request->input('ps_id'),
             (int) $request->input('post_id'),
-            (int) $request->input('pin_id'),
+            0,
             (int) $request->input('dist_id'),
         ]);
     }

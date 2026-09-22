@@ -50,13 +50,11 @@
                                     data-address1="{{ $supplier->Address_Line1 }}"
                                     data-address2="{{ $supplier->Address_Line2 }}"
                                     data-city="{{ $supplier->City }}"
-                                    data-district="{{ $supplier->District }}"
                                     data-state="{{ $supplier->State }}"
-                                    data-pin="{{ $supplier->PinCode }}"
+                                    data-pin="{{ $supplier->Pin_Code ?? '' }}"
                                     data-village="{{ $supplier->Village_Id ?? '' }}"
                                     data-ps="{{ $supplier->Ps_Id ?? '' }}"
                                     data-post="{{ $supplier->Post_Id ?? '' }}"
-                                    data-pin-id="{{ $supplier->Pin_Id ?? '' }}"
                                     data-dist="{{ $supplier->Dist_Id ?? '' }}"
                                     data-pan="{{ $supplier->Pan_No }}"
                                     data-gst="{{ $supplier->GstIn }}"
@@ -138,7 +136,7 @@
         <input type="text" class="form-control form-control-lg" id="address2" maxlength="200" autocomplete="off">
     </div>
 
-    @include('Admin.partials.address-master-fields')
+    @include('Admin.partials.address-master-fields', ['required' => false])
 
     <div class="col-md-3 mb-3">
         <label class="form-label">City</label>
@@ -191,7 +189,7 @@
 @endsection
 
 @push('scripts')
-<script src="{{ asset('template/assets/js/address-master-form.js') }}?v=1"></script>
+<script src="{{ asset('template/assets/js/address-master-form.js') }}?v=2"></script>
 <script>
 $(document).ready(function () {
 
@@ -211,8 +209,8 @@ $(document).ready(function () {
             village_id: $(this).data('village'),
             ps_id: $(this).data('ps'),
             post_id: $(this).data('post'),
-            pin_id: $(this).data('pin-id'),
-            dist_id: $(this).data('dist')
+            dist_id: $(this).data('dist'),
+            pin_code: $(this).data('pin')
         });
         $('#panNo').val($(this).data('pan'));
         $('#gstin').val($(this).data('gst'));
@@ -304,7 +302,6 @@ $(document).ready(function () {
 function validateForm() {
     if (!$('#partyName').val()) { Swal.fire('Validation Error', 'Party Name required', 'error'); return false; }
     if ($('#mobileNo').val() && !/^\d{10}$/.test($('#mobileNo').val())) { Swal.fire('Validation Error', 'Mobile No must be 10 digits', 'error'); return false; }
-    if (!AddressMasterForm.validate('')) return false;
     return true;
 }
 

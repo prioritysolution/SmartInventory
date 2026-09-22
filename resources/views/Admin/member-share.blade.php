@@ -204,7 +204,7 @@
 
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <script src="{{ asset('template/assets/js/address-master-form.js') }}?v=1"></script>
+    <script src="{{ asset('template/assets/js/address-master-form.js') }}?v=2"></script>
     <script>
         const ADM_FEES  = {{ (float) ($shareConfig->adm_fees  ?? 0) }};
         const RATE_SHARE = {{ (float) ($shareConfig->rate_share ?? 0) }};
@@ -370,7 +370,6 @@
                                         data-village="${m.Village_Id ?? ''}"
                                         data-ps="${m.Ps_Id ?? ''}"
                                         data-post="${m.Post_Id ?? ''}"
-                                        data-pin="${m.Pin_Id ?? ''}"
                                         data-dist="${m.Dist_Id ?? ''}"
                                         data-adhar="${m.Adhar_No ?? ''}"
                                         data-voter="${m.Voter_No ?? ''}"
@@ -424,7 +423,6 @@
                     village_id: $(this).data('village'),
                     ps_id: $(this).data('ps'),
                     post_id: $(this).data('post'),
-                    pin_id: $(this).data('pin'),
                     dist_id: $(this).data('dist')
                 });
                 $('#adhar_no').val($(this).data('adhar'));
@@ -504,7 +502,7 @@
             $('#bank_dropdown_block, #bank_remarks_block').hide();
             // Unlock admission block
             $('#mem_type, #mem_name, #gur_name, #mob_no, #address, #adhar_no, #voter_no, #pan_no').prop('disabled', false);
-            $('#village_id, #ps_id, #post_id, #pin_id, #dist_id').prop('disabled', false);
+            $('#village_id, #ps_id, #post_id, #pin_code, #dist_id').prop('disabled', false);
             $('#adm_date, #share_no, #ref_voucher, #bank_remarks').prop('readonly', false);
             $('#adm_fees, #rate_share, #share_amt, #tot_amt').prop('disabled', false);
             $('#adm_date').prop('disabled', false);

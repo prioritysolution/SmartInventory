@@ -1241,12 +1241,14 @@
                 const unit = item.unit_name ? (' ' + item.unit_name) : '';
                 const mrpVal = parseMrpValue(item.mrp);
                 const mrp = mrpVal > 0 ? mrpKey(item.mrp) : '-';
-                totalAmount += mrpVal * issueQty;
+                const amount = mrpVal * issueQty;
+                totalAmount += amount;
                 rowsHtml += `<tr>
                     <td class="c">${i + 1}</td>
                     <td>${item.product_name || ''}</td>
-                    <td class="c">${mrp}</td>
                     <td class="r">${fmtPrintQty(issueQty)}${unit}</td>
+                    <td class="r">${mrp}</td>
+                    <td class="r">${amount.toFixed(2)}</td>
                 </tr>`;
             });
 
@@ -1267,13 +1269,14 @@
                     <thead>
                         <tr>
                             <th style="width:40px;">Sl</th>
-                            <th>Requisition Item</th>
+                            <th>Item Name</th>
+                            <th style="width:120px;">Issue Quantity</th>
                             <th style="width:90px;">MRP</th>
-                            <th style="width:130px;">Issue Quantity</th>
+                            <th style="width:110px;">Amount</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${rowsHtml || '<tr><td colspan="4" class="c">No items</td></tr>'}
+                        ${rowsHtml || '<tr><td colspan="5" class="c">No items</td></tr>'}
                     </tbody>
                 </table>
                 <div class="total-wrap">Total Amount : ${totalAmount.toFixed(2)}</div>

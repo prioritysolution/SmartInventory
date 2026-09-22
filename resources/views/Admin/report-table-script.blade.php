@@ -33,6 +33,16 @@
 
     function fmtCell(col, row) {
         const val = row[col.key];
+        if (col.type === 'indent_print') {
+            const indentId = row.Indent_Id || '';
+            if (!indentId) return '';
+            return `<div class="text-center">
+                <button type="button" class="btn btn-sm btn-outline-primary btn-reprint-indent"
+                    data-indent-id="${indentId}" title="Reprint Indent Bill">
+                    <i class="fas fa-print"></i>
+                </button>
+            </div>`;
+        }
         if (col.type === 'date') {
             return (window.siDate && siDate.toDisplay) ? siDate.toDisplay(val) : (val || '');
         }
@@ -269,7 +279,10 @@
             period += (period ? ' &nbsp;|&nbsp; ' : '') + 'Ledger: ' + $('#ledgerId option:selected').text();
         }
         let head = '<th>Sl</th>';
-        activeColumns.forEach(function(col) { head += `<th>${col.label}</th>`; });
+        const printCols = activeColumns.filter(function(col) {
+            return col.type !== 'indent_print';
+        });
+        printCols.forEach(function(col) { head += `<th>${col.label}</th>`; });
         const sums = {};
         activeTotals.forEach(function(k) { sums[k] = 0; });
         let body = isPartyLedgerMode() ? renderLedgerPrintBody() : '';
@@ -278,7 +291,7 @@
             const kind = parseInt(row.Row_Kind, 10) || 0;
             const weight = kind > 0 ? ' font-weight:bold;' : '';
             body += `<tr><td>${idx + 1}</td>`;
-            activeColumns.forEach(function(col) {
+            printCols.forEach(function(col) {
                 const align = (col.type === 'amount' || col.type === 'amount_blank' || col.type === 'qty') ? ' style="text-align:right;' + weight + '"' : (weight ? ' style="' + weight + '"' : '');
                 body += `<td${align}>${fmtCell(col, row)}</td>`;
                 if (kind === 0 && sums.hasOwnProperty(col.key)) sums[col.key] += parseFloat(row[col.key]) || 0;
@@ -289,7 +302,7 @@
         let totalRow = '';
         if (activeTotals.length) {
             totalRow = '<tr><th>Total</th>';
-            activeColumns.forEach(function(col) {
+            printCols.forEach(function(col) {
                 if (sums.hasOwnProperty(col.key)) {
                     const v = (col.type === 'amount') ? fmtAmt(sums[col.key]) : fmtQty(sums[col.key]);
                     totalRow += `<th style="text-align:right;">${v}</th>`;

@@ -61,7 +61,6 @@
                                                 data-village="{{ $agent->Village_Id ?? '' }}"
                                                 data-ps="{{ $agent->Ps_Id ?? '' }}"
                                                 data-post="{{ $agent->Post_Id ?? '' }}"
-                                                data-pin="{{ $agent->Pin_Id ?? '' }}"
                                                 data-dist="{{ $agent->Dist_Id ?? '' }}"
                                                 data-password="">Edit</button>
                                         </td>
@@ -187,7 +186,7 @@
 
 
 @push('scripts')
-    <script src="{{ asset('template/assets/js/address-master-form.js') }}?v=1"></script>
+    <script src="{{ asset('template/assets/js/address-master-form.js') }}?v=2"></script>
     <script>
         $(document).ready(function() {
             $('#eyeIcon').on('click', function() {
@@ -212,7 +211,6 @@
                     village_id: $(this).data('village'),
                     ps_id: $(this).data('ps'),
                     post_id: $(this).data('post'),
-                    pin_id: $(this).data('pin'),
                     dist_id: $(this).data('dist')
                 });
                 $('#modalTitle').text('Edit Agent');
