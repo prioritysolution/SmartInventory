@@ -610,7 +610,7 @@ class Sales extends Controller
             'trans_mode'   => 'required|in:1,2,3',
             'items'        => 'required|array|min:1',
             'bank_id'      => 'nullable|integer',
-            'bank_remarks' => 'nullable|string|max:100',
+            'instrument_no' => 'nullable|string|max:50',
             'ref_vouch_no' => 'nullable|string|max:20',
             'disc_percent' => 'nullable|numeric',
             'round_off'    => 'nullable|numeric',
@@ -625,6 +625,14 @@ class Sales extends Controller
 
         if ($request->sale_date < $yearStart || $request->sale_date > $yearEnd) {
             return response()->json(['error' => "Sale Date must be between {$yearStart} and {$yearEnd}"], 400);
+        }
+        if ((int) $request->input('trans_mode') === 2) {
+            if ((int) $request->input('bank_id', 0) <= 0) {
+                return response()->json(['error' => 'Please select a Bank'], 400);
+            }
+            if (!trim((string) $request->input('instrument_no', ''))) {
+                return response()->json(['error' => 'Instrument No is required for Bank'], 400);
+            }
         }
 
         Config::set('database.connections.coops.database', session('org_schema'));
@@ -689,7 +697,7 @@ class Sales extends Controller
             $saleId = intval($request->input('sale_id', 0));
             $mode = $saleId > 0 ? 2 : 1;
 
-            $result = $conn->select('CALL USP_ADD_EDIT_SALE(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $result = $conn->select('CALL USP_ADD_EDIT_SALE(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                 $saleId,
                 intval($request->input('vouch_id', 0)),
                 session('branch_id'),
@@ -707,6 +715,7 @@ class Sales extends Controller
                 session('user_id'),
                 session('year_id'),
                 $mode,
+                (int) $request->input('trans_mode') === 2 ? trim((string) $request->input('instrument_no', '')) : '',
             ]);
 
             if (!empty($result) && $result[0]->Error_No < 0) {
@@ -796,7 +805,7 @@ class Sales extends Controller
             'trans_mode'   => 'required|in:1,2,3',
             'items'        => 'required|array|min:1',
             'bank_id'      => 'nullable|integer',
-            'bank_remarks' => 'nullable|string|max:100',
+            'instrument_no' => 'nullable|string|max:50',
             'ref_vouch_no' => 'nullable|string|max:20',
             'disc_percent' => 'nullable|numeric',
             'round_off'    => 'nullable|numeric',
@@ -810,6 +819,14 @@ class Sales extends Controller
 
         if ($request->sale_date < $yearStart || $request->sale_date > $yearEnd) {
             return response()->json(['error' => "Sale Date must be between {$yearStart} and {$yearEnd}"], 400);
+        }
+        if ((int) $request->input('trans_mode') === 2) {
+            if ((int) $request->input('bank_id', 0) <= 0) {
+                return response()->json(['error' => 'Please select a Bank'], 400);
+            }
+            if (!trim((string) $request->input('instrument_no', ''))) {
+                return response()->json(['error' => 'Instrument No is required for Bank'], 400);
+            }
         }
 
         Config::set('database.connections.coops.database', session('org_schema'));
@@ -874,7 +891,7 @@ class Sales extends Controller
             $saleId = intval($request->input('sale_id', 0));
             $mode = $saleId > 0 ? 2 : 1;
 
-            $result = $conn->select('CALL USP_ADD_EDIT_SALE_RETURN(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $result = $conn->select('CALL USP_ADD_EDIT_SALE_RETURN(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                 $saleId,
                 session('branch_id'),
                 $request->input('sale_date'),
@@ -889,6 +906,9 @@ class Sales extends Controller
                 session('year_id'),
                 $mode,
                 $request->input('sale_no'),
+                intval($request->input('trans_mode')),
+                intval($request->input('bank_id', 0)),
+                (int) $request->input('trans_mode') === 2 ? trim((string) $request->input('instrument_no', '')) : '',
             ]);
 
             if (!empty($result) && $result[0]->Error_No < 0) {

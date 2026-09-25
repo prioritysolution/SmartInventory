@@ -223,6 +223,8 @@ Route::get('/good-received/subcats', [Purchase::class, 'getSubCats'])->name('goo
 
   Route::get('/purchase-register', [InventoryReports::class, 'purchaseRegister'])->name('purchase-register');
   Route::get('/purchase-register/search', [InventoryReports::class, 'purchaseRegisterSearch'])->name('purchase-register.search');
+  Route::get('/itemwise-purchase', [InventoryReports::class, 'itemwisePurchase'])->name('itemwise-purchase');
+  Route::get('/itemwise-purchase/search', [InventoryReports::class, 'itemwisePurchaseSearch'])->name('itemwise-purchase.search');
   Route::get('/sales-register', [InventoryReports::class, 'salesRegister'])->name('sales-register');
   Route::get('/sales-register/search', [InventoryReports::class, 'salesRegisterSearch'])->name('sales-register.search');
   Route::get('/agent-register', [InventoryReports::class, 'agentRegister'])->name('agent-register');

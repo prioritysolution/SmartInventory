@@ -98,6 +98,79 @@ class InventoryReports extends Controller
         return response()->json($rows);
     }
 
+    public function itemwisePurchase()
+    {
+        Config::set('database.connections.coops.database', session('org_schema'));
+        $parties = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [
+            1,
+            session('branch_id') ?: 0,
+            0,
+        ]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+
+        return view('Admin.itemwise-purchase', [
+            'parties'     => $parties,
+            'categories'  => $categories,
+            'year_start'  => session('year_start'),
+            'year_end'    => session('year_end'),
+            'org_name'    => session('org_name'),
+            'branch_name' => session('branch_name'),
+        ])->with('pageTitle', 'Item Wise Purchase Report');
+    }
+
+    public function itemwisePurchaseSearch(Request $request)
+    {
+        $frm = $request->input('frm_date');
+        $to = $request->input('to_date');
+        if (!$frm || !$to) {
+            return response()->json(['message' => 'Select from date and to date'], 422);
+        }
+        if ($frm > $to) {
+            return response()->json(['message' => 'From date cannot be after to date'], 422);
+        }
+        if ($frm < session('year_start') || $to > session('year_end')) {
+            return response()->json(['message' => 'Date must be within the accounting year'], 422);
+        }
+
+        Config::set('database.connections.coops.database', session('org_schema'));
+        $partyId = (int) $request->input('party_id', 0);
+        $branchId = (int) (session('branch_id') ?: 0);
+        $catId = (int) $request->input('cat_id', 0);
+        $subCatId = (int) $request->input('sub_cat_id', 0);
+
+        $rows = DB::connection('coops')->select(
+            "SELECT
+                i.Prod_Code,
+                i.Prod_ShortNm,
+                IFNULL(c.Prd_CateNm, '') AS Cate_Name,
+                IFNULL(UDF_GET_UNIT_NAME(p.Unit_Id), '') AS Unit_Name,
+                SUM(IFNULL(p.Item_Qty, 0)) AS Qty,
+                CASE
+                    WHEN SUM(IFNULL(p.Item_Qty, 0)) = 0 THEN 0
+                    ELSE ROUND(SUM(IFNULL(p.Item_Total, 0)) / SUM(p.Item_Qty), 2)
+                END AS Item_Rate,
+                SUM(IFNULL(p.Taxable_Amt, 0)) AS Taxable_Amt,
+                SUM(IFNULL(p.SGST_Amt, 0) + IFNULL(p.CGST_Amt, 0)) AS GST_Amt,
+                SUM(IFNULL(p.Net_Amt, 0)) AS Net_Amt
+            FROM trans_trading m
+            INNER JOIN trans_trading_products p ON p.Trading_Id = m.Trading_Id
+            INNER JOIN mst_product i ON i.Prod_Id = p.Prod_Id
+            LEFT JOIN mst_prod_category c ON c.Prd_CateId = i.Cate_Id
+            WHERE m.Tranding_Type = 2
+              AND IFNULL(m.Status_Cd, 1) = 1
+              AND m.Invoice_Date BETWEEN ? AND ?
+              AND (? = 0 OR m.Party_Id = ?)
+              AND (? = 0 OR m.Branch_Id = ?)
+              AND (? = 0 OR i.Cate_Id = ?)
+              AND (? = 0 OR i.SubCate_Id = ?)
+            GROUP BY i.Prod_Id, i.Prod_Code, i.Prod_ShortNm, c.Prd_CateNm, p.Unit_Id
+            ORDER BY i.Prod_ShortNm, i.Prod_Code",
+            [$frm, $to, $partyId, $partyId, $branchId, $branchId, $catId, $catId, $subCatId, $subCatId]
+        );
+
+        return response()->json($rows);
+    }
+
     public function salesRegister()
     {
         Config::set('database.connections.coops.database', session('org_schema'));

@@ -117,22 +117,89 @@ class AccountsReports extends Controller
 
     public function cashBookSearch(Request $request)
     {
-        $asOn = $request->input('as_on_date');
-        if (!$asOn) {
-            return response()->json(['message' => 'Select date'], 422);
+        $frm = $request->input('frm_date') ?: $request->input('as_on_date');
+        $to = $request->input('to_date') ?: $request->input('as_on_date');
+        if (!$frm || !$to) {
+            return response()->json(['message' => 'Select from date and to date'], 422);
         }
-        if ($asOn < session('year_start') || $asOn > session('year_end')) {
+        if ($frm > $to) {
+            return response()->json(['message' => 'From date cannot be after to date'], 422);
+        }
+        if ($frm < session('year_start') || $to > session('year_end')) {
             return response()->json(['message' => 'Date must be within the accounting year'], 422);
         }
 
         Config::set('database.connections.coops.database', session('org_schema'));
-        $rows = DB::connection('coops')->select('CALL USP_RPT_CASH_BOOK(?, ?, ?)', [
-            (int) session('year_id'),
-            $asOn,
-            $asOn,
-        ]);
+        $yearId = (int) session('year_id');
 
-        return response()->json($rows);
+        $cashHead = DB::connection('coops')->selectOne(
+            "SELECT IFNULL(
+                (SELECT Cash_Ledg FROM mst_default_ledger WHERE Cash_Ledg IS NOT NULL LIMIT 1),
+                (SELECT Account_Id FROM mst_acct_glhead WHERE Account_For = 'C' LIMIT 1)
+             ) AS Cash_Id"
+        );
+        $cashId = (int) ($cashHead->Cash_Id ?? 0);
+
+        $opening = 0.0;
+        $rows = [];
+        if ($cashId) {
+            $opening = (float) (DB::connection('coops')->selectOne(
+                "SELECT IFNULL(SUM(CASE WHEN d.Trans_Type = 'D' THEN d.Vou_Amount ELSE -d.Vou_Amount END), 0) AS Amt
+                 FROM trans_voucher_details d
+                 INNER JOIN trans_voucher_master m ON m.Voucher_Id = d.Voucher_Id
+                 WHERE d.GlHead_Id = ?
+                   AND m.Year_Id = ?
+                   AND IFNULL(m.Status, 2) = 2
+                   AND m.Vou_Date < ?",
+                [$cashId, $yearId, $frm]
+            )->Amt ?? 0);
+
+            $rows = DB::connection('coops')->select(
+                "SELECT
+                    m.Vou_Date,
+                    IFNULL(m.Vou_No, '') AS Vou_No,
+                    CASE WHEN cash.Trans_Type = 'D' THEN 'R' ELSE 'P' END AS Side,
+                    IFNULL((
+                        SELECT g.Account_Desc
+                        FROM trans_voucher_details d
+                        LEFT JOIN mst_acct_glhead g ON g.Account_Id = d.GlHead_Id
+                        WHERE d.Voucher_Id = m.Voucher_Id
+                          AND d.GlHead_Id <> ?
+                        ORDER BY d.Vou_Amount DESC, d.VouDtls_Id
+                        LIMIT 1
+                    ), '') AS Gl_Head,
+                    IFNULL(NULLIF(TRIM(m.Particulars), ''), IFNULL(m.Ref_Vou_No, '')) AS Particulars,
+                    IFNULL(cash.Vou_Amount, 0) AS Amount
+                 FROM trans_voucher_master m
+                 INNER JOIN trans_voucher_details cash
+                    ON cash.Voucher_Id = m.Voucher_Id
+                   AND cash.GlHead_Id = ?
+                 WHERE m.Year_Id = ?
+                   AND IFNULL(m.Status, 2) = 2
+                   AND m.Vou_Date BETWEEN ? AND ?
+                 ORDER BY m.Vou_Date, m.Voucher_Id",
+                [$cashId, $cashId, $yearId, $frm, $to]
+            );
+        }
+
+        $receiptTotal = 0.0;
+        $paymentTotal = 0.0;
+        foreach ($rows as $row) {
+            $amt = (float) ($row->Amount ?? 0);
+            if (($row->Side ?? '') === 'R') {
+                $receiptTotal += $amt;
+            } else {
+                $paymentTotal += $amt;
+            }
+        }
+
+        return response()->json([
+            'opening' => round($opening, 2),
+            'closing' => round($opening + $receiptTotal - $paymentTotal, 2),
+            'receipt_total' => round($receiptTotal, 2),
+            'payment_total' => round($paymentTotal, 2),
+            'rows' => $rows,
+        ]);
     }
 
     public function journalBook()

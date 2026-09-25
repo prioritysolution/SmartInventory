@@ -61,11 +61,15 @@ class Accounting extends Controller
             'particulars'  => 'required|string|max:200',
             'ref_vouch_no' => 'nullable|string|max:50',
             'bank_id'      => 'nullable|integer',
+            'instrument_no' => 'nullable|string|max:50',
             'vouch_id'     => 'nullable|integer',
         ]);
 
         if ((int) $request->trans_mode === 2 && !$request->bank_id) {
             return response()->json(['error' => 'Please select a Bank'], 400);
+        }
+        if ((int) $request->trans_mode === 2 && !trim((string) $request->input('instrument_no', ''))) {
+            return response()->json(['error' => 'Instrument No is required for Bank'], 400);
         }
 
         $yearStart = session('year_start');
@@ -99,11 +103,14 @@ class Accounting extends Controller
                 'pFin_Id'       => session('year_id'),
                 'pBranch_Id'    => session('branch_id'),
                 'pMode'         => $mode,
+                'pInstrument_No' => (int) $request->input('trans_mode') === 2
+                    ? trim((string) $request->input('instrument_no', ''))
+                    : '',
             ];
 
             Log::channel('trading')->info('USP_ADD_EDIT_GENERAL_VOUCHER params', $spParams);
 
-            $result = $conn->select('CALL USP_ADD_EDIT_GENERAL_VOUCHER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', array_values($spParams));
+            $result = $conn->select('CALL USP_ADD_EDIT_GENERAL_VOUCHER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', array_values($spParams));
 
             Log::channel('trading')->info('USP_ADD_EDIT_GENERAL_VOUCHER result', ['result' => $result]);
 
@@ -231,11 +238,15 @@ class Accounting extends Controller
             'particulars'  => 'required|string|max:200',
             'ref_vouch_no' => 'nullable|string|max:50',
             'bank_id'      => 'nullable|integer',
+            'instrument_no' => 'nullable|string|max:50',
             'vouch_id'     => 'nullable|integer',
         ]);
 
         if ((int) $request->trans_mode === 2 && !$request->bank_id) {
             return response()->json(['error' => 'Please select a Bank'], 400);
+        }
+        if ((int) $request->trans_mode === 2 && !trim((string) $request->input('instrument_no', ''))) {
+            return response()->json(['error' => 'Instrument No is required for Bank'], 400);
         }
 
         $yearStart = session('year_start');
@@ -255,7 +266,7 @@ class Accounting extends Controller
         $conn->beginTransaction();
 
         try {
-            $result = $conn->select('CALL USP_ADD_EDIT_PARTY_VOUCHER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $result = $conn->select('CALL USP_ADD_EDIT_PARTY_VOUCHER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                 $vouchId,
                 $request->input('voucher_date'),
                 intval($partyType),
@@ -269,6 +280,7 @@ class Accounting extends Controller
                 session('year_id'),
                 session('branch_id'),
                 $mode,
+                (int) $request->input('trans_mode') === 2 ? trim((string) $request->input('instrument_no', '')) : '',
             ]);
 
             if (!empty($result) && $result[0]->Error_No < 0) {

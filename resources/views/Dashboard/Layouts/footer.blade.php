@@ -36,6 +36,7 @@
 <script src="{{asset('template/assets/js/script.js')}}"></script>
 <script src="{{asset('template/assets/js/global-loader.js')}}?v=2"></script>
 <script src="{{asset('template/assets/js/date-format.js')}}?v=16"></script>
+<script src="{{asset('template/assets/js/print-helper.js')}}?v=1"></script>
 
 <script>
 if (!IS_ADMIN) {

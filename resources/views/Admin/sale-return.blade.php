@@ -150,7 +150,7 @@
                                     autocomplete="off">
                             </div>
                             <div class="col-md-4 mb-3" id="bankSelectDiv" style="display:none;">
-                                <label class="form-label">Select Bank</label>
+                                <label class="form-label">Select Bank<span class="text-danger">*</span></label>
                                 <select class="form-select" id="bankAccountId">
                                     <option value="">-- Select Bank --</option>
                                     @foreach ($banks as $bank)
@@ -158,10 +158,10 @@
                                     @endforeach
                                 </select>
                             </div>
-                            <div class="col-md-4 mb-3" id="bankRemarksDiv" style="display:none;">
-                                <label class="form-label">Bank Remarks</label>
-                                <input type="text" class="form-control" id="bankRemarks" maxlength="100"
-                                    autocomplete="off">
+                            <div class="col-md-4 mb-3" id="instrumentNoDiv" style="display:none;">
+                                <label class="form-label">Instrument No<span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="instrumentNo" maxlength="50"
+                                    autocomplete="off" placeholder="Cheque / UTR / Instrument No">
                             </div>
                         </div>
                     </div>
@@ -696,8 +696,12 @@
                     $('#partyId').val(data.Party_Id).trigger('change');
                     $('#saleNo').val(data.Ref_No);
 
-                    // Set transaction mode based on data
-                    $('input[name="transMode"][value="1"]').prop('checked', true);
+                    const mode = String(data.Trans_Mode || '1');
+                    $('input[name="transMode"][value="' + mode + '"]').prop('checked', true).trigger('change');
+                    if (mode === '2') {
+                        $('#bankAccountId').val(data.Bank_Ledg || '').trigger('change');
+                        $('#instrumentNo').val(data.Instrument_No || '');
+                    }
 
                     // Fill items
                     itemsArray = data.Item_Details.map(item => ({
@@ -1123,11 +1127,11 @@
             // ── Trans Mode ───────────────────────────────────────────────
             $('input[name="transMode"]').on('change', function() {
                 if ($(this).val() === '2') {
-                    $('#bankSelectDiv, #bankRemarksDiv').show();
+                    $('#bankSelectDiv, #instrumentNoDiv').show();
                 } else {
-                    $('#bankSelectDiv, #bankRemarksDiv').hide();
+                    $('#bankSelectDiv, #instrumentNoDiv').hide();
                     $('#bankAccountId').val('').trigger('change');
-                    $('#bankRemarks').val('');
+                    $('#instrumentNo').val('');
                 }
             });
 
@@ -1213,9 +1217,15 @@
                     Swal.fire('Error', 'Please add at least one item', 'error');
                     return;
                 }
-                if ($('input[name="transMode"]:checked').val() === '2' && !$('#bankAccountId').val()) {
-                    Swal.fire('Error', 'Please select a Bank', 'error');
-                    return;
+                if ($('input[name="transMode"]:checked').val() === '2') {
+                    if (!$('#bankAccountId').val()) {
+                        Swal.fire('Error', 'Please select a Bank', 'error');
+                        return;
+                    }
+                    if (!$('#instrumentNo').val().trim()) {
+                        Swal.fire('Error', 'Instrument No is required for Bank', 'error');
+                        return;
+                    }
                 }
 
                 $(this).prop('disabled', true).text(currentSaleId > 0 ? 'Updating...' : 'Saving...');
@@ -1232,7 +1242,7 @@
                         trans_mode: $('input[name="transMode"]:checked').val(),
                         ref_vouch_no: $('#refVoucherNo').val(),
                         bank_id: $('#bankAccountId').val(),
-                        bank_remarks: $('#bankRemarks').val(),
+                        instrument_no: $('#instrumentNo').val().trim(),
                         disc_percent: $('#summaryDiscPercent').prop('readonly') ? 0 : (parseFloat($(
                             '#summaryDiscPercent').val()) || 0),
                         disc_amt: $('#totalDiscountAmount').val() || 0,
@@ -1682,10 +1692,10 @@
         function resetForm() {
             itemsArray = [];
             currentSaleId = 0;
-            $('#saleNo, #refVoucherNo, #bankRemarks').val('');
+            $('#saleNo, #refVoucherNo, #instrumentNo').val('');
             $('#saleDate').val('{{ date('Y-m-d') }}');
             $('#partyId, #bankAccountId').val('').trigger('change');
-            $('#bankSelectDiv, #bankRemarksDiv').hide();
+            $('#bankSelectDiv, #instrumentNoDiv').hide();
             $('#transCash').prop('checked', true);
             $('#itemsTableBody').html('');
             $('#summaryTotalAmount, #totalTaxableAmount, #totalDiscountAmount, #totalGSTAmount, #roundOff, #finalNetAmount')

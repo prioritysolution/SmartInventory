@@ -617,21 +617,7 @@
             ${denomPrint}
             </body></html>`;
 
-        let iframe = document.getElementById('settlementPrintFrame');
-        if (iframe) iframe.remove();
-        iframe = document.createElement('iframe');
-        iframe.id = 'settlementPrintFrame';
-        iframe.setAttribute('aria-hidden', 'true');
-        iframe.style.cssText = 'position:fixed;top:0;left:0;width:210mm;height:297mm;border:0;opacity:0;pointer-events:none;z-index:-1;';
-        document.body.appendChild(iframe);
-        const doc = iframe.contentWindow.document;
-        doc.open();
-        doc.write(html);
-        doc.close();
-        setTimeout(function () {
-            iframe.contentWindow.focus();
-            iframe.contentWindow.print();
-        }, 150);
+        siPrint(html);
     }
 
     $('#printBtn').on('click', printReport);

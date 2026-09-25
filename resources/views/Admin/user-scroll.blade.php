@@ -220,8 +220,7 @@
                 <td style="text-align:right;font-weight:bold;">${fmtTot(grandRec)}</td>
                 <td style="text-align:right;font-weight:bold;">${fmtTot(grandPay)}</td>
             </tr>`;
-            const w = window.open('', '_blank');
-            w.document.write(`<!DOCTYPE html><html><head><title>${reportTitle}</title>
+            siPrint(`<!DOCTYPE html><html><head><title>${reportTitle}</title>
                 <style>
                     body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
                     h3, h4, p { margin: 0 0 6px 0; text-align: center; }
@@ -242,9 +241,6 @@
                     <tbody>${body}</tbody>
                 ${showCashBalance ? `<p style="text-align:right; font-weight:bold; margin: 12px 0 0 0;">Closing Balance: ${fmtTot(printClosing)}</p>` : ''}
                 </body></html>`);
-            w.document.close();
-            w.focus();
-            w.print();
         }
 
         $('#printBtn').on('click', printScroll);

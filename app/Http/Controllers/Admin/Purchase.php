@@ -55,7 +55,7 @@ class Purchase extends Controller
             'trans_mode'    => 'required|in:1,2,3',
             'items'         => 'required|array|min:1',
             'bank_id'       => 'nullable|integer',
-            'bank_remarks'  => 'nullable|string|max:100',
+            'instrument_no' => 'nullable|string|max:50',
             'ref_vouch_no'  => 'nullable|string|max:20',
             'disc_percent'  => 'nullable|numeric',
             'freight_amt'   => 'nullable|numeric|min:0|max:999999.99',
@@ -71,6 +71,14 @@ class Purchase extends Controller
 
         if ($request->purchase_date < $yearStart || $request->purchase_date > $yearEnd) {
             return response()->json(['error' => "Purchase Date must be between {$yearStart} and {$yearEnd}"], 400);
+        }
+        if ((int) $request->input('trans_mode') === 2) {
+            if ((int) $request->input('bank_id', 0) <= 0) {
+                return response()->json(['error' => 'Please select a Bank'], 400);
+            }
+            if (!trim((string) $request->input('instrument_no', ''))) {
+                return response()->json(['error' => 'Instrument No is required for Bank'], 400);
+            }
         }
         Config::set('database.connections.coops.database', session('org_schema'));
         
@@ -141,7 +149,7 @@ class Purchase extends Controller
             $purchaseId = intval($request->input('purchase_id', 0));
             $mode = $purchaseId > 0 ? 2 : 1;
 
-            $result = $conn->select('CALL USP_ADD_EDIT_PURCHASE(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?)', [
+            $result = $conn->select('CALL USP_ADD_EDIT_PURCHASE(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?,?)', [
                 $purchaseId,
                 intval($request->input('vouch_id', 0)),
                 session('branch_id'),
@@ -161,6 +169,7 @@ class Purchase extends Controller
                 session('user_id'),
                 session('year_id'),
                 $mode,
+                (int) $request->input('trans_mode') === 2 ? trim((string) $request->input('instrument_no', '')) : '',
             ]);
 
             if (!empty($result) && $result[0]->Error_No < 0) {
@@ -351,7 +360,7 @@ class Purchase extends Controller
             'trans_mode'    => 'required|in:1,2,3',
             'items'         => 'required|array|min:1',
             'bank_id'       => 'nullable|integer',
-            'bank_remarks'  => 'nullable|string|max:100',
+            'instrument_no' => 'nullable|string|max:50',
             'ref_vouch_no'  => 'nullable|string|max:20',
             'disc_percent'  => 'nullable|numeric',
             'round_off'     => 'nullable|numeric',
@@ -365,6 +374,14 @@ class Purchase extends Controller
 
         if ($request->purchase_date < $yearStart || $request->purchase_date > $yearEnd) {
             return response()->json(['error' => "Purchase Date must be between {$yearStart} and {$yearEnd}"], 400);
+        }
+        if ((int) $request->input('trans_mode') === 2) {
+            if ((int) $request->input('bank_id', 0) <= 0) {
+                return response()->json(['error' => 'Please select a Bank'], 400);
+            }
+            if (!trim((string) $request->input('instrument_no', ''))) {
+                return response()->json(['error' => 'Instrument No is required for Bank'], 400);
+            }
         }
         Config::set('database.connections.coops.database', session('org_schema'));
         // amazonq-ignore-next-line
@@ -458,7 +475,7 @@ class Purchase extends Controller
 
             $purchaseId = intval($request->input('purchase_id', 0));
             $mode = $purchaseId > 0 ? 2 : 1;
-            $result = $conn->select('CALL USP_ADD_EDIT_PURCHASE_RETURN(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?)', [
+            $result = $conn->select('CALL USP_ADD_EDIT_PURCHASE_RETURN(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?,?)', [
                 $purchaseId,
                 intval($request->input('vouch_id', 0)),
                 session('branch_id'),
@@ -478,6 +495,7 @@ class Purchase extends Controller
                 session('user_id'),
                 session('year_id'),
                 $mode,
+                (int) $request->input('trans_mode') === 2 ? trim((string) $request->input('instrument_no', '')) : '',
             ]);
 
             if (!empty($result) && $result[0]->Error_No < 0) {

@@ -150,8 +150,7 @@
                 <th style="text-align:right;">${fmtQty(totQty)}</th>
                 <th style="text-align:right;">${fmtAmt(totValue)}</th>
             </tr>`;
-            const w = window.open('', '_blank');
-            w.document.write(`<!DOCTYPE html><html><head><title>Stock Summary Report</title>
+            siPrint(`<!DOCTYPE html><html><head><title>Stock Summary Report</title>
                 <style>
                     body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
                     h3, h4, p { margin: 0 0 6px 0; text-align: center; }
@@ -171,9 +170,6 @@
                     <tbody>${body}</tbody>
                 </table>
                 </body></html>`);
-            w.document.close();
-            w.focus();
-            w.print();
         }
 
         $('#cateId').on('change', function() {

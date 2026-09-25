@@ -200,8 +200,7 @@
             head += `<th${align}>${col.label}</th>`;
         });
         const body = renderLedgerPrintBody();
-        const w = window.open('', '_blank');
-        w.document.write(`<!DOCTYPE html><html><head><title>Party Ledger</title>
+        siPrint(`<!DOCTYPE html><html><head><title>Party Ledger</title>
             <style>
                 body { font-family: Arial, sans-serif; font-size: 12px; color: #000; margin: 24px; }
                 .header { text-align: center; margin-bottom: 12px; }
@@ -221,9 +220,6 @@
             <div class="page-no">Page 1 of 1</div>
             <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
             </body></html>`);
-        w.document.close();
-        w.focus();
-        w.print();
     }
 
     function resetTable(message, isError) {
@@ -312,8 +308,7 @@
             });
             totalRow += '</tr>';
         }
-        const w = window.open('', '_blank');
-        w.document.write(`<!DOCTYPE html><html><head><title>${pageTitle}</title>
+        siPrint(`<!DOCTYPE html><html><head><title>${pageTitle}</title>
             <style>
                 body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
                 h3, h4, p { margin: 0 0 6px 0; text-align: center; }
@@ -326,9 +321,6 @@
             <p>${branchName ? branchName + ' &nbsp;|&nbsp; ' : ''}${period}</p>
             <table><thead><tr>${head}</tr></thead><tbody>${body}${totalRow}</tbody></table>
             </body></html>`);
-        w.document.close();
-        w.focus();
-        w.print();
     }
 
     $('#cateId').on('change', function() {

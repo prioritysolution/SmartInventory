@@ -20,6 +20,7 @@
 
 <script src="{{asset('agenttemplate/assets/js/script.js')}}"></script>
 <script src="{{asset('template/assets/js/global-loader.js')}}?v=2"></script>
+<script src="{{asset('template/assets/js/print-helper.js')}}?v=1"></script>
 <script>
     // Modals close only via X / Cancel — not outside click or Esc
     $(function () {

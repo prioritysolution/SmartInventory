@@ -89,6 +89,11 @@
                                     @endforeach
                                 </select>
                             </div>
+                            <div class="mb-3" id="instrumentNoDiv" style="display:none;">
+                                <label class="form-label">Instrument No<span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="instrumentNo" maxlength="50"
+                                    autocomplete="off" placeholder="Cheque / UTR / Instrument No">
+                            </div>
                             <div class="d-flex gap-2 justify-content-end">
                                 <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
                                 <button type="button" class="btn btn-primary" id="saveVoucher">Save</button>
@@ -173,12 +178,14 @@
                     $('#refVouchNo').val(d.Ref_Vou_No);
                     if (String(d.Vou_Mode) === '2') {
                         $('#transBank').prop('checked', true);
-                        $('#bankSelectDiv').show();
+                        $('#bankSelectDiv, #instrumentNoDiv').show();
                         $('#bankAccountId').val(d.Bank_Ledg).trigger('change');
+                        $('#instrumentNo').val(d.Instrument_No || '');
                     } else {
                         $('#transCash').prop('checked', true);
-                        $('#bankSelectDiv').hide();
+                        $('#bankSelectDiv, #instrumentNoDiv').hide();
                         $('#bankAccountId').val('').trigger('change');
+                        $('#instrumentNo').val('');
                     }
                     $('#formTitle').text('Edit Voucher');
                     $('#saveVoucher').text('Update');
@@ -213,6 +220,10 @@
                     Swal.fire('Error', 'Please select a Bank', 'error');
                     return;
                 }
+                if ($('input[name="transMode"]:checked').val() === '2' && !$('#instrumentNo').val().trim()) {
+                    Swal.fire('Error', 'Instrument No is required for Bank', 'error');
+                    return;
+                }
 
                 const isEdit = parseInt($('#vouchId').val() || 0, 10) > 0;
                 $(this).prop('disabled', true).text(isEdit ? 'Updating...' : 'Saving...');
@@ -229,7 +240,8 @@
                         amount: $('#amount').val(),
                         particulars: $('#particulars').val().trim(),
                         ref_vouch_no: $('#refVouchNo').val().trim(),
-                        bank_id: $('#bankAccountId').val() || 0
+                        bank_id: $('#bankAccountId').val() || 0,
+                        instrument_no: $('#instrumentNo').val().trim()
                     },
                     success: function(res) {
                         Swal.fire('Success', res.message, 'success').then(() => location.reload());
@@ -245,10 +257,11 @@
 
         function toggleBank() {
             if ($('input[name="transMode"]:checked').val() === '2') {
-                $('#bankSelectDiv').show();
+                $('#bankSelectDiv, #instrumentNoDiv').show();
             } else {
-                $('#bankSelectDiv').hide();
+                $('#bankSelectDiv, #instrumentNoDiv').hide();
                 $('#bankAccountId').val('').trigger('change');
+                $('#instrumentNo').val('');
             }
         }
 
@@ -259,9 +272,9 @@
             $('#voucherDate').val('{{ date('Y-m-d') }}');
             $('#voucherType').val('');
             $('#ledgerId, #bankAccountId').val('').trigger('change');
-            $('#amount, #particulars, #refVouchNo').val('');
+            $('#amount, #particulars, #refVouchNo, #instrumentNo').val('');
             $('#transCash').prop('checked', true);
-            $('#bankSelectDiv').hide();
+            $('#bankSelectDiv, #instrumentNoDiv').hide();
             $('#formTitle').text('Add Voucher');
             $('#saveVoucher').prop('disabled', false).text('Save');
         }
