@@ -155,6 +155,7 @@ class Sales extends Controller
             'items.*.unit_id'  => 'required|integer',
             'items.*.quantity' => 'required|numeric|min:0',
             'items.*.mrp'      => 'nullable|numeric|min:0',
+            'items.*.barcode'  => 'nullable|string|max:20',
             'items.*.rejected' => 'nullable|boolean',
         ]);
 
@@ -169,6 +170,12 @@ class Sales extends Controller
 
         if ($issueItems->isEmpty() && !$allRejected) {
             return response()->json(['error' => 'At least one product must be issued (qty > 0)'], 422);
+        }
+        foreach ($issueItems as $item) {
+            $barcode = trim((string) ($item['barcode'] ?? ''));
+            if ($barcode === '' || !ctype_digit($barcode)) {
+                return response()->json(['error' => 'Scan a barcode before issuing'], 422);
+            }
         }
 
         Config::set('database.connections.coops.database', session('org_schema'));
@@ -214,6 +221,35 @@ class Sales extends Controller
             if (!empty($result) && $result[0]->Error_No < 0) {
                 $conn->rollBack();
                 return response()->json(['error' => $result[0]->Message ?? 'Save failed'], 400);
+            }
+
+            foreach (array_reverse($request->items) as $item) {
+                $qty = round((float) ($item['quantity'] ?? 0), 2);
+                $barcode = trim((string) ($item['barcode'] ?? ''));
+                if ($qty <= 0 || $barcode === '' || !ctype_digit($barcode)) {
+                    continue;
+                }
+                $conn->statement(
+                    'UPDATE trns_stockinout
+                     SET Barcode = ?,
+                         Created_By = IFNULL(Created_By, ?)
+                     WHERE Stock_Type = 4
+                       AND Prod_Id = ?
+                       AND InOut_Date = ?
+                       AND Quantity = ?
+                       AND ROUND(IFNULL(MRP, 0), 2) = ?
+                       AND IFNULL(Barcode, 0) = 0
+                     ORDER BY Stock_Id DESC
+                     LIMIT 1',
+                    [
+                        $barcode,
+                        (int) session('user_id'),
+                        (int) $item['prod_id'],
+                        $request->input('indent_date'),
+                        $qty,
+                        round((float) ($item['mrp'] ?? 0), 2),
+                    ]
+                );
             }
 
             $conn->commit();
@@ -557,6 +593,246 @@ class Sales extends Controller
         return response()->json($this->fetchSaleRates((int) $request->input('prod_id', 0)));
     }
 
+    public function getProductBarcodes(Request $request)
+    {
+        $prodId = (int) $request->input('prod_id', 0);
+        $date = $request->input('sale_date');
+        if ($prodId <= 0 || !$date) {
+            return response()->json(['error' => 'Product and sale date are required'], 400);
+        }
+
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+
+        return response()->json($this->officeBarcodeStock($prodId, $date, true));
+    }
+
+    /**
+     * Office stock left on each barcode. A movement saved without a barcode
+     * is applied to that MRP when only one barcode exists for it, so the
+     * quantity matches the indent MRP stock.
+     */
+    private function officeBarcodeStock(int $prodId, string $date, bool $onlyInStock): array
+    {
+        $signed = "
+            CASE
+                WHEN s.Stock_Type IN (1, 2, 6) THEN s.Quantity
+                WHEN s.Stock_Type = 8 AND NOT EXISTS (
+                    SELECT 1 FROM trans_agent_stock a WHERE a.TrnsStock_Id = s.Stock_Id
+                ) THEN s.Quantity
+                WHEN s.Stock_Type IN (3, 4, 7, 9) THEN -s.Quantity
+                ELSE 0
+            END
+        ";
+
+        $rows = DB::connection('coops')->select("
+            SELECT
+                b.Barcode,
+                b.MRP,
+                (b.Avil_Qnty + CASE WHEN c.Barcode_Count = 1 THEN IFNULL(u.Unbar_Qnty, 0) ELSE 0 END) AS Avil_Qnty
+            FROM (
+                SELECT
+                    s.Barcode AS Barcode,
+                    CAST(IFNULL(MAX(CASE WHEN s.Stock_Type IN (1, 2) THEN s.MRP END), MAX(s.MRP)) AS DECIMAL(10,2)) AS MRP,
+                    IFNULL(SUM($signed), 0) AS Avil_Qnty,
+                    MAX(CASE WHEN s.Stock_Type = 2 THEN s.Stock_Id END) AS Purchase_Id,
+                    MAX(s.Stock_Id) AS Last_Id
+                FROM trns_stockinout s
+                WHERE s.Prod_Id = ?
+                  AND s.InOut_Date <= ?
+                  AND IFNULL(s.Barcode, 0) <> 0
+                GROUP BY s.Barcode
+            ) b
+            LEFT JOIN (
+                SELECT MRP, COUNT(*) AS Barcode_Count
+                FROM (
+                    SELECT
+                        s.Barcode,
+                        CAST(IFNULL(MAX(CASE WHEN s.Stock_Type IN (1, 2) THEN s.MRP END), MAX(s.MRP)) AS DECIMAL(10,2)) AS MRP
+                    FROM trns_stockinout s
+                    WHERE s.Prod_Id = ?
+                      AND s.InOut_Date <= ?
+                      AND IFNULL(s.Barcode, 0) <> 0
+                    GROUP BY s.Barcode
+                ) m
+                GROUP BY MRP
+            ) c ON c.MRP = b.MRP
+            LEFT JOIN (
+                SELECT
+                    CAST(IFNULL(s.MRP, 0) AS DECIMAL(10,2)) AS MRP,
+                    IFNULL(SUM($signed), 0) AS Unbar_Qnty
+                FROM trns_stockinout s
+                WHERE s.Prod_Id = ?
+                  AND s.InOut_Date <= ?
+                  AND IFNULL(s.Barcode, 0) = 0
+                GROUP BY CAST(IFNULL(s.MRP, 0) AS DECIMAL(10,2))
+            ) u ON u.MRP = b.MRP
+            ORDER BY b.Purchase_Id DESC, b.Last_Id DESC
+        ", [$prodId, $date, $prodId, $date, $prodId, $date]);
+
+        $this->applyUnbarcodedPurchaseReturns($rows, $prodId, $date);
+
+        if (!$onlyInStock) {
+            return $rows;
+        }
+
+        return array_values(array_filter($rows, function ($row) {
+            return (float) $row->Avil_Qnty > 0;
+        }));
+    }
+
+    /**
+     * Barcodes sold on counter sale, with the quantity still available to return.
+     * A sale saved without a barcode is not included.
+     */
+    private function soldBarcodesForReturn(int $prodId, string $date, int $excludeReturnId = 0, string $barcode = '', int $saleId = 0): array
+    {
+        if ($date === '') {
+            return [];
+        }
+
+        $rows = DB::connection('coops')->select("
+            SELECT
+                s.Barcode AS Barcode,
+                MAX(s.Prod_Id) AS Prod_Id,
+                CAST(IFNULL(MAX(CASE WHEN s.Stock_Type = 3 THEN s.MRP END), MAX(s.MRP)) AS DECIMAL(10,2)) AS MRP,
+                CAST(IFNULL(MAX(CASE WHEN s.Stock_Type = 3 THEN s.Rate END), 0) AS DECIMAL(10,2)) AS Rate,
+                IFNULL(SUM(CASE WHEN s.Stock_Type = 3 THEN s.Quantity ELSE 0 END), 0) AS Sold_Qty,
+                IFNULL(SUM(CASE
+                    WHEN s.Stock_Type = 8
+                     AND NOT EXISTS (
+                        SELECT 1 FROM trans_agent_stock a WHERE a.TrnsStock_Id = s.Stock_Id
+                     )
+                     AND (? = 0 OR IFNULL(s.Type_Id, 0) <> ?)
+                    THEN s.Quantity ELSE 0 END), 0) AS Returned_Qty
+            FROM trns_stockinout s
+            WHERE s.InOut_Date <= ?
+              AND IFNULL(s.Barcode, 0) <> 0
+              AND (? = 0 OR s.Prod_Id = ?)
+              AND (? = '' OR s.Barcode = ?)
+              AND (
+                    s.Stock_Type = 8
+                    OR (s.Stock_Type = 3 AND (? = 0 OR s.Type_Id = ?))
+              )
+            GROUP BY s.Barcode
+            HAVING Sold_Qty > 0
+            ORDER BY s.Barcode
+        ", [
+            $excludeReturnId,
+            $excludeReturnId,
+            $date,
+            $prodId,
+            $prodId,
+            $barcode,
+            $barcode,
+            $saleId,
+            $saleId,
+        ]);
+
+        foreach ($rows as $row) {
+            $row->Returnable_Qty = max(0, round((float) $row->Sold_Qty - (float) $row->Returned_Qty, 2));
+        }
+
+        return $rows;
+    }
+
+    private function barcodeReturnableQty(int $prodId, string $barcode, string $date, int $excludeReturnId = 0): float
+    {
+        $rows = $this->soldBarcodesForReturn($prodId, $date, $excludeReturnId, $barcode);
+        if ($rows === []) {
+            return 0.0;
+        }
+
+        return (float) $rows[0]->Returnable_Qty;
+    }
+
+    /**
+     * The sale-return procedure does not store a barcode. Write the barcode the user selected.
+     */
+    private function assignSaleReturnBarcodes($conn, array $items, string $date): void
+    {
+        foreach ($items as $item) {
+            $prodId = (int) ($item['item_id'] ?? 0);
+            $barcode = trim((string) ($item['barcode'] ?? ''));
+            if ($prodId <= 0 || $barcode === '' || !ctype_digit($barcode) || $date === '') {
+                continue;
+            }
+            $mrp = round((float) ($item['sale_mrp'] ?? 0), 2);
+            if ($mrp <= 0) {
+                $sold = $conn->selectOne(
+                    'SELECT IFNULL(MAX(MRP), 0) AS MRP FROM trns_stockinout WHERE Barcode = ? AND Stock_Type = 3',
+                    [$barcode]
+                );
+                $mrp = round((float) ($sold->MRP ?? 0), 2);
+            }
+            $conn->statement("
+                UPDATE trns_stockinout
+                SET Barcode = ?,
+                    MRP = CASE WHEN IFNULL(MRP, 0) = 0 THEN ? ELSE MRP END
+                WHERE Stock_Type = 8
+                  AND Prod_Id = ?
+                  AND IFNULL(Barcode, 0) = 0
+                  AND InOut_Date = ?
+                ORDER BY Stock_Id ASC
+                LIMIT 1
+            ", [$barcode, $mrp, $prodId, $date]);
+        }
+    }
+
+    /**
+     * A purchase return saved without a barcode (often MRP 0) still reduces
+     * that product's barcode. A matching MRP with one barcode is already included.
+     */
+    private function applyUnbarcodedPurchaseReturns(array $rows, int $prodId, string $date): void
+    {
+        if ($rows === []) {
+            return;
+        }
+
+        $returns = DB::connection('coops')->select("
+            SELECT
+                CAST(IFNULL(s.MRP, 0) AS DECIMAL(10,2)) AS MRP,
+                IFNULL(SUM(s.Quantity), 0) AS Qty
+            FROM trns_stockinout s
+            WHERE s.Prod_Id = ?
+              AND s.InOut_Date <= ?
+              AND s.Stock_Type = 7
+              AND IFNULL(s.Barcode, 0) = 0
+            GROUP BY CAST(IFNULL(s.MRP, 0) AS DECIMAL(10,2))
+        ", [$prodId, $date]);
+
+        $countByMrp = [];
+        foreach ($rows as $row) {
+            $key = number_format((float) $row->MRP, 2, '.', '');
+            $countByMrp[$key] = ($countByMrp[$key] ?? 0) + 1;
+        }
+
+        foreach ($returns as $ret) {
+            $qty = (float) $ret->Qty;
+            if ($qty == 0.0) {
+                continue;
+            }
+            $key = number_format((float) $ret->MRP, 2, '.', '');
+            if ((float) $ret->MRP > 0 && ($countByMrp[$key] ?? 0) === 1) {
+                continue;
+            }
+
+            $target = null;
+            if ((float) $ret->MRP > 0) {
+                foreach ($rows as $row) {
+                    if (number_format((float) $row->MRP, 2, '.', '') === $key) {
+                        $target = $row;
+                        break;
+                    }
+                }
+            }
+            if ($target === null) {
+                $target = $rows[0];
+            }
+            $target->Avil_Qnty = round((float) $target->Avil_Qnty - $qty, 2);
+        }
+    }
+
     public function getItemByBarcode(Request $request)
     {
         try {
@@ -566,11 +842,33 @@ class Sales extends Controller
             Config::set('database.connections.coops.database', session('org_schema'));
             DB::purge('coops');
 
-            $result = $this->resolveUniqueProductInfo($barcode, (string) $date);
-            if (!empty($result)) {
-                return response()->json($this->attachSaleRates($result[0], (int) $result[0]->Prod_Id));
+            if ($barcode === '' || !ctype_digit($barcode)) {
+                return response()->json(['error' => 'Invalid Code Entered !!'], 404);
             }
-            return response()->json(['error' => 'Invalid Code Entered !!'], 404);
+
+            $result = $this->prodInfoByBarcode($barcode, (string) $date);
+            if (empty($result)) {
+                return response()->json(['error' => 'Invalid Code Entered !!'], 404);
+            }
+
+            $item = $result[0];
+            $matched = false;
+            foreach ($this->officeBarcodeStock((int) $item->Prod_Id, (string) $date, false) as $row) {
+                if ((string) $row->Barcode === $barcode) {
+                    $item->Avil_Qnty = max(0, round((float) $row->Avil_Qnty, 2));
+                    $item->MRP = $row->MRP;
+                    $matched = true;
+                    break;
+                }
+            }
+            if (!$matched) {
+                return response()->json(['error' => 'Invalid Code Entered !!'], 404);
+            }
+
+            $item->Barcode = $barcode;
+            $mrp = round((float) ($item->MRP ?? 0), 2);
+            $item->Sale_Rates = $mrp > 0 ? [$mrp] : [];
+            return response()->json($item);
         } catch (\Exception $e) {
             Log::error('Counter Sale Barcode Error: ' . $e->getMessage());
             return response()->json(['error' => 'Error fetching product details'], 500);
@@ -615,8 +913,9 @@ class Sales extends Controller
             'disc_percent' => 'nullable|numeric',
             'round_off'    => 'nullable|numeric',
             'net_amt'      => 'nullable|numeric',
-            'items.*.quantity' => 'required|numeric|max:99999999.99|min:0.01',
+            'items.*.quantity' => 'required|integer|min:1|max:99999999',
             'items.*.rate'     => 'required|numeric|max:99999999.99|min:0',
+            'items.*.barcode'  => ['required', 'regex:/^[0-9]+$/'],
             'vouch_id' => 'nullable|integer',
         ]);
 
@@ -636,7 +935,27 @@ class Sales extends Controller
         }
 
         Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
         $conn = DB::connection('coops');
+
+        foreach ($request->items as $item) {
+            $barcode = trim((string) ($item['barcode'] ?? ''));
+            $available = null;
+            foreach ($this->officeBarcodeStock((int) $item['item_id'], (string) $request->sale_date, false) as $row) {
+                if ((string) $row->Barcode === $barcode) {
+                    $available = (float) $row->Avil_Qnty;
+                    break;
+                }
+            }
+            $qty = (float) $item['quantity'];
+            if ($available === null || $qty > $available + 0.0001) {
+                $left = max(0, (float) $available);
+                return response()->json([
+                    'error' => 'You cannot sell this product as available quantity = ' . $left,
+                ], 400);
+            }
+        }
+
         $conn->beginTransaction();
 
         try {
@@ -657,12 +976,13 @@ class Sales extends Controller
             cgst_perc NUMERIC(5,2),
             cgst_amt  NUMERIC(10,2),
             net_amt   NUMERIC(10,2),
-            Pack_Date DATE NULL
+            Pack_Date DATE NULL,
+            barcode   BIGINT NULL
         )');
 
             // Insert each item into temp table
             foreach ($request->items as $item) {
-                $conn->insert('INSERT INTO temppurchase VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+                $conn->insert('INSERT INTO temppurchase VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                     $item['item_id'],
                     $item['hsn_code'],
                     $item['quantity'],
@@ -679,6 +999,7 @@ class Sales extends Controller
                     $item['cgst_amount'],
                     $item['net_amount'],
                     !empty($item['item_sale_date']) ? $item['item_sale_date'] : null,
+                    !empty($item['barcode']) ? $item['barcode'] : null,
                 ]);
             }
 
@@ -723,6 +1044,18 @@ class Sales extends Controller
                 return response()->json(['error' => $result[0]->Message ?? 'Save failed'], 400);
             }
 
+            // Edit mode writes the item lines with an unset sale id, so Trading_Id is NULL.
+            if ($mode === 2 && $saleId > 0) {
+                $conn->update(
+                    'UPDATE trans_trading_products SET Trading_Id = ? WHERE Trading_Id IS NULL',
+                    [$saleId]
+                );
+                $conn->update(
+                    'UPDATE trans_trading_gst SET Trading_Id = ? WHERE Trading_Id IS NULL',
+                    [$saleId]
+                );
+            }
+
             $conn->commit();
 
             // Check if bill data is available
@@ -755,13 +1088,76 @@ class Sales extends Controller
             }
 
             $row = $result[0];
-            $row->Item_Details = json_decode($row->Item_Details, true);
+            $row->Item_Details = $this->saleLineItems((int) $id);
 
             return response()->json($row);
         } catch (\Exception $e) {
             Log::error('Counter Sale Details Error: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load sale details'], 500);
         }
+    }
+
+    /**
+     * One row per sale line. The details procedure joins every stock row of the
+     * same product, and returns no items at all when a line has no stock row.
+     */
+    private function saleLineItems(int $tradingId): array
+    {
+        $rows = DB::connection('coops')->select("
+            SELECT
+                p.Prod_Id,
+                i.Cate_Id AS Cat_Id,
+                i.Prod_ShortNm AS Prod_Name,
+                p.Gst_Code AS hsn_code,
+                p.Item_Qty AS qnty,
+                p.Item_Rate,
+                p.Unit_Id,
+                UDF_GET_UNIT_NAME(p.Unit_Id) AS Unit_Name,
+                p.Item_Total,
+                p.MRP,
+                p.Disc_Prcnt,
+                p.Disc_Amt,
+                p.Taxable_Amt,
+                p.SGST_Prcnt,
+                p.CGST_Prcnt,
+                p.SGST_Amt,
+                p.CGST_Amt,
+                p.Net_Amt,
+                s.Pack_Date,
+                s.Barcode
+            FROM (
+                SELECT tp.*,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY tp.Prod_Id, tp.Item_Qty, ROUND(tp.Item_Rate, 2), ROUND(IFNULL(tp.MRP, 0), 2)
+                           ORDER BY tp.Sl
+                       ) AS line_no
+                FROM trans_trading_products tp
+                WHERE tp.Trading_Id = ?
+            ) p
+            JOIN mst_product i ON i.Prod_Id = p.Prod_Id
+            LEFT JOIN (
+                SELECT
+                    st.Prod_Id,
+                    st.Quantity,
+                    ROUND(st.Rate, 2) AS Rate,
+                    ROUND(IFNULL(st.MRP, 0), 2) AS MRP,
+                    st.Pack_Date,
+                    st.Barcode,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY st.Prod_Id, st.Quantity, ROUND(st.Rate, 2), ROUND(IFNULL(st.MRP, 0), 2)
+                        ORDER BY st.Stock_Id
+                    ) AS line_no
+                FROM trns_stockinout st
+                WHERE st.Type_Id = ?
+            ) s ON s.Prod_Id = p.Prod_Id
+               AND s.Quantity = p.Item_Qty
+               AND s.Rate = ROUND(p.Item_Rate, 2)
+               AND s.MRP = ROUND(IFNULL(p.MRP, 0), 2)
+               AND s.line_no = p.line_no
+            ORDER BY p.Sl
+        ", [$tradingId, $tradingId]);
+
+        return array_map(static fn ($row) => (array) $row, $rows);
     }
 
 
@@ -781,20 +1177,58 @@ class Sales extends Controller
     {
         try {
             $barcode = trim((string) $request->input('barcode'));
-            $date = $request->input('sale_date');
+            $date = (string) $request->input('sale_date');
 
             Config::set('database.connections.coops.database', session('org_schema'));
             DB::purge('coops');
 
-            $result = $this->resolveUniqueProductInfo($barcode, (string) $date);
-            if (!empty($result)) {
-                return response()->json($this->attachSaleRates($result[0], (int) $result[0]->Prod_Id));
+            if ($barcode === '' || !ctype_digit($barcode)) {
+                return response()->json(['error' => 'Invalid Code Entered !!'], 404);
             }
-            return response()->json(['error' => 'Invalid Code Entered !!'], 404);
+
+            $sold = $this->soldBarcodesForReturn(0, $date, 0, $barcode);
+            if ($sold === []) {
+                return response()->json(['error' => 'This barcode was not sold'], 404);
+            }
+            if ((float) $sold[0]->Returnable_Qty <= 0) {
+                return response()->json(['error' => 'Nothing is left to return for this barcode'], 400);
+            }
+
+            $result = $this->prodInfoByItem((int) $sold[0]->Prod_Id, $date);
+            if (empty($result)) {
+                return response()->json(['error' => 'Invalid Code Entered !!'], 404);
+            }
+
+            $item = $result[0];
+            $item->Barcode = $barcode;
+            $item->MRP = $sold[0]->MRP;
+            $item->Rate = $sold[0]->Rate;
+            $item->Returnable_Qty = $sold[0]->Returnable_Qty;
+            return response()->json($item);
         } catch (\Exception $e) {
             Log::error('Sale Return Barcode Error: ' . $e->getMessage());
             return response()->json(['error' => 'Error fetching product details'], 500);
         }
+    }
+
+    public function saleReturnBarcodes(Request $request)
+    {
+        $prodId = (int) $request->input('prod_id', 0);
+        $date = (string) $request->input('sale_date');
+        $saleId = (int) $request->input('sale_id', 0);
+        if ($prodId <= 0 || $date === '') {
+            return response()->json(['error' => 'Product and sale date are required'], 400);
+        }
+
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+
+        $rows = array_values(array_filter(
+            $this->soldBarcodesForReturn($prodId, $date, 0, '', $saleId),
+            fn ($row) => (float) $row->Returnable_Qty > 0
+        ));
+
+        return response()->json($rows);
     }
 
     public function storeSaleReturn(Request $request)
@@ -812,6 +1246,7 @@ class Sales extends Controller
             'net_amt'      => 'nullable|numeric',
             'items.*.quantity' => 'required|numeric|max:99999999.99|min:0.01',
             'items.*.rate'     => 'required|numeric|max:99999999.99|min:0',
+            'items.*.barcode'  => ['required', 'regex:/^[0-9]+$/'],
         ]);
 
         $yearStart = session('year_start');
@@ -830,7 +1265,30 @@ class Sales extends Controller
         }
 
         Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
         $conn = DB::connection('coops');
+
+        $excludeReturnId = (int) $request->input('sale_id', 0);
+        $returnQtyByBarcode = [];
+        foreach ($request->items as $item) {
+            $barcode = trim((string) ($item['barcode'] ?? ''));
+            if ($barcode === '' || !ctype_digit($barcode)) {
+                return response()->json(['error' => 'Select a barcode before returning'], 400);
+            }
+            $key = (int) ($item['item_id'] ?? 0) . '|' . $barcode;
+            $returnQtyByBarcode[$key] = ($returnQtyByBarcode[$key] ?? 0) + (float) $item['quantity'];
+        }
+        foreach ($returnQtyByBarcode as $key => $qty) {
+            [$prodId, $barcode] = explode('|', $key, 2);
+            $allowed = $this->barcodeReturnableQty((int) $prodId, $barcode, (string) $request->sale_date, $excludeReturnId);
+            if ($qty > $allowed + 0.0001) {
+                $left = rtrim(rtrim(number_format($allowed, 2, '.', ''), '0'), '.');
+                return response()->json([
+                    'error' => 'Return quantity cannot exceed the sold quantity of this barcode. Quantity available to return = ' . $left,
+                ], 400);
+            }
+        }
+
         $conn->beginTransaction();
 
         try {
@@ -916,6 +1374,8 @@ class Sales extends Controller
                 return response()->json(['error' => $result[0]->Message ?? 'Save failed'], 400);
             }
 
+            $this->assignSaleReturnBarcodes($conn, $request->items, (string) $request->input('sale_date'));
+
             $conn->commit();
 
             return response()->json([
@@ -966,7 +1426,7 @@ class Sales extends Controller
             }
 
             $row = $result[0];
-            $row->Item_Details = json_decode($row->Item_Details, true);
+            $row->Item_Details = $this->saleLineItems((int) $id);
 
             return response()->json($row);
         } catch (\Exception $e) {

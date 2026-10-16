@@ -67,8 +67,19 @@ class AgentSale extends Controller
             }
             if (!empty($result)) {
                 $item = $result[0];
-                $item->Avil_Qnty = $this->agentAvailableQty((int) $item->Prod_Id, $date);
-                return response()->json($this->attachSaleRates($item, (int) $item->Prod_Id));
+                $held = $this->agentBarcodeRow((int) $item->Prod_Id, (string) $date, $code);
+                if (!$held) {
+                    return response()->json(['error' => 'Invalid Code Entered !!'], 404);
+                }
+                $item->Avil_Qnty = $held->Avil_Qnty;
+                if ((float) $held->MRP > 0) {
+                    $item->MRP = $held->MRP;
+                    $item->Rate = $held->MRP;
+                }
+                $item->Barcode = $code;
+                $mrp = round((float) ($item->MRP ?? 0), 2);
+                $item->Sale_Rates = $mrp > 0 ? [$mrp] : [];
+                return response()->json($item);
             }
             return response()->json(['error' => 'Invalid Code Entered !!'], 404);
         } catch (\Exception $e) {
@@ -98,6 +109,82 @@ class AgentSale extends Controller
             (string) ($request->input('code') ?? '')
         );
         return response()->json($items);
+    }
+
+    public function productBarcodes(Request $request)
+    {
+        $prodId = (int) $request->input('prod_id', 0);
+        $date = $this->toIsoDate($request->input('sale_date'));
+        if ($prodId <= 0 || !$date) {
+            return response()->json(['error' => 'Product and sale date are required'], 400);
+        }
+
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+
+        return response()->json($this->agentProductBarcodes($prodId, $date));
+    }
+
+    /**
+     * Barcodes held by this agent. Quantity is indent stock issued to the agent
+     * (issue minus office return, agent sale, plus customer return), not office stock.
+     */
+    private function agentProductBarcodes(int $prodId, string $date): array
+    {
+        return DB::connection('coops')->select("
+            SELECT
+                x.Barcode AS Barcode,
+                CAST(MAX(x.MRP) AS DECIMAL(10,2)) AS MRP,
+                SUM(x.Qty) AS Avil_Qnty
+            FROM (
+                SELECT
+                    COALESCE(NULLIF(s.Barcode, 0), (
+                        SELECT p.Barcode
+                          FROM trns_stockinout p
+                         WHERE p.Prod_Id = s.Prod_Id
+                           AND p.Stock_Type IN (1, 2)
+                           AND IFNULL(p.Barcode, 0) <> 0
+                           AND (IFNULL(s.MRP, 0) = 0 OR ROUND(p.MRP, 2) = ROUND(s.MRP, 2))
+                         ORDER BY (p.Stock_Type = 2) DESC, p.Stock_Id DESC
+                         LIMIT 1
+                    )) AS Barcode,
+                    IFNULL(NULLIF(s.MRP, 0), (
+                        SELECT p.MRP
+                          FROM trns_stockinout p
+                         WHERE p.Prod_Id = s.Prod_Id
+                           AND p.Stock_Type IN (1, 2)
+                           AND IFNULL(p.Barcode, 0) <> 0
+                           AND (IFNULL(s.MRP, 0) = 0 OR ROUND(p.MRP, 2) = ROUND(s.MRP, 2))
+                         ORDER BY (p.Stock_Type = 2) DESC, p.Stock_Id DESC
+                         LIMIT 1
+                    )) AS MRP,
+                    CASE
+                        WHEN s.Stock_Type IN (4, 8) THEN s.Quantity
+                        WHEN s.Stock_Type IN (5, 6) THEN -s.Quantity
+                        ELSE 0
+                    END AS Qty
+                FROM trns_stockinout s
+                INNER JOIN trans_agent_stock a ON a.TrnsStock_Id = s.Stock_Id
+                WHERE a.Agent_Id = ?
+                  AND a.Prod_Id = ?
+                  AND a.Trans_Date <= ?
+                  AND s.Stock_Type IN (4, 5, 6, 8)
+            ) x
+            WHERE IFNULL(x.Barcode, 0) <> 0
+            GROUP BY x.Barcode
+            HAVING Avil_Qnty > 0
+            ORDER BY MAX(x.MRP) DESC, x.Barcode DESC
+        ", [session('agent_id'), $prodId, $date]);
+    }
+
+    private function agentBarcodeRow(int $prodId, string $date, string $barcode): ?object
+    {
+        foreach ($this->agentProductBarcodes($prodId, $date) as $row) {
+            if ((string) $row->Barcode === (string) $barcode) {
+                return $row;
+            }
+        }
+        return null;
     }
 
     public function getItemByProd(Request $request)

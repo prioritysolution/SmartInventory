@@ -170,7 +170,7 @@
 @endsection
 
 @push('scripts')
-<script src="{{ asset('template/assets/js/address-master-form.js') }}?v=2"></script>
+<script src="{{ asset('template/assets/js/address-master-form.js') }}?v=3"></script>
 <script>
 $(document).ready(function () {
 

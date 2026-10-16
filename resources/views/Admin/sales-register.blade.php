@@ -49,48 +49,11 @@
                 </div>
             </div>
 
-            <div class="card">
-                <div class="card-body">
-                    <div class="table-responsive report-scroll">
-                        <table id="reportTable" class="table table-nowrap">
-                            <thead class="thead-light">
-                                <tr id="reportHead"></tr>
-                            </thead>
-                            <tbody id="reportBody">
-                                <tr>
-                                    <td class="text-center text-muted">Select filters and click Search</td>
-                                </tr>
-                            </tbody>
-                            <tfoot>
-                                <tr id="reportFoot"></tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                </div>
-            </div>
+            @include('Admin.partials.billwise-register', [
+                'searchUrl' => route('sales-register.search'),
+                'reportTitle' => 'Billwise Sale Register',
+                'extraFields' => ['mode' => '#modeId', 'cat_id' => '#cateId'],
+            ])
         </div>
     </div>
 @endsection
-
-@push('scripts')
-    @php
-        $reportCfg = [
-            'slug' => 'sales-register',
-            'title' => 'Sales Register',
-            'searchUrl' => route('sales-register.search'),
-            'extraParams' => ['cat_id' => '#cateId'],
-            'columns' => [
-                ['key' => 'Invoice_No', 'label' => 'Invoice No'],
-                ['key' => 'Invoice_Date', 'label' => 'Date', 'type' => 'date'],
-                ['key' => 'Sale_Type', 'label' => 'Type'],
-                ['key' => 'Party_Name', 'label' => 'Customer'],
-                ['key' => 'Agent_Name', 'label' => 'Agent'],
-                ['key' => 'Taxable_Amt', 'label' => 'Taxable', 'type' => 'amount'],
-                ['key' => 'GST_Amt', 'label' => 'GST', 'type' => 'amount'],
-                ['key' => 'Net_Amt', 'label' => 'Net Amt', 'type' => 'amount'],
-            ],
-            'totals' => ['Taxable_Amt', 'GST_Amt', 'Net_Amt'],
-        ];
-    @endphp
-    @include('Admin.report-table-script')
-@endpush

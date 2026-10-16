@@ -27,6 +27,15 @@ public function getPendingBarcodeList($mode)
             'org_schema' => session('org_schema'),
         ]);
         $data = DB::connection('coops')->select('CALL USP_GET_PENDING_BARCODE_LIST(?)', [$mode]);
+        if ((int) $mode === 2) {
+            usort($data, function ($a, $b) {
+                $byDate = strcmp((string) ($b->Invoice_Date ?? ''), (string) ($a->Invoice_Date ?? ''));
+                if ($byDate !== 0) {
+                    return $byDate;
+                }
+                return ((int) ($b->Trading_Id ?? 0)) <=> ((int) ($a->Trading_Id ?? 0));
+            });
+        }
         Log::channel('trading')->info('getPendingBarcodeList result', ['count' => count($data), 'data' => $data]);
         return response()->json($data);
     } catch (\Exception $e) {

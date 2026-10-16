@@ -73,6 +73,8 @@ class ProcessLogin extends Controller
                 'user_id' => $userData->User_Id,
                 'user_code' => $userData->User_Code,
                 'user_name' => $userData->User_FullName,
+                'user_phone' => $userData->Contact_No ?? '',
+                'user_email' => $userData->Email_Id ?? '',
                 'user_group_id' => $userData->UGrp_Id,
                 'is_admin' => isset($userData->Is_Admin) ? (bool)$userData->Is_Admin : ($userData->UGrp_Id == 1),
                 'branch_id' => $userData->Branch_Id,

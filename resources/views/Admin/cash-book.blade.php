@@ -59,6 +59,7 @@
                             <tfoot id="reportFoot"></tfoot>
                         </table>
                     </div>
+                    <div class="text-end fw-semibold mt-3" id="closingWords"></div>
                 </div>
             </div>
         </div>
@@ -80,9 +81,48 @@
             return (window.siDate && siDate.toDisplay) ? siDate.toDisplay(val) : (val || '');
         }
 
+        function closingWords(amount) {
+            var num = Math.round((parseFloat(amount) || 0) * 100) / 100;
+            var negative = num < 0;
+            num = Math.abs(num);
+            var rupees = Math.floor(num);
+            var paise = Math.round((num - rupees) * 100);
+            var ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+                'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+            var tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+            function twoDigits(n) {
+                if (n < 20) return ones[n];
+                return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+            }
+            function threeDigits(n) {
+                if (n < 100) return twoDigits(n);
+                var rest = n % 100;
+                return ones[Math.floor(n / 100)] + ' Hundred' + (rest ? ' and ' + twoDigits(rest) : '');
+            }
+            function toWords(n) {
+                if (n === 0) return 'Zero';
+                var crore = Math.floor(n / 10000000);
+                var lakh = Math.floor((n % 10000000) / 100000);
+                var thousand = Math.floor((n % 100000) / 1000);
+                var rest = n % 1000;
+                var parts = [];
+                if (crore) parts.push(twoDigits(crore) + ' Crore');
+                if (lakh) parts.push(twoDigits(lakh) + ' Lakh');
+                if (thousand) parts.push(twoDigits(thousand) + ' Thousand');
+                if (rest) parts.push(threeDigits(rest));
+                return parts.join(' ');
+            }
+            var text = (negative ? 'Minus ' : '') + (rupees === 0 && paise > 0 ? '' : toWords(rupees));
+            if (paise > 0) {
+                text += (text.trim() ? ' and ' : '') + twoDigits(paise) + ' Paise';
+            }
+            return 'Closing Cash Balance in Word : ' + text.trim() + ' Only';
+        }
+
         function resetTable(message, isError) {
             printData = null;
             $('#printBtn').prop('disabled', true);
+            $('#closingWords').text('');
             const cls = isError ? 'text-danger' : 'text-muted';
             $('#reportBody').html(`<tr><td colspan="7" class="text-center ${cls}">${message}</td></tr>`);
             $('#reportFoot').html('');
@@ -171,6 +211,7 @@
                     <td class="text-end">${fmtAmt(pay + closing)}</td>
                 </tr>
             `);
+            $('#closingWords').text(closingWords(closing));
         }
 
         function printReport() {
@@ -242,6 +283,7 @@
                         </tr>
                     </tbody>
                 </table>
+                <p style="text-align:right; font-weight:bold; margin-top:16px;">${closingWords(closing)}</p>
                 <div class="sign"><span>Secretary / Treasurer</span><span>Accountant</span></div>
                 </body></html>`);
         }

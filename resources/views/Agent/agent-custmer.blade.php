@@ -267,11 +267,11 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="billContent"></div>
-            <div class="modal-footer">
+            <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 <button type="button" class="btn btn-primary" onclick="printBill()">
                     <i class="fa fa-print"></i> Print
                 </button>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -1075,50 +1075,52 @@
 
     function printBill() {
         const billHtml = document.getElementById('billContent').innerHTML;
-        let iframe = document.getElementById('printFrame');
-        if (iframe) iframe.remove();
-        iframe = document.createElement('iframe');
-        iframe.id = 'printFrame';
-        iframe.setAttribute('aria-hidden', 'true');
-        iframe.style.cssText = 'position:fixed;top:0;left:0;width:58mm;height:500mm;border:0;opacity:0;pointer-events:none;z-index:-1;';
-        document.body.appendChild(iframe);
-        const doc = iframe.contentWindow.document;
-        doc.open();
-        doc.write(`<!DOCTYPE html>
+        let frame = document.getElementById('printFrame');
+        if (frame) frame.remove();
+        frame = document.createElement('iframe');
+        frame.id = 'printFrame';
+        frame.setAttribute('aria-hidden', 'true');
+        frame.style.cssText = 'position:fixed;left:-1200px;top:0;width:420px;height:700px;border:0;';
+        document.body.appendChild(frame);
+        const win = frame.contentWindow;
+        win.document.open();
+        win.document.write(`<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
+<title>Bill</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-@page { size: 58mm 400mm; margin: 2mm 1.5mm; }
-html, body { margin: 0; padding: 0; width: 58mm; }
-body { width: 58mm; }
-.bill-container { width: 54mm; max-width: 54mm; margin: 0 auto; font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #000; line-height: 1.25; word-wrap: break-word; }
+@page { size: 72mm 190mm; margin: 0; }
+html, body { margin: 0; padding: 0; width: 46mm; background: #fff; color: #000; }
+body { width: 46mm; }
+.bill-container { width: 46mm; max-width: 46mm; margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 9px; color: #000; line-height: 1.25; word-wrap: break-word; }
 .bill-header { text-align:center; padding-bottom:2px; }
-.bill-header h3 { font-size:11px; font-weight:bold; text-transform:uppercase; margin:0; line-height:1.2; }
-.bill-header p { font-size:9px; margin:2px 0 0; }
-.bill-title { text-align:center; font-weight:bold; text-decoration:underline; text-transform:uppercase; letter-spacing:1px; margin:4px 0 6px; font-size:11px; }
-.bill-meta { display:block; overflow:hidden; margin:2px 0; font-size:9px; }
-.bill-meta span { display:inline-block; width:49%; vertical-align:top; }
-.bill-meta span:last-child { text-align:right; }
-.bill-customer, .bill-agent { margin:3px 0 6px; font-size:9px; }
-.items-table { width:100%; border-collapse:collapse; font-size:9px; }
-.items-table th, .items-table td { border:1px dashed #000; padding:2px 3px; text-align:left; vertical-align:top; }
+.bill-header h3 { font-size:9px; font-weight:bold; text-transform:uppercase; margin:0 auto; line-height:1.25; text-align:center; word-break:break-word; }
+.bill-header p { font-size:8px; margin:2px 0 0; text-align:center; }
+.bill-title { text-align:center; font-weight:bold; text-decoration:underline; text-transform:uppercase; letter-spacing:1px; margin:4px 0 6px; font-size:10px; }
+.bill-meta { display:block; overflow:hidden; margin:2px 0; font-size:8px; }
+.bill-meta span { display:block; width:100%; text-align:left; }
+.bill-meta span:last-child { text-align:left; }
+.bill-customer, .bill-agent { margin:3px 0 6px; font-size:8px; word-break:break-word; }
+.items-table { width:100%; border-collapse:collapse; font-size:8px; table-layout:fixed; }
+.items-table th, .items-table td { border:1px dashed #000; padding:2px 2px; text-align:left; vertical-align:top; }
 .items-table th { font-weight:bold; text-transform:uppercase; }
 .items-table .item-name { word-break:break-word; }
 .text-right { text-align:right; white-space:nowrap; }
 .text-center { text-align:center; white-space:nowrap; }
-.bill-words { font-size:8px; line-height:1.2; }
-.bill-signature { margin-top:14px; font-size:9px; }
+.bill-words { font-size:7px; line-height:1.2; white-space:normal; word-break:break-word; }
+.bill-signature { margin-top:12px; font-size:8px; }
 </style>
 </head>
 <body>${billHtml}</body>
 </html>`);
-        doc.close();
+        win.document.close();
+        win.onafterprint = function () { frame.remove(); };
         setTimeout(function () {
-            iframe.contentWindow.focus();
-            iframe.contentWindow.print();
-        }, 150);
+            win.focus();
+            win.print();
+        }, 300);
     }
 
     function showBillModal(billData) {

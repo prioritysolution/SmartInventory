@@ -49,49 +49,11 @@
                 </div>
             </div>
 
-            <div class="card">
-                <div class="card-body">
-                    <div class="table-responsive report-scroll">
-                        <table id="reportTable" class="table table-nowrap">
-                            <thead class="thead-light">
-                                <tr id="reportHead"></tr>
-                            </thead>
-                            <tbody id="reportBody">
-                                <tr>
-                                    <td class="text-center text-muted">Select filters and click Search</td>
-                                </tr>
-                            </tbody>
-                            <tfoot>
-                                <tr id="reportFoot"></tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                </div>
-            </div>
+            @include('Admin.partials.billwise-register', [
+                'searchUrl' => route('purchase-register.search'),
+                'reportTitle' => 'Billwise Purchase Register',
+                'extraFields' => ['party_id' => '#partyId', 'gst_filter' => '#gstFilter'],
+            ])
         </div>
     </div>
 @endsection
-
-@push('scripts')
-    @php
-        $reportCfg = [
-            'slug' => 'purchase-register',
-            'title' => 'Purchase Register',
-            'searchUrl' => route('purchase-register.search'),
-            'extraParams' => ['gst_filter' => '#gstFilter'],
-            'columns' => [
-                ['key' => 'Invoice_No', 'label' => 'Invoice No'],
-                ['key' => 'Invoice_Date', 'label' => 'Date', 'type' => 'date'],
-                ['key' => 'Party_Name', 'label' => 'Supplier'],
-                ['key' => 'GstIn', 'label' => 'GSTIN'],
-                ['key' => 'Invoice_Amt', 'label' => 'Invoice Amt', 'type' => 'amount'],
-                ['key' => 'Disc_Amount', 'label' => 'Discount', 'type' => 'amount'],
-                ['key' => 'Taxable_Amt', 'label' => 'Taxable', 'type' => 'amount'],
-                ['key' => 'GST_Amt', 'label' => 'GST', 'type' => 'amount'],
-                ['key' => 'Net_Amt', 'label' => 'Net Amt', 'type' => 'amount'],
-            ],
-            'totals' => ['Invoice_Amt', 'Disc_Amount', 'Taxable_Amt', 'GST_Amt', 'Net_Amt'],
-        ];
-    @endphp
-    @include('Admin.report-table-script')
-@endpush

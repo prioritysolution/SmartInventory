@@ -15,6 +15,16 @@
         #itemPickerTable tbody tr:hover {
             background-color: #e8f4ff;
         }
+
+        #itemDropdown {
+            z-index: 1000;
+            max-height: 280px;
+            overflow-y: auto;
+            width: 100%;
+            top: calc(100% + 2px);
+            left: 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+        }
     </style>
 @endpush
 
@@ -36,7 +46,7 @@
 
             <input type="hidden" id="indentId" value="0">
 
-            <div class="row g-3 mb-3">
+            <div class="row g-3 mb-3 align-items-end">
                 <div class="col-md-3">
                     <label class="form-label">Date <span class="text-danger">*</span></label>
                     <input type="date" id="indentDate" class="form-control"
@@ -46,18 +56,17 @@
                 </div>
                 <div class="col-md-5">
                     <label class="form-label">Select Item <span class="text-danger">*</span></label>
-                    <div class="input-group" style="position:relative;">
-                        <input type="text" id="itemSearch" class="form-control" placeholder="Scan barcode or product code" autocomplete="off">
-                       <button class="btn btn-primary" type="button" id="itemSearchBtn">
-                          <i class="fas fa-search"></i>
-                       </button>
-
-                        <input type="hidden" id="selectedItemId">
-                        <input type="hidden" id="selectedUnitId">
-                        <div id="itemDropdown" class="list-group position-absolute"
-                            style="display:none;z-index:1000;max-height:300px;overflow-y:auto;width:100%;top:100%;left:0;box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+                    <div class="position-relative">
+                        <div class="input-group">
+                            <input type="text" id="itemSearch" class="form-control" placeholder="Product code or name" autocomplete="off">
+                            <button class="btn btn-primary" type="button" id="itemSearchBtn">
+                                <i class="fas fa-search"></i>
+                            </button>
                         </div>
+                        <div id="itemDropdown" class="list-group position-absolute" style="display:none;"></div>
                     </div>
+                    <input type="hidden" id="selectedItemId">
+                    <input type="hidden" id="selectedUnitId">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Unit</label>
@@ -69,12 +78,12 @@
                 </div>
             </div>
 
-            <div class="row g-3 mb-3">
-                <div class="col-md-8">
+            <div class="row g-3 mb-3 align-items-end">
+                <div class="col-lg-8 col-md-8">
                     <label class="form-label">Remarks</label>
                     <input type="text" id="remarks" class="form-control" maxlength="100">
                 </div>
-                <div class="col-md-2 d-flex align-items-end">
+                <div class="col-lg-2 col-md-3 ms-auto">
                     <button class="btn btn-success w-100" onclick="addItem()">Add</button>
                 </div>
             </div>
@@ -236,6 +245,21 @@
                 openItemPickerModal([], '');
                 return;
             }
+            if (/^\d+$/.test(code)) {
+                $.get(baseUrl + '/agent/requisition/barcode', {
+                    barcode: code,
+                    date: $('#indentDate').val()
+                }).done(function (item) {
+                    selectRequisitionItem(item);
+                }).fail(function () {
+                    searchRequisitionItems(code);
+                });
+                return;
+            }
+            searchRequisitionItems(code);
+        });
+
+        function searchRequisitionItems(code) {
             $.get(baseUrl + '/agent/requisition/items', {
                 code: code,
                 cat_id: 0,
@@ -258,7 +282,7 @@
             }).fail(function () {
                 openItemPickerModal([], code);
             });
-        });
+        }
 
         $('#modalCateId').on('change', function () {
             const catId = parseInt($(this).val()) || 0;
@@ -335,10 +359,10 @@
         $('#itemSearch').on('input', function () {
             if ($(this).val().trim() === '') $('#itemDropdown').hide();
             if ($('#selectedItemId').val()) {
-        $('#selectedItemId').val('');
-        $('#selectedUnitId').val('');
-        $('#selectedUnitName').val('');
-    }
+                $('#selectedItemId').val('');
+                $('#selectedUnitId').val('');
+                $('#selectedUnitName').val('');
+            }
         });
 
         $(document).on('click', function (e) {
@@ -506,12 +530,13 @@ $('#reqSearchModal').on('hidden.bs.modal', function () {
                         .text(item.Item_Name)
                         .on('click', function (e) {
                             e.preventDefault();
-                            $('#itemSearch').val(item.Item_Name);
-                            $('#selectedItemId').val(item.Prod_Id);
-                            $('#selectedUnitId').val(item.Unit_Id);
-                            $('#selectedUnitName').val(item.Unit_Name);
+                            selectRequisitionItem({
+                                Prod_Id: item.Prod_Id,
+                                Prod_ShortNm: item.Item_Name,
+                                Unit_Id: item.Unit_Id,
+                                Unit_Name: item.Unit_Name
+                            });
                             $('#itemDropdown').hide();
-                            $('#itemQty').focus();
                         })
                 );
             });
@@ -528,7 +553,7 @@ $('#reqSearchModal').on('hidden.bs.modal', function () {
 
         if (!itemId)         { Swal.fire('Error', 'Please select an item', 'error'); return; }
         if (!qty || qty < 1) { Swal.fire('Error', 'Enter a valid quantity', 'error'); return; }
-        if (itemList.find(i => i.item_id == itemId)) { Swal.fire('Error', 'Item already added', 'error'); return; }
+        if (itemList.find(i => String(i.item_id) === String(itemId))) { Swal.fire('Error', 'This item is already added', 'error'); return; }
 
         itemList.push({ item_id: itemId, item_name: itemName, unit_id: unitId, unit_name: unitName, qnty: qty });
         renderItemTable();

@@ -152,6 +152,36 @@
                          </div>
                      </div>
 
+                     <!-- Support notices -->
+                     <div class="dropdown me-2">
+                         <a href="#" data-support-bell class="btn btn-menubar position-relative" title="Support notices"
+                             data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-label="Support notices">
+                             <i class="isax isax-notification-bing5"></i>
+                             <span class="sp-live-count">0</span>
+                         </a>
+                         <div class="dropdown-menu dropdown-menu-end p-0" style="width:320px;">
+                             <div class="p-2 border-bottom d-flex justify-content-between align-items-center">
+                                 <h6 class="m-0 fs-14 fw-semibold">Support</h6>
+                                 <button type="button" class="btn btn-link btn-sm p-0" id="supportMarkAll">Mark all read</button>
+                             </div>
+                             <div id="supportBellList" style="max-height:320px;overflow-y:auto;">
+                                 <div class="px-3 py-4 text-center text-muted small">No notifications yet</div>
+                             </div>
+                         </div>
+                     </div>
+                     <div class="me-2">
+                         <a href="{{ route('support') }}" data-support-icon title="Support" class="btn btn-menubar position-relative" aria-label="Support">
+                             <i class="fa-solid fa-headset"></i>
+                             <span class="sp-live-count">0</span>
+                         </a>
+                     </div>
+                     <style>
+                         .sp-live-count { display:none; position:absolute; top:2px; right:2px; min-width:16px; height:16px; padding:0 4px; border-radius:10px; background:#c62828; color:#fff; font-size:10px; line-height:16px; text-align:center; }
+                         [data-support-icon].has-news .sp-live-count, [data-support-bell].has-news .sp-live-count { display:inline-block; }
+                         .sp-bell-dot { width:8px; height:8px; border-radius:50%; background:#c62828; display:inline-block; }
+                         .support-row-updated { background:#fff8e1; }
+                     </style>
+
                      <!-- Quick Access -->
                      <div class="me-2">
                          <a href="javascript:void(0);" data-toggle="quick-access" title="Quick Access"

@@ -154,7 +154,8 @@ class AgentOfficeReturn extends Controller
             $conn->statement('CREATE TEMPORARY TABLE tempitem (
                 item_id INT,
                 qnty SMALLINT,
-                unit_id SMALLINT
+                unit_id SMALLINT,
+                barcode BIGINT NULL
             )');
 
             foreach ($request->items as $item) {

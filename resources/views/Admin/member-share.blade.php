@@ -204,7 +204,7 @@
 
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <script src="{{ asset('template/assets/js/address-master-form.js') }}?v=2"></script>
+    <script src="{{ asset('template/assets/js/address-master-form.js') }}?v=3"></script>
     <script>
         const ADM_FEES  = {{ (float) ($shareConfig->adm_fees  ?? 0) }};
         const RATE_SHARE = {{ (float) ($shareConfig->rate_share ?? 0) }};

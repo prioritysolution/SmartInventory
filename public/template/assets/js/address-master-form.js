@@ -113,19 +113,7 @@ window.AddressMasterForm = (function ($) {
         return $.trim($sel.find('option:selected').text());
     }
 
-    function validate(prefix) {
-        prefix = prefix || '';
-        for (let i = 0; i < TYPES.length; i++) {
-            const type = TYPES[i];
-            if (!$(`#${prefix}${type}_id`).val()) {
-                Swal.fire('Validation Error', LABELS[type] + ' is required', 'error');
-                return false;
-            }
-        }
-        if (!$.trim($(`#${prefix}pin_code`).val() || '')) {
-            Swal.fire('Validation Error', 'PIN Code is missing for selected Post Office', 'error');
-            return false;
-        }
+    function validate() {
         return true;
     }
 

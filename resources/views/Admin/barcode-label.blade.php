@@ -204,6 +204,7 @@ $(document).ready(function () {
                     </div>`);
                 dtPurchase = $('#purchaseTable').DataTable({
                     ...dtOptions,
+                    order: [],
                     columnDefs: [{ orderable: false, targets: [0, 4] }]
                 });
             }).fail(function (xhr) {

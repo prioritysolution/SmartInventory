@@ -1412,6 +1412,7 @@
                     unit_id: item.unit_id,
                     quantity: item.quantity,
                     mrp: parseMrpValue(item.mrp),
+                    barcode: item.barcode || '',
                     rejected: 0
                 })),
                 _token: "{{ csrf_token() }}"

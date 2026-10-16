@@ -27,6 +27,26 @@
             background-color: #e8f4ff;
         }
 
+        #barcodePickerTable tbody tr.barcode-pick-row {
+            cursor: pointer;
+        }
+
+        #barcodePickerTable tbody tr.barcode-pick-row:hover {
+            background-color: #e8f4ff;
+        }
+
+        .barcode-picker-scroll {
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .barcode-picker-scroll thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #f6f6f6;
+        }
+
         .section-card {
             border: 1px solid #dee2e6;
             border-radius: 8px;
@@ -100,7 +120,7 @@
                                 <label class="form-label">Product Code<span class="text-danger">*</span></label>
                                 <div class="input-group">
                                     <input type="text" class="form-control" id="productCodeInput"
-                                        placeholder="Enter product code" autocomplete="new-password" maxlength="20">
+                                        placeholder="Product code or barcode" autocomplete="new-password" maxlength="20">
                                     <button class="btn btn-primary" type="button" id="productSearchBtn">
                                         <i class="fa-solid fa-magnifying-glass"></i>
                                     </button>
@@ -139,6 +159,13 @@
                                 <label class="form-label">Available Qty</label>
                                 <input type="text" class="form-control calc-label" id="availQty" readonly>
                             </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Barcode</label>
+                                <input type="text" class="form-control calc-label" id="barcodeDisplay" readonly
+                                    placeholder="Scan or select">
+                                <input type="hidden" id="scannedBarcode">
+                                <input type="hidden" id="scannedMrp">
+                            </div>
                             <div class="col-md-4 mb-3 ms-md-auto">
                                 <label class="form-label d-none d-md-block">&nbsp;</label>
                                 <button type="button" class="btn btn-success w-100 d-block" id="addItemBtn">+ Add
@@ -159,6 +186,7 @@
                                     <tr>
                                         <th>Sl</th>
                                         <th>Item Name</th>
+                                        <th>Barcode</th>
                                         <th>Qty</th>
                                         <th>Unit</th>
                                         <th>Purchase Rate</th>
@@ -168,7 +196,7 @@
                                 </thead>
                                 <tbody id="itemsBody">
                                     <tr>
-                                        <td colspan="7" class="text-center text-muted">No items added</td>
+                                        <td colspan="8" class="text-center text-muted">No items added</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -253,6 +281,33 @@
         </div>
     </div>
 
+    <div class="modal fade" id="barcodePickerModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="barcodePickerTitle">Select Barcode</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive barcode-picker-scroll">
+                        <table class="table table-bordered table-hover table-sm mb-0" id="barcodePickerTable">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Sl</th>
+                                    <th>Barcode</th>
+                                    <th>Item Name</th>
+                                    <th class="text-end">MRP</th>
+                                    <th class="text-end">Available Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="searchModal" tabindex="-1" data-bs-backdrop="static">
         <div class="modal-dialog modal-lg modal-xl-custom">
             <div class="modal-content">
@@ -306,6 +361,7 @@
     <script>
         let itemsArray = [];
         let itemPickerDT = null;
+        let pendingBarcodePick = null;
         const yearStart = @json(session('year_start'));
         const yearEnd = @json(session('year_end'));
 
@@ -320,14 +376,14 @@
         }
 
         function clearItem() {
-            $('#productCodeInput, #itemSelected, #unitDisplay, #quantity, #purchaseRate, #availQty, #totalAmount').val('');
-            $('#selectedItemId, #unitId').val('');
+            $('#productCodeInput, #itemSelected, #unitDisplay, #quantity, #purchaseRate, #availQty, #totalAmount, #barcodeDisplay').val('');
+            $('#selectedItemId, #unitId, #scannedBarcode, #scannedMrp').val('');
         }
 
         function renderItems() {
             if (!itemsArray.length) {
                 $('#itemsBody').html(
-                    '<tr><td colspan="7" class="text-center text-muted">No items added</td></tr>');
+                    '<tr><td colspan="8" class="text-center text-muted">No items added</td></tr>');
                 $('#netTotal').val('0.00');
                 return;
             }
@@ -338,6 +394,7 @@
                 html += `<tr>
                     <td>${i + 1}</td>
                     <td>${item.item_name}</td>
+                    <td>${item.barcode || ''}</td>
                     <td>${fmt(item.quantity)}</td>
                     <td>${item.unit_name || ''}</td>
                     <td>${fmt(item.rate)}</td>
@@ -349,24 +406,78 @@
             $('#netTotal').val(fmt(tot));
         }
 
-        function applyItem(item) {
+        function fillBarcodeLine(item) {
+            $('#productCodeInput').val(item.Prod_Code || '');
+            $('#selectedItemId').val(item.Prod_Id);
+            $('#itemSelected').val(item.Prod_ShortNm || '');
+            $('#unitId').val(item.Unit_Id || '');
+            $('#unitDisplay').val(item.Unit_Name || '');
+            $('#barcodeDisplay').val(item.Barcode || '');
+            $('#scannedBarcode').val(item.Barcode || '');
+            $('#scannedMrp').val(item.MRP || 0);
+            const rate = parseFloat(item.Purchase_Rate) || 0;
+            $('#purchaseRate').val(rate > 0 ? fmt(rate) : '');
+            $('#availQty').val(item.Avil_Qnty ?? 0);
+            calcLine();
+            $('#quantity').focus();
+        }
+
+        function openBarcodePicker(payload) {
+            const item = payload.item || {};
+            const name = item.Prod_ShortNm || '';
+            const rows = payload.barcodes || [];
+            $('#barcodePickerTitle').text(name ? ('Select Barcode — ' + name) : 'Select Barcode');
+            const $body = $('#barcodePickerTable tbody').empty();
+            if (!rows.length) {
+                $body.append(
+                    '<tr><td colspan="5" class="text-center text-muted">No barcode stock found for this product</td></tr>'
+                );
+            } else {
+                rows.forEach(function(row, i) {
+                    const mrp = parseFloat(row.MRP) || 0;
+                    const qty = parseFloat(row.Avil_Qnty);
+                    const qtyText = isNaN(qty) ? '' : qty;
+                    const $tr = $('<tr class="barcode-pick-row"></tr>');
+                    $tr.attr('data-barcode', row.Barcode);
+                    $tr.attr('data-mrp', mrp);
+                    $tr.attr('data-qty', qtyText);
+                    $tr.attr('data-rate', row.Purchase_Rate || 0);
+                    $tr.append($('<td></td>').text(i + 1));
+                    $tr.append($('<td></td>').text(row.Barcode));
+                    $tr.append($('<td></td>').text(name));
+                    $tr.append($('<td class="text-end"></td>').text(mrp.toFixed(2)));
+                    $tr.append($('<td class="text-end"></td>').text(qtyText));
+                    $body.append($tr);
+                });
+            }
+            $('#barcodePickerModal').data('item', item);
+            $('#barcodePickerModal').modal('show');
+        }
+
+        function selectProductForDamage(item) {
             const date = $('#entryDate').val();
-            $.get("{{ route('wastage-damage.item-info') }}", {
+            if (!date) {
+                Swal.fire('Error', 'Date is required', 'error');
+                return;
+            }
+            $.get("{{ route('wastage-damage.barcodes') }}", {
                 prod_id: item.Prod_Id,
-                date: date
-            }, function(info) {
-                $('#productCodeInput').val(item.Prod_Code);
-                $('#selectedItemId').val(item.Prod_Id);
-                $('#itemSelected').val(item.Prod_ShortNm);
-                $('#unitId').val(item.Unit_Id);
-                $('#unitDisplay').val(item.Unit_Name || info.Unit_Name || '');
-                const lastRate = parseFloat(info.Purchase_Rate) || 0;
-                $('#purchaseRate').val(lastRate > 0 ? fmt(lastRate) : '');
-                $('#availQty').val(info.Avil_Qnty ?? 0);
-                calcLine();
-                $('#quantity').focus();
+                date: date,
+                damage_id: $('#damageId').val() || 0
+            }, function(rows) {
+                pendingBarcodePick = {
+                    item: item,
+                    barcodes: rows || []
+                };
+                if ($('#itemPickerModal').hasClass('show')) {
+                    $('#itemPickerModal').modal('hide');
+                    return;
+                }
+                const payload = pendingBarcodePick;
+                pendingBarcodePick = null;
+                openBarcodePicker(payload);
             }).fail(function(xhr) {
-                Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load rate', 'error');
+                Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load barcodes', 'error');
             });
         }
 
@@ -451,7 +562,7 @@
                 );
                 const unique = exactMatch || ((data || []).length === 1 ? data[0] : null);
                 if (unique) {
-                    applyItem(unique);
+                    selectProductForDamage(unique);
                     return;
                 }
                 openItemPickerModal(data || [], code);
@@ -467,7 +578,32 @@
             e.preventDefault();
             const code = $(this).val().trim();
             if (!code) return;
-            lookupProductCode(code);
+            if (!$('#entryDate').val()) {
+                Swal.fire('Error', 'Date is required', 'error');
+                return;
+            }
+            if (!/^\d+$/.test(code)) {
+                lookupProductCode(code);
+                return;
+            }
+            $.get("{{ route('wastage-damage.barcode') }}", {
+                barcode: code,
+                date: $('#entryDate').val(),
+                damage_id: $('#damageId').val() || 0
+            }).done(function(item) {
+                const scanned = String(item.Barcode || '').trim();
+                if (!/^\d+$/.test(scanned)) {
+                    lookupProductCode(code);
+                    return;
+                }
+                fillBarcodeLine(item);
+            }).fail(function(xhr) {
+                if (xhr.status === 400) {
+                    Swal.fire('Error', xhr.responseJSON?.error || 'No stock is left on this barcode', 'error');
+                    return;
+                }
+                lookupProductCode(code);
+            });
         });
 
         $('#productSearchBtn').on('click', function(e) {
@@ -523,17 +659,41 @@
             $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
             $('#modalSearchInput').val('');
             resetItemPickerTable();
+            if (pendingBarcodePick) {
+                const payload = pendingBarcodePick;
+                pendingBarcodePick = null;
+                openBarcodePicker(payload);
+            }
         });
 
         $(document).on('click', '#itemPickerTable tbody tr[data-id]', function() {
-            applyItem({
+            selectProductForDamage({
                 Prod_Id: $(this).data('id'),
                 Prod_Code: $(this).data('code'),
                 Prod_ShortNm: $(this).data('name'),
                 Unit_Id: $(this).data('unit'),
                 Unit_Name: $(this).data('unitname')
             });
-            $('#itemPickerModal').modal('hide');
+        });
+
+        $(document).on('click', '#barcodePickerTable tbody tr.barcode-pick-row', function() {
+            const item = $('#barcodePickerModal').data('item') || {};
+            const code = String($(this).attr('data-barcode') || '').trim();
+            const qty = parseFloat($(this).attr('data-qty'));
+            const mrp = parseFloat($(this).attr('data-mrp')) || 0;
+            const rate = parseFloat($(this).attr('data-rate')) || 0;
+            $('#barcodePickerModal').modal('hide');
+            fillBarcodeLine({
+                Prod_Id: item.Prod_Id,
+                Prod_Code: item.Prod_Code,
+                Prod_ShortNm: item.Prod_ShortNm,
+                Unit_Id: item.Unit_Id,
+                Unit_Name: item.Unit_Name,
+                Barcode: code,
+                MRP: mrp,
+                Avil_Qnty: isNaN(qty) ? 0 : qty,
+                Purchase_Rate: rate
+            });
         });
 
         $('#addItemBtn').on('click', function() {
@@ -543,6 +703,11 @@
             }
             if (!$('#selectedItemId').val()) {
                 Swal.fire('Error', 'Select a product', 'error');
+                return;
+            }
+            const barcode = String($('#scannedBarcode').val() || '').trim();
+            if (!/^\d+$/.test(barcode)) {
+                Swal.fire('Error', 'Select a barcode. Damage without a barcode is not allowed.', 'error');
                 return;
             }
             const qty = parseInt($('#quantity').val(), 10) || 0;
@@ -560,14 +725,15 @@
                 Swal.fire('Error', 'Quantity cannot exceed available stock (' + avail + ')', 'error');
                 return;
             }
-            const id = $('#selectedItemId').val();
-            if (itemsArray.some(i => String(i.item_id) === String(id))) {
-                Swal.fire('Error', 'Item already added', 'error');
+            if (itemsArray.some(i => String(i.barcode) === barcode)) {
+                Swal.fire('Error', 'This barcode is already added', 'error');
                 return;
             }
             itemsArray.push({
-                item_id: id,
+                item_id: $('#selectedItemId').val(),
                 item_name: $('#itemSelected').val(),
+                barcode: barcode,
+                mrp: parseFloat($('#scannedMrp').val()) || 0,
                 unit_id: $('#unitId').val(),
                 unit_name: $('#unitDisplay').val(),
                 quantity: qty,
@@ -599,6 +765,12 @@
             }
             if (!itemsArray.length) {
                 Swal.fire('Error', 'Add at least one item', 'error');
+                return;
+            }
+            if (itemsArray.some(function(item) {
+                return !/^\d+$/.test(String(item.barcode || ''));
+            })) {
+                Swal.fire('Error', 'Each line needs a barcode. Remove it and select the barcode again.', 'error');
                 return;
             }
             const isEdit = parseInt($('#damageId').val(), 10) > 0;
@@ -677,9 +849,11 @@
                     return {
                         item_id: item.Prod_Id,
                         item_name: item.Prod_Name,
+                        barcode: item.Barcode || '',
+                        mrp: item.MRP || 0,
                         unit_id: item.Unit_Id,
                         unit_name: item.Unit_Name || '',
-                        quantity: item.qnty,
+                        quantity: parseInt(item.qnty, 10) || 0,
                         rate: item.Item_Rate,
                         total_amount: item.Item_Total
                     };

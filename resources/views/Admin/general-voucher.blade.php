@@ -39,7 +39,7 @@
                                     @endforeach
                                 </select>
                             </div>
-                            <div class="mb-3">
+                            <div class="mb-3" id="singleLedgerDiv">
                                 <label class="form-label">Select Ledger<span class="text-danger">*</span></label>
                                 <select class="form-select" id="ledgerId">
                                     <option value="">-- Select Ledger --</option>
@@ -49,6 +49,20 @@
                                         </option>
                                     @endforeach
                                 </select>
+                            </div>
+                            <div id="pairLedgerDiv" style="display:none;">
+                                <div class="mb-3">
+                                    <label class="form-label">Debit Ledger<span class="text-danger">*</span></label>
+                                    <select class="form-select" id="debitLedgerId">
+                                        <option value="">-- Select Debit Ledger --</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Credit Ledger<span class="text-danger">*</span></label>
+                                    <select class="form-select" id="creditLedgerId">
+                                        <option value="">-- Select Credit Ledger --</option>
+                                    </select>
+                                </div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Amount<span class="text-danger">*</span></label>
@@ -65,6 +79,7 @@
                                 <input type="text" class="form-control" id="refVouchNo" maxlength="50"
                                     autocomplete="off">
                             </div>
+                            <div id="cashModeBlock">
                             <div class="mb-3">
                                 <label class="form-label d-block">Trans Mode<span class="text-danger">*</span></label>
                                 <div class="form-check form-check-inline">
@@ -93,6 +108,7 @@
                                 <label class="form-label">Instrument No<span class="text-danger">*</span></label>
                                 <input type="text" class="form-control" id="instrumentNo" maxlength="50"
                                     autocomplete="off" placeholder="Cheque / UTR / Instrument No">
+                            </div>
                             </div>
                             <div class="d-flex gap-2 justify-content-end">
                                 <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
@@ -150,16 +166,39 @@
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
+        const pairLedgers = @json($pairLedgers);
+
+        let pairLock = false;
+
         $(document).ready(function() {
             $('#ledgerId').select2({
                 placeholder: '-- Select Ledger --',
+                allowClear: true
+            });
+            $('#debitLedgerId').select2({
+                placeholder: '-- Select Debit Ledger --',
+                allowClear: true
+            });
+            $('#creditLedgerId').select2({
+                placeholder: '-- Select Credit Ledger --',
                 allowClear: true
             });
             $('#bankAccountId').select2({
                 placeholder: '-- Select Bank --',
                 allowClear: true
             });
+            fillPairSelect($('#debitLedgerId'), '', '');
+            fillPairSelect($('#creditLedgerId'), '', '');
 
+            $('#voucherType').on('change', toggleVoucherType);
+            $('#debitLedgerId').on('change', function() {
+                if (pairLock) return;
+                fillPairSelect($('#creditLedgerId'), $('#creditLedgerId').val(), $(this).val());
+            });
+            $('#creditLedgerId').on('change', function() {
+                if (pairLock) return;
+                fillPairSelect($('#debitLedgerId'), $('#debitLedgerId').val(), $(this).val());
+            });
             $('input[name="transMode"]').on('change', toggleBank);
 
             $('#cancelBtn').on('click', resetForm);
@@ -172,7 +211,13 @@
                     $('#vouNoDiv').show();
                     $('#voucherDate').val(d.Vou_Date);
                     $('#voucherType').val(d.Vou_Type);
-                    $('#ledgerId').val(d.Ledger_Id).trigger('change');
+                    toggleVoucherType();
+                    if (isPairType()) {
+                        fillPairSelect($('#debitLedgerId'), d.Debit_Ledger, d.Credit_Ledger);
+                        fillPairSelect($('#creditLedgerId'), d.Credit_Ledger, d.Debit_Ledger);
+                    } else {
+                        $('#ledgerId').val(d.Ledger_Id).trigger('change');
+                    }
                     $('#amount').val(d.Amount);
                     $('#particulars').val(d.Particulars);
                     $('#refVouchNo').val(d.Ref_Vou_No);
@@ -203,7 +248,16 @@
                     Swal.fire('Error', 'Please select Voucher Type', 'error');
                     return;
                 }
-                if (!$('#ledgerId').val()) {
+                if (isPairType()) {
+                    if (!$('#debitLedgerId').val() || !$('#creditLedgerId').val()) {
+                        Swal.fire('Error', 'Select debit ledger and credit ledger', 'error');
+                        return;
+                    }
+                    if ($('#debitLedgerId').val() === $('#creditLedgerId').val()) {
+                        Swal.fire('Error', 'Debit ledger and credit ledger must be different', 'error');
+                        return;
+                    }
+                } else if (!$('#ledgerId').val()) {
                     Swal.fire('Error', 'Please select a Ledger', 'error');
                     return;
                 }
@@ -216,11 +270,11 @@
                     Swal.fire('Error', 'Particulars is required', 'error');
                     return;
                 }
-                if ($('input[name="transMode"]:checked').val() === '2' && !$('#bankAccountId').val()) {
+                if (!isPairType() && $('input[name="transMode"]:checked').val() === '2' && !$('#bankAccountId').val()) {
                     Swal.fire('Error', 'Please select a Bank', 'error');
                     return;
                 }
-                if ($('input[name="transMode"]:checked').val() === '2' && !$('#instrumentNo').val().trim()) {
+                if (!isPairType() && $('input[name="transMode"]:checked').val() === '2' && !$('#instrumentNo').val().trim()) {
                     Swal.fire('Error', 'Instrument No is required for Bank', 'error');
                     return;
                 }
@@ -235,8 +289,10 @@
                         vouch_id: $('#vouchId').val() || 0,
                         voucher_date: $('#voucherDate').val(),
                         voucher_type: $('#voucherType').val(),
-                        trans_mode: $('input[name="transMode"]:checked').val(),
-                        ledger_id: $('#ledgerId').val(),
+                        trans_mode: isPairType() ? '' : $('input[name="transMode"]:checked').val(),
+                        ledger_id: isPairType() ? 0 : $('#ledgerId').val(),
+                        debit_ledger: isPairType() ? $('#debitLedgerId').val() : 0,
+                        credit_ledger: isPairType() ? $('#creditLedgerId').val() : 0,
                         amount: $('#amount').val(),
                         particulars: $('#particulars').val().trim(),
                         ref_vouch_no: $('#refVouchNo').val().trim(),
@@ -255,6 +311,38 @@
             });
         });
 
+        function isPairType() {
+            const type = String($('#voucherType').val() || '');
+            return type === '3' || type === '4';
+        }
+
+        function fillPairSelect($el, selected, exclude) {
+            const keep = selected && String(selected) !== String(exclude || '') ? String(selected) : '';
+            pairLock = true;
+            $el.empty().append(new Option($el.attr('id') === 'debitLedgerId' ? '-- Select Debit Ledger --' : '-- Select Credit Ledger --', ''));
+            pairLedgers.forEach(function(ledger) {
+                if (exclude && String(ledger.id) === String(exclude)) {
+                    return;
+                }
+                $el.append(new Option(ledger.label, ledger.id, false, String(ledger.id) === keep));
+            });
+            $el.val(keep).trigger('change.select2');
+            pairLock = false;
+        }
+
+        function toggleVoucherType() {
+            if (isPairType()) {
+                $('#singleLedgerDiv, #cashModeBlock').hide();
+                $('#pairLedgerDiv').show();
+            } else {
+                $('#pairLedgerDiv').hide();
+                $('#singleLedgerDiv, #cashModeBlock').show();
+                fillPairSelect($('#debitLedgerId'), '', '');
+                fillPairSelect($('#creditLedgerId'), '', '');
+                toggleBank();
+            }
+        }
+
         function toggleBank() {
             if ($('input[name="transMode"]:checked').val() === '2') {
                 $('#bankSelectDiv, #instrumentNoDiv').show();
@@ -272,6 +360,10 @@
             $('#voucherDate').val('{{ date('Y-m-d') }}');
             $('#voucherType').val('');
             $('#ledgerId, #bankAccountId').val('').trigger('change');
+            fillPairSelect($('#debitLedgerId'), '', '');
+            fillPairSelect($('#creditLedgerId'), '', '');
+            $('#pairLedgerDiv').hide();
+            $('#singleLedgerDiv, #cashModeBlock').show();
             $('#amount, #particulars, #refVouchNo, #instrumentNo').val('');
             $('#transCash').prop('checked', true);
             $('#bankSelectDiv, #instrumentNoDiv').hide();

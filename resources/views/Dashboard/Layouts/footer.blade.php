@@ -92,3 +92,15 @@ if (!IS_ADMIN) {
         }
     });
 </script>
+<script src="https://cdn.jsdelivr.net/npm/pusher-js@8.4.0/dist/web/pusher.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/laravel-echo@1.15.3/dist/echo.iife.js"></script>
+<script>
+window.SUPPORT_CFG = {
+    api: @json(env('SP_API')),
+    key: @json(env('SP_API_KEY')),
+    phone: @json(session('user_phone')),
+    supportUrl: @json(route('support')),
+    icon: @json(asset('template/assets/img/favicon.png'))
+};
+</script>
+<script src="{{ asset('template/assets/js/support-live.js') }}?v=2"></script>

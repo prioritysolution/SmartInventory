@@ -150,7 +150,7 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">Password</label>
+                            <label class="form-label fw-semibold">Password <span class="text-danger" id="passwordRequired">*</span></label>
                             <div class="position-relative">
                                 <input type="password" class="form-control form-control-lg" id="password"
                                     autocomplete="off" placeholder="Password"
@@ -186,7 +186,7 @@
 
 
 @push('scripts')
-    <script src="{{ asset('template/assets/js/address-master-form.js') }}?v=2"></script>
+    <script src="{{ asset('template/assets/js/address-master-form.js') }}?v=3"></script>
     <script>
         $(document).ready(function() {
             $('#eyeIcon').on('click', function() {
@@ -213,6 +213,8 @@
                     post_id: $(this).data('post'),
                     dist_id: $(this).data('dist')
                 });
+                $('#password').val('');
+                $('#passwordRequired').hide();
                 $('#modalTitle').text('Edit Agent');
                 $('#saveAgent').text('Update').prop('disabled', false);
                 $('#agentModal').modal('show');
@@ -260,6 +262,7 @@
                 $('#joinDate').val('{{ date('Y-m-d') }}');
                 $('#modalTitle').text('Add New Agent');
                 $('#saveAgent').text('Save').prop('disabled', false);
+                $('#passwordRequired').show();
                 $('#password').attr('type', 'password');
                 $('#eyeIcon').removeClass('fa-eye-slash').addClass('fa-eye');
             });
@@ -280,6 +283,15 @@
                 Swal.fire('Validation Error', 'Joining date required', 'error');
                 return false;
             }
+            const password = $('#password').val().trim();
+            if (!$('#agentId').val() && !password) {
+                Swal.fire('Validation Error', 'Password required', 'error');
+                return false;
+            }
+            if (password && (password.length < 6 || password.length > 20)) {
+                Swal.fire('Validation Error', 'Password must be between 6 and 20 characters', 'error');
+                return false;
+            }
             if ($('#stockLimit').val() && $('#stockLimit').val() > 99999999.99) {
                 Swal.fire('Validation Error', 'Stock limit must not exceed 99,999,999.99', 'error');
                 return false;
@@ -295,6 +307,7 @@
             $('#agentId, #agentName, #address, #mobile, #stockLimit, #creditSellLimit, #password').val('');
             AddressMasterForm.clearValues('');
             $('#joinDate').val('{{ date('Y-m-d') }}');
+            $('#passwordRequired').show();
             $('#modalTitle').text('Add New Agent');
             $('#saveAgent').text('Save').prop('disabled', false);
             $('#agentModal').modal('show');

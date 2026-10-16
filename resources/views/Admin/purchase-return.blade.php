@@ -29,6 +29,26 @@
             background-color: #e8f4ff;
         }
 
+        #barcodePickerTable tbody tr.barcode-pick-row {
+            cursor: pointer;
+        }
+
+        #barcodePickerTable tbody tr.barcode-pick-row:hover {
+            background-color: #e8f4ff;
+        }
+
+        .barcode-picker-scroll {
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .barcode-picker-scroll thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #f8f9fa;
+        }
+
         .section-card {
             border: 1px solid #dee2e6;
             border-radius: 8px;
@@ -181,6 +201,8 @@
                                 <input type="hidden" id="selectedHsnCode">
                                 <input type="hidden" id="unitId">
                                 <input type="hidden" id="maxReturnQty">
+                                <input type="hidden" id="returnBarcode">
+                                <input type="hidden" id="returnMrp">
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label class="form-label">Unit</label>
@@ -273,6 +295,7 @@
                                     <tr>
                                         <th>Sl</th>
                                         <th>Item Name</th>
+                                        <th>Barcode</th>
                                         <th>Qty</th>
                                         <th>Unit</th>
                                         <th>Rate</th>
@@ -394,6 +417,33 @@
                                     <th>Item Code</th>
                                     <th>Item Name</th>
                                     <th>Unit</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="barcodePickerModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="barcodePickerTitle">Select Barcode</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive barcode-picker-scroll">
+                        <table class="table table-bordered table-hover table-sm mb-0" id="barcodePickerTable">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Sl</th>
+                                    <th>Barcode</th>
+                                    <th>Item Name</th>
+                                    <th class="text-end">MRP</th>
+                                    <th class="text-end">Returnable Qty</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -584,10 +634,13 @@
         }
 
         function qtyOnCurrentBill(prodId) {
+            const barcode = $('#returnBarcode').val();
             return itemsArray.reduce(function(sum, row) {
-                return String(row.item_id) === String(prodId)
-                    ? sum + (parseFloat(row.quantity) || 0)
-                    : sum;
+                const qty = parseFloat(row.quantity) || 0;
+                if (barcode) {
+                    return String(row.barcode || '') === String(barcode) ? sum + qty : sum;
+                }
+                return String(row.item_id) === String(prodId) ? sum + qty : sum;
             }, 0);
         }
 
@@ -602,6 +655,7 @@
             $.get("{{ url('purchase-return/returnable-qty') }}", {
                 party_id: partyId,
                 prod_id: prodId,
+                return_date: $('#purchaseDate').val(),
                 exclude_id: currentPurchaseId || 0
             }, function(row) {
                 let remaining = parseFloat(row.Remaining_Qty) || 0;
@@ -612,6 +666,8 @@
                 }
                 remaining = parseFloat(remaining.toFixed(2));
                 const purchased = parseFloat(row.Purchased_Qty) || 0;
+                const returned = parseFloat(row.Returned_Qty) || 0;
+                const office = parseFloat(row.Office_Qty) || 0;
                 $('#maxReturnQty').val(remaining);
                 $('#quantity').attr('max', remaining);
                 if (remaining <= 0) {
@@ -621,6 +677,12 @@
                             icon: 'warning',
                             title: 'No item purchased from this party',
                             text: 'This product was not purchased from the selected party, so it cannot be returned.'
+                        });
+                    } else if (office <= 0 && purchased > returned) {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Not enough stock',
+                            text: 'Quantity already sold, issued to an agent, or damaged cannot be returned.'
                         });
                     } else {
                         Swal.fire({
@@ -717,7 +779,116 @@
                 } else {
                     showPackDateField(false);
                 }
-                applyReturnableLimit({ focusQty: true });
+            }
+
+            let pendingBarcodePick = null;
+            let pendingPurchaseLine = null;
+
+            function openBarcodePicker(rows, title) {
+                const $body = $('#barcodePickerTable tbody').empty();
+                $('#barcodePickerTitle').text(title || 'Select Barcode');
+                if (!rows.length) {
+                    $body.append(
+                        '<tr><td colspan="5" class="text-center text-muted">No barcode purchased from this party</td></tr>'
+                    );
+                } else {
+                    rows.forEach(function(row, i) {
+                        const remaining = parseFloat(row.Remaining_Qty) || 0;
+                        const $tr = $('<tr class="barcode-pick-row"></tr>');
+                        $tr.attr('data-barcode', row.Barcode);
+                        $tr.attr('data-mrp', row.MRP);
+                        $tr.attr('data-qty', remaining);
+                        $tr.data('row', row);
+                        $tr.append($('<td></td>').text(i + 1));
+                        $tr.append($('<td></td>').text(row.Barcode));
+                        $tr.append($('<td></td>').text(row.Prod_ShortNm || ''));
+                        $tr.append($('<td class="text-end"></td>').text((parseFloat(row.MRP) || 0).toFixed(2)));
+                        $tr.append($('<td class="text-end"></td>').text(remaining));
+                        $body.append($tr);
+                    });
+                }
+                $('#barcodePickerModal').modal('show');
+            }
+
+            function selectProductForReturn(prodId, title) {
+                if (!requireReturnParty()) return;
+                if (!$('#purchaseDate').val()) {
+                    Swal.fire('Error', 'Purchase Date is required before choosing an item', 'error');
+                    return;
+                }
+                $.get("{{ route('purchase-return.barcodes') }}", {
+                    party_id: $('#partyId').val(),
+                    prod_id: prodId,
+                    return_date: $('#purchaseDate').val(),
+                    exclude_id: currentPurchaseId || 0
+                }, function(rows) {
+                    pendingBarcodePick = { rows: rows || [], title: title || 'Select Barcode' };
+                    if ($('#itemPickerModal').hasClass('show') || $('#findPurchaseModal').hasClass('show')) {
+                        if ($('#itemPickerModal').hasClass('show')) $('#itemPickerModal').modal('hide');
+                        if ($('#findPurchaseModal').hasClass('show')) $('#findPurchaseModal').modal('hide');
+                        return;
+                    }
+                    const payload = pendingBarcodePick;
+                    pendingBarcodePick = null;
+                    openBarcodePicker(payload.rows, payload.title);
+                }).fail(function(xhr) {
+                    Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load barcodes', 'error');
+                });
+            }
+
+            function applyReturnBarcode(row) {
+                const already = itemsArray.reduce(function(sum, line) {
+                    return String(line.barcode || '') === String(row.Barcode)
+                        ? sum + (parseFloat(line.quantity) || 0)
+                        : sum;
+                }, 0);
+                let remaining = (parseFloat(row.Remaining_Qty) || 0) - already;
+                if (remaining < 0) remaining = 0;
+                if (pendingPurchaseLine) {
+                    const billLeft = parseFloat(pendingPurchaseLine.Remaining_Qty ?? pendingPurchaseLine.qnty) || 0;
+                    if (billLeft > 0) remaining = Math.min(remaining, billLeft);
+                }
+                if (remaining <= 0) {
+                    const office = parseFloat(row.Office_Qty) || 0;
+                    const purchasedLeft = (parseFloat(row.Purchased_Qty) || 0) - (parseFloat(row.Returned_Qty) || 0);
+                    if (office <= 0 && purchasedLeft > 0) {
+                        Swal.fire('Not enough stock', 'Quantity already sold, issued to an agent, or damaged cannot be returned.', 'warning');
+                    } else {
+                        Swal.fire('Already Returned', 'No remaining quantity for this barcode', 'warning');
+                    }
+                    pendingPurchaseLine = null;
+                    return;
+                }
+                const purchaseLine = pendingPurchaseLine;
+                pendingPurchaseLine = null;
+                applyPurchaseReturnItem({
+                    Prod_Id: row.Prod_Id,
+                    Prod_Code: row.Prod_Code,
+                    Prod_ShortNm: row.Prod_ShortNm,
+                    Gst_Id: row.Gst_Id,
+                    Unit_Id: row.Unit_Id,
+                    Unit_Name: row.Unit_Name,
+                    GST_Data: row.GST_Data,
+                    Is_Fmcg: row.Is_Fmcg
+                });
+                $('#returnBarcode').val(row.Barcode);
+                $('#returnMrp').val(row.MRP);
+                $('#productCodeInput').val(row.Barcode);
+                if (purchaseLine) {
+                    const purchaseRate = parseFloat(purchaseLine.Item_Rate);
+                    if (!isNaN(purchaseRate)) $('#rate').val(purchaseRate.toFixed(2));
+                    const purchaseDisc = parseFloat(purchaseLine.Disc_Prcnt);
+                    if (!isNaN(purchaseDisc)) $('#discountPercent').val(purchaseDisc);
+                    if (purchaseLine.Pack_Date) {
+                        showPackDateField(true);
+                        $('#itemPurchaseDate').val(String(purchaseLine.Pack_Date).substring(0, 10));
+                    }
+                }
+                applyReturnableLimit({
+                    billCap: remaining,
+                    keepItem: true,
+                    focusQty: true
+                });
             }
 
             function resolvePurchaseReturnCode(data, code) {
@@ -726,13 +897,47 @@
                 );
                 const unique = exactMatch || ((data || []).length === 1 ? data[0] : null);
                 if (unique) {
-                    applyPurchaseReturnItem(unique);
+                    selectProductForReturn(unique.Prod_Id, 'Select Barcode — ' + (unique.Prod_ShortNm || ''));
                     return;
                 }
                 openItemPickerModal(data || [], true, code);
             }
 
             function lookupReturnProductCode(code) {
+                if (/^\d+$/.test(code)) {
+                    if (!requireReturnParty()) return;
+                    if (!$('#purchaseDate').val()) {
+                        Swal.fire('Error', 'Purchase Date is required before choosing an item', 'error');
+                        return;
+                    }
+                    $.get("{{ route('purchase-return.barcodes') }}", {
+                        party_id: $('#partyId').val(),
+                        return_date: $('#purchaseDate').val(),
+                        exclude_id: currentPurchaseId || 0,
+                        barcode: code
+                    }, function(rows) {
+                        if (rows && rows.length === 1) {
+                            applyReturnBarcode(rows[0]);
+                            return;
+                        }
+                        if (rows && rows.length > 1) {
+                            openBarcodePicker(rows, 'Select Barcode');
+                            return;
+                        }
+                        $.get("{{ url('purchase-return/items') }}", {
+                            code: code,
+                            cat_id: 0,
+                            sub_cat_id: 0
+                        }, function(data) {
+                            resolvePurchaseReturnCode(data, code);
+                        }).fail(function() {
+                            openItemPickerModal([], true, code);
+                        });
+                    }).fail(function() {
+                        Swal.fire('Error', 'Failed to load barcode', 'error');
+                    });
+                    return;
+                }
                 $.get("{{ url('purchase-return/items') }}", {
                     code: code,
                     cat_id: 0,
@@ -804,6 +1009,13 @@
                 if (e.which === 13) $('#modalSearchBtn').trigger('click');
             });
 
+            $('#itemPickerModal, #findPurchaseModal').on('hidden.bs.modal', function() {
+                if (!pendingBarcodePick) return;
+                const payload = pendingBarcodePick;
+                pendingBarcodePick = null;
+                openBarcodePicker(payload.rows, payload.title);
+            });
+
             $('#itemPickerModal').on('hidden.bs.modal', function() {
                 $('#modalCateId').val('0');
                 $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
@@ -840,26 +1052,16 @@
             }
 
             $(document).on('click', '#itemPickerTable tbody tr', function() {
-                const cgst = parseFloat($(this).data('cgst')) || 0;
-                const sgst = parseFloat($(this).data('sgst')) || 0;
-                const isFmcg = $(this).data('fmcg') == 1;
-                const isWithGst = $('input[name="gstMode"]:checked').val() === '1';
-                $('#productCodeInput').val($(this).data('code'));
-                $('#selectedItemId').val($(this).data('id'));
-                $('#selectedHsnCode').val($(this).data('hsn'));
-                $('#itemSelected').val($(this).data('name'));
-                $('#unitId').val($(this).data('unit'));
-                $('#unitDisplay').val($(this).data('unitname'));
-                if (isFmcg) {
-                    showPackDateField(true);
-                } else {
-                    showPackDateField(false);
-                }
-                $('#itemPickerModal').modal('hide');
-                clearItemCalc();
-                $('#cgstRate').val(isWithGst ? cgst : 0);
-                $('#sgstRate').val(isWithGst ? sgst : 0);
-                applyReturnableLimit({ focusQty: true });
+                const prodId = $(this).data('id');
+                if (!prodId) return;
+                selectProductForReturn(prodId, 'Select Barcode — ' + ($(this).data('name') || ''));
+            });
+
+            $(document).on('click', '#barcodePickerTable tbody tr.barcode-pick-row', function() {
+                const row = $(this).data('row');
+                if (!row) return;
+                $('#barcodePickerModal').modal('hide');
+                applyReturnBarcode(row);
             });
 
             $('#partyId').on('change', function() {
@@ -876,7 +1078,7 @@
                     if (!isNaN(maxReturnQty) && !isNaN(qty) && qty > maxReturnQty) {
                         $(this).val(maxReturnQty);
                         Swal.fire('Error',
-                            'Return quantity cannot exceed remaining purchased qty (' + maxReturnQty + ')',
+                            'Return quantity cannot exceed available stock (' + maxReturnQty + ')',
                             'error');
                     }
                 }
@@ -931,7 +1133,8 @@
                     sgst_amount: $('#sgstAmount').val(),
                     total_gst: $('#totalGst').val(),
                     net_amount: $('#netAmount').val(),
-                    sale_mrp: 0,
+                    sale_mrp: $('#returnMrp').val() || 0,
+                    barcode: $('#returnBarcode').val() || '',
                     item_purchase_date: $('#itemPurchaseDate').val() || '',
                 });
                 renderItemsTable();
@@ -969,6 +1172,9 @@
                 $('#totalGst').val(item.total_gst);
                 $('#netAmount').val(item.net_amount);
                 $('#itemPurchaseDate').val(item.item_purchase_date);
+                $('#returnBarcode').val(item.barcode || '');
+                $('#returnMrp').val(item.sale_mrp || 0);
+                $('#productCodeInput').val(item.barcode || '');
                 if (item.item_purchase_date) showPackDateField(true);
                 itemsArray.splice(index, 1);
                 renderItemsTable();
@@ -987,6 +1193,10 @@
                 }
                 if (itemsArray.length === 0) {
                     Swal.fire('Error', 'Please add at least one item', 'error');
+                    return;
+                }
+                if (itemsArray.some(function(row) { return !/^\d+$/.test(String(row.barcode || '')); })) {
+                    Swal.fire('Error', 'Select a barcode for each return item', 'error');
                     return;
                 }
                 if ($('input[name="transMode"]:checked').val() === '2') {
@@ -1073,6 +1283,7 @@
                             .CGST_Amt)).toFixed(2),
                         net_amount: item.Net_Amt,
                         sale_mrp: item.MRP,
+                        barcode: item.Barcode || '',
                         item_purchase_date: item.Pack_Date ? item.Pack_Date.substring(0,
                             10) : '',
                     }));
@@ -1273,12 +1484,33 @@
                 });
             });
 
+            function populateReturnFromPurchase(item, header) {
+                const remaining = parseFloat(item.Remaining_Qty ?? item.qnty) || 0;
+                if (remaining <= 0) {
+                    Swal.fire('Already Returned', 'No remaining quantity for this item', 'warning');
+                    return false;
+                }
+                if (header && header.Party_Id) {
+                    skipPartyReturnableRefresh = true;
+                    $('#partyId').val(header.Party_Id).trigger('change');
+                    skipPartyReturnableRefresh = false;
+                }
+                if (header && !$('#purchaseNo').val()) {
+                    $('#purchaseNo').val(header.Ref_No || header.Invoice_No || '');
+                }
+                pendingPurchaseLine = item;
+                return true;
+            }
+
             $(document).on('click', '.addReturnItem', function() {
                 const idx = $(this).data('index');
                 const item = findPurchaseItems[idx];
                 if (!item) return;
                 if (!populateReturnFromPurchase(item, findPurchaseHeader)) return;
                 reopenFindPurchase = false;
+                $('#purchaseItemsModal').one('hidden.bs.modal', function() {
+                    selectProductForReturn(item.Prod_Id, 'Select Barcode — ' + (item.Prod_Name || ''));
+                });
                 $('#purchaseItemsModal').modal('hide');
             });
 
@@ -1369,53 +1601,6 @@
                     }
                 }
             });
-        }
-
-        function populateReturnFromPurchase(item, header) {
-            const existing = itemsArray.find(x => String(x.item_id) === String(item.Prod_Id));
-            if (existing) {
-                Swal.fire('Product Already Added',
-                    `${item.Prod_Name} is already in the return list`,
-                    'warning');
-                return false;
-            }
-            const remaining = parseFloat(item.Remaining_Qty ?? item.qnty) || 0;
-            if (remaining <= 0) {
-                Swal.fire('Already Returned', 'No remaining quantity for this item', 'warning');
-                return false;
-            }
-            if (header && header.Party_Id) {
-                skipPartyReturnableRefresh = true;
-                $('#partyId').val(header.Party_Id).trigger('change');
-                skipPartyReturnableRefresh = false;
-            }
-            if (header && !$('#purchaseNo').val()) {
-                $('#purchaseNo').val(header.Ref_No || header.Invoice_No || '');
-            }
-            clearItemSelection();
-            $('#selectedItemId').val(item.Prod_Id);
-            $('#selectedHsnCode').val(item.hsn_code || 0);
-            $('#itemSelected').val(item.Prod_Name);
-            $('#unitId').val(item.Unit_Id);
-            $('#unitDisplay').val(item.Unit_Name);
-            $('#quantity').val(remaining);
-            $('#maxReturnQty').val(remaining);
-            const purchaseRate = parseFloat(item.Item_Rate);
-            $('#rate').val(!isNaN(purchaseRate) ? purchaseRate.toFixed(2) : '');
-            const purchaseDisc = parseFloat(item.Disc_Prcnt);
-            $('#discountPercent').val(!isNaN(purchaseDisc) ? purchaseDisc : 0);
-            const isWithGst = $('input[name="gstMode"]:checked').val() === '1';
-            $('#cgstRate').val(isWithGst ? (item.CGST_Prcnt || 0) : 0);
-            $('#sgstRate').val(isWithGst ? (item.SGST_Prcnt || 0) : 0);
-            if (item.Pack_Date) {
-                showPackDateField(true);
-                $('#itemPurchaseDate').val(String(item.Pack_Date).substring(0, 10));
-            } else {
-                showPackDateField(false);
-            }
-            calculateAmounts();
-            applyReturnableLimit({ billCap: remaining, keepItem: true, focusQty: true });
-            return true;
         }
 
         function renderItemPickerTable(data, isCodeSearch) {
@@ -1518,6 +1703,18 @@
                 Swal.fire('Error', 'Please select an item', 'error');
                 return false;
             }
+            const returnBarcode = String($('#returnBarcode').val() || '').trim();
+            if (!/^\d+$/.test(returnBarcode)) {
+                Swal.fire('Error', 'Select a barcode', 'error');
+                return false;
+            }
+            const duplicateBarcode = itemsArray.some(function(row) {
+                return String(row.barcode || '') === returnBarcode;
+            });
+            if (duplicateBarcode && !$('#addItemBtn').data('editing')) {
+                Swal.fire('Error', 'This barcode is already in the return list', 'error');
+                return false;
+            }
             if (!$('#partyId').val()) {
                 Swal.fire('Error', 'Please select a Party', 'error');
                 return false;
@@ -1545,7 +1742,7 @@
                 return false;
             }
             if (qty > maxReturnQty) {
-                Swal.fire('Error', `Return quantity cannot exceed remaining purchased qty (${maxReturnQty})`, 'error');
+                Swal.fire('Error', `Return quantity cannot exceed available stock (${maxReturnQty})`, 'error');
                 $('#quantity').focus();
                 return false;
             }
@@ -1590,6 +1787,7 @@
                 html += `<tr>
                     <td>${index + 1}</td>
                     <td style="white-space:nowrap; min-width:100px;">${item.item_name}</td>
+                    <td>${item.barcode || ''}</td>
                     <td>${item.quantity}</td><td>${item.unit_name}</td><td>${item.rate}</td>
                     <td>${item.total_amount}</td><td>${item.discount_percent}</td>
                     <td>${item.discount_amount}</td><td>${item.taxable_amount}</td>
@@ -1637,7 +1835,7 @@
 
         function clearItemSelection() {
             returnableReady = false;
-            $('#selectedItemId, #selectedHsnCode, #unitId, #maxReturnQty').val('');
+            $('#selectedItemId, #selectedHsnCode, #unitId, #maxReturnQty, #returnBarcode, #returnMrp').val('');
             $('#itemSelected, #unitDisplay').val('');
             $('#cgstRate, #sgstRate').val('');
             $('#quantity').removeAttr('max');

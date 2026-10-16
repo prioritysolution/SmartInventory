@@ -26,6 +26,26 @@
             box-shadow: 0 0 0 .2rem rgba(13, 110, 253, .25);
         }
 
+        #barcodePickerTable tbody tr.barcode-pick-row {
+            cursor: pointer;
+        }
+
+        #barcodePickerTable tbody tr.barcode-pick-row:hover {
+            background-color: #e8f4ff;
+        }
+
+        .barcode-picker-scroll {
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .barcode-picker-scroll thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #f6f6f6;
+        }
+
         #itemPickerTable tbody tr {
             cursor: pointer;
         }
@@ -342,8 +362,8 @@
                         <div class="row">
                             <div class="col-md-4 mb-3">
                                 <label class="form-label">Qty<span class="text-danger">*</span></label>
-                                <input type="number" class="form-control" id="quantity" step="0.01" min="0.01"
-                                    autocomplete="off">
+                                <input type="number" class="form-control" id="quantity" step="1" min="1"
+                                    inputmode="numeric" autocomplete="off">
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label class="form-label">Rate<span class="text-danger">*</span></label>
@@ -431,11 +451,11 @@
                                         <th>Disc %</th>
                                         <th>Disc Amt</th>
                                         <th>Taxable Amt</th>
-                                        <th>CGST Rate</th>
-                                        <th>CGST Amt</th>
-                                        <th>SGST Rate</th>
-                                        <th>SGST Amt</th>
-                                        <th>Total GST</th>
+                                        <th class="gst-col">CGST Rate</th>
+                                        <th class="gst-col">CGST Amt</th>
+                                        <th class="gst-col">SGST Rate</th>
+                                        <th class="gst-col">SGST Amt</th>
+                                        <th class="gst-col">Total GST</th>
                                         <th>Net Amt</th>
                                         <th>Action</th>
                                     </tr>
@@ -559,6 +579,34 @@
         </div>
     </div>
 
+    {{-- Barcode picker for a chosen product --}}
+    <div class="modal fade" id="barcodePickerModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="barcodePickerTitle">Select Barcode</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive barcode-picker-scroll">
+                        <table class="table table-bordered table-hover table-sm mb-0" id="barcodePickerTable">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Sl</th>
+                                    <th>Barcode</th>
+                                    <th>Item Name</th>
+                                    <th class="text-end">MRP</th>
+                                    <th class="text-end">Available Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {{-- Sale Search Modal --}}
     <div class="modal fade" id="saleSearchModal" tabindex="-1" data-bs-backdrop="static">
         <div class="modal-dialog modal-lg modal-xl-custom">
@@ -620,11 +668,11 @@
                 <div class="modal-body" id="billContent">
                     <!-- Bill content will be loaded here -->
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     <button type="button" class="btn btn-primary" onclick="printBill()">
                         <i class="fa fa-print"></i> Print
                     </button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>
@@ -846,69 +894,70 @@
         // Function to print bill
         function printBill() {
             const billHtml = document.getElementById('billContent').innerHTML;
-
-            let iframe = document.getElementById('printFrame');
-            if (iframe) iframe.remove();
-
-            iframe = document.createElement('iframe');
-            iframe.id = 'printFrame';
-            iframe.setAttribute('aria-hidden', 'true');
-            iframe.style.cssText = 'position:fixed;top:0;left:0;width:58mm;height:500mm;border:0;opacity:0;pointer-events:none;z-index:-1;';
-            document.body.appendChild(iframe);
-
-            const doc = iframe.contentWindow.document;
-            doc.open();
-            doc.write(`<!DOCTYPE html>
+            let frame = document.getElementById('printFrame');
+            if (frame) frame.remove();
+            frame = document.createElement('iframe');
+            frame.id = 'printFrame';
+            frame.setAttribute('aria-hidden', 'true');
+            frame.style.cssText = 'position:fixed;left:-1200px;top:0;width:420px;height:700px;border:0;';
+            document.body.appendChild(frame);
+            const win = frame.contentWindow;
+            win.document.open();
+            win.document.write(`<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
+<title>Bill</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 @page {
-    size: 58mm 400mm;
-    margin: 2mm 1.5mm;
+    size: 72mm 190mm;
+    margin: 0;
 }
 html, body {
     margin: 0;
     padding: 0;
-    width: 58mm;
+    width: 46mm;
+    background: #fff;
+    color: #000;
 }
-body { width: 58mm; }
+body { width: 46mm; }
 .bill-container {
-    width: 54mm;
-    max-width: 54mm;
-    margin: 0 auto;
+    width: 46mm;
+    max-width: 46mm;
+    margin: 0;
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 10px;
+    font-size: 9px;
     color: #000;
     line-height: 1.25;
     word-wrap: break-word;
 }
 .bill-header { text-align:center; padding-bottom:2px; }
-.bill-header h3 { font-size:11px; font-weight:bold; text-transform:uppercase; margin:0; line-height:1.2; }
-.bill-header p { font-size:9px; margin:2px 0 0; }
-.bill-title { text-align:center; font-weight:bold; text-decoration:underline; text-transform:uppercase; letter-spacing:1px; margin:4px 0 6px; font-size:11px; }
-.bill-meta { display:block; overflow:hidden; margin:2px 0; font-size:9px; }
-.bill-meta span { display:inline-block; width:49%; vertical-align:top; }
-.bill-meta span:last-child { text-align:right; }
-.bill-customer { margin:3px 0 6px; font-size:9px; }
-.items-table { width:100%; border-collapse:collapse; font-size:9px; }
-.items-table th, .items-table td { border:1px dashed #000; padding:2px 3px; text-align:left; vertical-align:top; }
+.bill-header h3 { font-size:9px; font-weight:bold; text-transform:uppercase; margin:0 auto; line-height:1.25; text-align:center; word-break:break-word; }
+.bill-header p { font-size:8px; margin:2px 0 0; text-align:center; }
+.bill-title { text-align:center; font-weight:bold; text-decoration:underline; text-transform:uppercase; letter-spacing:1px; margin:4px 0 6px; font-size:10px; }
+.bill-meta { display:block; overflow:hidden; margin:2px 0; font-size:8px; }
+.bill-meta span { display:block; width:100%; text-align:left; }
+.bill-meta span:last-child { text-align:left; }
+.bill-customer { margin:3px 0 6px; font-size:8px; word-break:break-word; }
+.items-table { width:100%; border-collapse:collapse; font-size:8px; table-layout:fixed; }
+.items-table th, .items-table td { border:1px dashed #000; padding:2px 2px; text-align:left; vertical-align:top; }
 .items-table th { font-weight:bold; text-transform:uppercase; }
 .items-table .item-name { word-break:break-word; }
 .text-right { text-align:right; white-space:nowrap; }
 .text-center { text-align:center; white-space:nowrap; }
-.bill-words { font-size:8px; line-height:1.2; }
-.bill-signature { margin-top:14px; font-size:9px; }
+.bill-words { font-size:7px; line-height:1.2; white-space:normal; word-break:break-word; }
+.bill-signature { margin-top:12px; font-size:8px; }
 </style>
 </head>
 <body>${billHtml}</body>
 </html>`);
-            doc.close();
+            win.document.close();
+            win.onafterprint = function () { frame.remove(); };
             setTimeout(function () {
-                iframe.contentWindow.focus();
-                iframe.contentWindow.print();
-            }, 150);
+                win.focus();
+                win.print();
+            }, 300);
         }
 
 
@@ -923,8 +972,7 @@ body { width: 58mm; }
                 allowClear: true
             });
             if (GST_TYPE == 2) {
-                $('#cgstRate, #cgstAmount, #sgstRate, #sgstAmount, #totalGst').closest('.gst-col').hide();
-                $('th:contains("CGST"), th:contains("SGST"), th:contains("Total GST")').hide();
+                $('.gst-col').hide();
                 $('#totalGSTAmount').closest('tr').hide();
             }
 
@@ -981,7 +1029,7 @@ body { width: 58mm; }
                 <td>${row.Invoice_No}</td>
                 <td>${siDate.toDisplay(row.Invoice_Date)}</td>
                 <td>${row.Net_Amt}</td>
-                <td><button class="btn btn-sm btn-primary viewSale" data-id="${row.Sale_Id}">Edit</button></td>
+                <td><button type="button" class="btn btn-sm btn-primary viewSale" data-id="${row.Sale_Id}">Edit</button></td>
             </tr>`;
                     });
                     $('#saleSearchBody').html(html);
@@ -1010,7 +1058,8 @@ body { width: 58mm; }
             });
 
 
-            $(document).on('click', '.viewSale', function() {
+            $(document).on('click', '.viewSale', function(e) {
+                e.preventDefault();
                 const saleId = $(this).data('id');
                 currentSaleId = saleId;
 
@@ -1031,13 +1080,13 @@ body { width: 58mm; }
                         $('#instrumentNo').val(data.Instrument_No || '');
                     }
 
-                    // Fill items
-                    itemsArray = data.Item_Details.map(item => ({
+                    const lines = Array.isArray(data.Item_Details) ? data.Item_Details : [];
+                    itemsArray = lines.map(item => ({
                         item_id: item.Prod_Id,
                         category_id: item.Cat_Id,
                         hsn_code: item.hsn_code ?? '',
                         item_name: item.Prod_Name,
-                        quantity: item.qnty,
+                        quantity: parseInt(item.qnty, 10) || 0,
                         unit_id: item.Unit_Id,
                         unit_name: item.Unit_Name,
                         rate: item.Item_Rate,
@@ -1052,7 +1101,8 @@ body { width: 58mm; }
                         total_gst: (parseFloat(item.SGST_Amt) + parseFloat(item
                             .CGST_Amt)).toFixed(2),
                         net_amount: item.Net_Amt,
-                        sale_mrp: item.MRP
+                        sale_mrp: item.MRP,
+                        barcode: item.Barcode || ''
                     }));
 
                     renderItemsTable();
@@ -1102,17 +1152,73 @@ body { width: 58mm; }
                 return null;
             }
 
-            function loadItemByProdId(prodId) {
+            let pendingBarcodePick = null;
+
+            function openBarcodePicker(payload) {
+                const item = payload.item || {};
+                const name = item.Prod_ShortNm || '';
+                const rows = payload.barcodes || [];
+                $('#barcodePickerTitle').text(name ? ('Select Barcode — ' + name) : 'Select Barcode');
+                const $body = $('#barcodePickerTable tbody').empty();
+                if (!rows.length) {
+                    $body.append(
+                        '<tr><td colspan="5" class="text-center text-muted">No barcode stock found for this product</td></tr>'
+                    );
+                } else {
+                    rows.forEach(function(row, i) {
+                        const mrp = parseFloat(row.MRP) || 0;
+                        const qty = parseFloat(row.Avil_Qnty);
+                        const qtyText = isNaN(qty) ? '' : qty;
+                        const $tr = $('<tr class="barcode-pick-row"></tr>');
+                        $tr.attr('data-barcode', row.Barcode);
+                        $tr.attr('data-mrp', mrp);
+                        $tr.attr('data-qty', qtyText);
+                        $tr.append($('<td></td>').text(i + 1));
+                        $tr.append($('<td></td>').text(row.Barcode));
+                        $tr.append($('<td></td>').text(name));
+                        $tr.append($('<td class="text-end"></td>').text(mrp.toFixed(2)));
+                        $tr.append($('<td class="text-end"></td>').text(qtyText));
+                        $body.append($tr);
+                    });
+                }
+                $('#barcodePickerModal').data('item', item).data('hsn', payload.hsn || '');
+                $('#barcodePickerModal').modal('show');
+            }
+
+            function selectProductForSale(prodId, hsn) {
+                if (!prodId) return;
                 if (!ensureSaleDate()) return;
-                $.get("{{ route('counter-sale.item-info') }}", {
-                    prod_id: prodId,
-                    sale_date: $('#saleDate').val()
-                }).done(function(item) {
-                    populateItemFields(item);
-                    $('#barcodeInput').focus();
+                const saleDate = $('#saleDate').val();
+                $.when(
+                    $.get("{{ route('counter-sale.item-info') }}", {
+                        prod_id: prodId,
+                        sale_date: saleDate
+                    }),
+                    $.get("{{ route('counter-sale.product-barcodes') }}", {
+                        prod_id: prodId,
+                        sale_date: saleDate
+                    })
+                ).done(function(infoRes, barcodeRes) {
+                    pendingBarcodePick = {
+                        item: infoRes[0],
+                        hsn: hsn || '',
+                        barcodes: barcodeRes[0] || []
+                    };
+                    if ($('#itemPickerModal').hasClass('show')) {
+                        $('#itemPickerModal').modal('hide');
+                        return;
+                    }
+                    const payload = pendingBarcodePick;
+                    pendingBarcodePick = null;
+                    openBarcodePicker(payload);
                 }).fail(function(xhr) {
-                    Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load item details', 'error');
+                    const msg = xhr.responseJSON?.error || 'Failed to load item details';
+                    Swal.fire('Error', msg, 'error');
                 });
+            }
+
+            function loadItemByProdId(prodId) {
+                selectProductForSale(prodId, '');
             }
 
             function resolveItemsOrOpenPicker(data, code) {
@@ -1136,10 +1242,26 @@ body { width: 58mm; }
                         sale_date: saleDate
                     })
                     .done(function(item) {
+                        const code = String(item.Barcode || '').trim();
+                        if (!/^\d+$/.test(code)) {
+                            $('#barcodeInput').removeData('scanned-barcode');
+                            $.get("{{ route('counter-sale.items') }}", {
+                                code: barcode,
+                                cat_id: 0,
+                                sub_cat_id: 0
+                            }, function(data) {
+                                resolveItemsOrOpenPicker(data, barcode);
+                            }).fail(function() {
+                                openItemPickerModal([], true, barcode);
+                            });
+                            return;
+                        }
+                        $('#barcodeInput').val(code).data('scanned-barcode', code);
                         populateItemFields(item);
-                        $('#barcodeInput').focus();
+                        $('#quantity').focus();
                     })
                     .fail(function() {
+                        $('#barcodeInput').removeData('scanned-barcode');
                         $.get("{{ route('counter-sale.items') }}", {
                             code: barcode,
                             cat_id: 0,
@@ -1250,6 +1372,11 @@ body { width: 58mm; }
                     itemPickerDT = null;
                 }
                 $('#itemPickerTable tbody').html('');
+                if (pendingBarcodePick) {
+                    const payload = pendingBarcodePick;
+                    pendingBarcodePick = null;
+                    openBarcodePicker(payload);
+                }
             });
 
             function openItemPickerModal(data, isCodeSearch, code) {
@@ -1278,23 +1405,40 @@ body { width: 58mm; }
                 const $row = $(this);
                 const prodId = $row.data('id');
                 if (!prodId) return;
-                if (!ensureSaleDate()) return;
-                $.get("{{ route('counter-sale.item-info') }}", {
-                    prod_id: prodId,
-                    sale_date: $('#saleDate').val()
-                }).done(function(item) {
-                    $('#itemPickerModal').modal('hide');
-                    populateItemFields(item);
-                    if ($row.data('hsn')) {
-                        $('#selectedHsnCode').val($row.data('hsn'));
-                    }
-                }).fail(function(xhr) {
-                    Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load item details', 'error');
-                });
+                selectProductForSale(prodId, $row.data('hsn') || '');
+            });
+
+            $(document).on('click', '#barcodePickerTable tbody tr.barcode-pick-row', function() {
+                const item = $('#barcodePickerModal').data('item');
+                if (!item) return;
+                const code = $(this).attr('data-barcode');
+                const mrp = parseFloat($(this).attr('data-mrp')) || 0;
+                const qty = parseFloat($(this).attr('data-qty'));
+                const hsn = $('#barcodePickerModal').data('hsn') || '';
+                $('#barcodePickerModal').modal('hide');
+                $('#barcodeInput').val(code).data('scanned-barcode', code).data('available-qty', isNaN(qty) ? '' : qty);
+                populateItemFields($.extend({}, item, {
+                    MRP: mrp,
+                    Rate: mrp,
+                    Avil_Qnty: isNaN(qty) ? null : qty
+                }));
+                if (hsn) $('#selectedHsnCode').val(hsn);
+                $('#quantity').focus();
             });
 
 
-            $('#quantity').on('input', calculateAmounts);
+            $('#quantity').on('keydown', function(e) {
+                if (['.', ',', 'e', 'E', '+', '-'].indexOf(e.key) !== -1) {
+                    e.preventDefault();
+                }
+            });
+            $('#quantity').on('input', function() {
+                const whole = String($(this).val()).split(/[.,]/)[0].replace(/\D/g, '');
+                if ($(this).val() !== whole) {
+                    $(this).val(whole);
+                }
+                calculateAmounts();
+            });
 
             $('#rateSelect').on('change', function() {
                 const selected = $(this).val();
@@ -1337,7 +1481,7 @@ body { width: 58mm; }
                     item_id: $('#selectedItemId').val(),
                     hsn_code: $('#selectedHsnCode').val() || '',
                     item_name: $('#itemSelected').val(),
-                    quantity: $('#quantity').val(),
+                    quantity: parseInt($('#quantity').val(), 10),
                     unit_id: $('#unitId').val(),
                     unit_name: $('#unitDisplay').val(),
                     rate: $('#rate').val(),
@@ -1352,6 +1496,7 @@ body { width: 58mm; }
                     total_gst: $('#totalGst').val(),
                     net_amount: $('#netAmount').val(),
                     sale_mrp: $('#saleMrp').val() || $('#rate').val() || 0,
+                    barcode: $('#barcodeInput').data('scanned-barcode') || '',
                 });
                 renderItemsTable();
                 clearItemSelection();
@@ -1388,6 +1533,21 @@ body { width: 58mm; }
                 $('#sgstAmount').val(item.sgst_amount);
                 $('#totalGst').val(item.total_gst);
                 $('#netAmount').val(item.net_amount);
+                $('#saleMrp').val(item.sale_mrp || item.rate || 0);
+                resetRateSelect();
+                $('#rate').val(item.rate);
+                $('#barcodeInput').val(item.barcode || '').data('scanned-barcode', item.barcode || '');
+                if (item.barcode) {
+                    $.get("{{ route('counter-sale.product-barcodes') }}", {
+                        prod_id: item.item_id,
+                        sale_date: $('#saleDate').val()
+                    }, function(rows) {
+                        const match = (rows || []).find(function(row) {
+                            return String(row.Barcode) === String(item.barcode);
+                        });
+                        if (match) $('#barcodeInput').data('available-qty', match.Avil_Qnty);
+                    });
+                }
 
                 // Remove the item from array temporarily
                 itemsArray.splice(index, 1);
@@ -1577,14 +1737,20 @@ body { width: 58mm; }
             $('#rate').show();
         }
 
-        function populateItemFields(item) {
+        function populateItemFields(item, options) {
+            options = options || {};
+            const scannedBarcode = options.requireBarcode ? '' : ($('#barcodeInput').data('scanned-barcode') || '');
             const existingItem = itemsArray.find(function(row) {
+                if (scannedBarcode) {
+                    return String(row.barcode || '') === String(scannedBarcode);
+                }
                 return String(row.item_id) === String(item.Prod_Id)
-                    && parseFloat(row.rate) === parseFloat(item.MRP ?? item.Rate ?? 0);
+                    && parseFloat(row.rate) === parseFloat(item.MRP ?? item.Rate ?? 0)
+                    && !row.barcode;
             });
             const saleRates = Array.isArray(item.Sale_Rates) ? item.Sale_Rates
                 : (Array.isArray(item.sale_rates) ? item.sale_rates : []);
-            if (existingItem && saleRates.length === 1) {
+            if (!options.requireBarcode && existingItem && (scannedBarcode || saleRates.length === 1)) {
                 Swal.fire('Product Already Added',
                     `${item.Prod_ShortNm} is already in the list with quantity: ${existingItem.quantity}`,
                     'warning');
@@ -1604,25 +1770,37 @@ body { width: 58mm; }
             $('#unitId').val(item.Unit_Id);
             $('#unitDisplay').val(item.Unit_Name);
             const stockMrp = parseFloat(item.MRP ?? item.Rate) || 0;
-            applySaleRateOptions(saleRates, stockMrp);
-            loadSaleRatesForItem(item.Prod_Id, stockMrp);
+            if (options.requireBarcode) {
+                resetRateSelect();
+                $('#rate, #saleMrp').val('');
+                $('#barcodeInput').removeData('available-qty');
+            } else if (scannedBarcode) {
+                applySaleRateOptions([stockMrp], stockMrp);
+            } else {
+                applySaleRateOptions(saleRates, stockMrp);
+                loadSaleRatesForItem(item.Prod_Id, stockMrp);
+            }
             $('#discountPercent').val(item.Discount || 0);
             $('#cgstRate').val(GST_TYPE == 2 ? 0 : cgst);
             $('#sgstRate').val(GST_TYPE == 2 ? 0 : sgst);
             $('#quantity').val(1);
             calculateAmounts();
-            if (item.Avil_Qnty != null) {
+            if (options.requireBarcode) {
+                $('#barcodeInput').removeData('available-qty').removeData('pack-date');
+            } else if (item.Avil_Qnty != null) {
                 $('#barcodeInput').data('available-qty', item.Avil_Qnty);
                 $('#barcodeInput').data('pack-date', item.Pack_Date);
                 if (item.Avil_Qnty <= 0) {
-                    Swal.fire('Warning', 'This product is out of stock!', 'warning');
+                    Swal.fire('Warning', 'This barcode is out of stock!', 'warning');
                 }
             } else {
                 $('#barcodeInput').removeData('available-qty');
                 $('#barcodeInput').removeData('pack-date');
             }
             $('#saleDate').prop('disabled', true);
-            $('#quantity').focus();
+            if (!options.requireBarcode) {
+                $('#quantity').focus();
+            }
         }
 
 
@@ -1674,22 +1852,32 @@ body { width: 58mm; }
                 Swal.fire('Error', 'Please select an item', 'error');
                 return false;
             }
-            const qty = parseFloat($('#quantity').val());
+            const scannedBarcode = String($('#barcodeInput').data('scanned-barcode') || '').trim();
+            if (!/^\d+$/.test(scannedBarcode)) {
+                Swal.fire('Error', 'Select a barcode', 'error');
+                $('#barcodeInput').focus();
+                return false;
+            }
+            const qty = parseInt($('#quantity').val(), 10);
             const rate = parseFloat($('#rate').val());
             const discPct = parseFloat($('#discountPercent').val()) || 0;
             const totAmt = parseFloat($('#totalAmount').val()) || 0;
             const availableQty = parseFloat($('#barcodeInput').data('available-qty'));
             const alreadyAdded = itemsArray.find(function(row) {
+                if (scannedBarcode) {
+                    return String(row.barcode || '') === String(scannedBarcode);
+                }
                 return String(row.item_id) === String($('#selectedItemId').val())
-                    && parseFloat(row.rate) === rate;
+                    && parseFloat(row.rate) === rate
+                    && !row.barcode;
             });
             if (alreadyAdded && !$('#addItemBtn').data('editing')) {
                 Swal.fire('Error', 'This item at this rate is already in the list', 'error');
                 return false;
             }
 
-            if (!$('#quantity').val() || qty <= 0) {
-                Swal.fire('Error', 'Quantity must be greater than 0', 'error');
+            if (!/^\d+$/.test(String($('#quantity').val())) || qty < 1) {
+                Swal.fire('Error', 'Quantity must be a whole number', 'error');
                 return false;
             }
             if (!isNaN(availableQty) && qty > availableQty) {
@@ -1734,11 +1922,11 @@ body { width: 58mm; }
             <td>${item.discount_percent}</td>
             <td>${item.discount_amount}</td>
             <td>${item.taxable_amount}</td>
-            <td>${item.cgst_rate}</td>
-            <td>${item.cgst_amount}</td>
-            <td>${item.sgst_rate}</td>
-            <td>${item.sgst_amount}</td>
-            <td>${item.total_gst}</td>
+            <td class="gst-col">${item.cgst_rate}</td>
+            <td class="gst-col">${item.cgst_amount}</td>
+            <td class="gst-col">${item.sgst_rate}</td>
+            <td class="gst-col">${item.sgst_amount}</td>
+            <td class="gst-col">${item.total_gst}</td>
             <td>${item.net_amount}</td>
             <td style="white-space:nowrap; min-width:130px;">
               <button class="btn btn-primary btn-sm editItem me-1" data-index="${index}">Edit</button>
@@ -1748,6 +1936,9 @@ body { width: 58mm; }
             });
 
             $('#itemsTableBody').html(html);
+            if (GST_TYPE == 2) {
+                $('.gst-col').hide();
+            }
             $('#summaryTotalAmount').val(totalAmt.toFixed(2));
             $('#totalGSTAmount').val(totalGST.toFixed(2));
 
@@ -1786,6 +1977,7 @@ body { width: 58mm; }
         function clearItemSelection() {
             $('#selectedItemId, #selectedHsnCode, #unitId').val('');
             $('#itemSelected, #unitDisplay, #saleMrp').val('');
+            $('#barcodeInput').val('').removeData('scanned-barcode').removeData('available-qty');
             $('#cgstRate, #sgstRate').val('');
             resetRateSelect();
             clearItemCalc();

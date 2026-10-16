@@ -77,9 +77,10 @@
                 ['key' => 'Particulars', 'label' => 'Particulars'],
                 ['key' => 'Debit', 'label' => 'Debit', 'type' => 'amount'],
                 ['key' => 'Credit', 'label' => 'Credit', 'type' => 'amount'],
-                ['key' => 'Balance', 'label' => 'Balance', 'type' => 'amount'],
+                ['key' => 'Balance', 'label' => 'Balance', 'type' => 'drcr'],
             ],
             'totals' => ['Debit', 'Credit'],
+            'closing_key' => 'Balance',
         ];
     @endphp
     @include('Admin.report-table-script')

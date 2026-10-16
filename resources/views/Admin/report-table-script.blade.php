@@ -20,6 +20,13 @@
         return (parseFloat(n) || 0).toFixed(2);
     }
 
+    function fmtDrCr(n) {
+        const v = parseFloat(n);
+        if (isNaN(v) || Math.abs(v) < 0.005) return '0.00';
+        if (v < 0) return Math.abs(v).toFixed(2) + ' Cr';
+        return v.toFixed(2) + ' Dr';
+    }
+
     function isPartyLedgerMode() {
         return (slug === 'supplier-register' || slug === 'customer-register')
             && String($('input[name="reportView"]:checked').val()) === '2';
@@ -49,6 +56,10 @@
         if (col.type === 'amount') {
             if (val === null || val === undefined || val === '') return '';
             return fmtAmt(val);
+        }
+        if (col.type === 'drcr') {
+            if (val === null || val === undefined || val === '') return '';
+            return fmtDrCr(val);
         }
         if (col.type === 'amount_blank') {
             return fmtAmtBlank(val);
@@ -88,7 +99,7 @@
         activeTotals = currentTotals();
         let head = '<th>Sl</th>';
         activeColumns.forEach(function(col) {
-            const cls = (col.type === 'amount' || col.type === 'amount_blank' || col.type === 'qty') ? ' class="text-end"' : '';
+            const cls = (col.type === 'amount' || col.type === 'amount_blank' || col.type === 'qty' || col.type === 'drcr') ? ' class="text-end"' : '';
             head += `<th${cls}>${col.label}</th>`;
         });
         $('#reportHead').html(head);
@@ -97,7 +108,7 @@
             foot = '<th colspan="' + (activeColumns.length + 1) + '"></th>';
         } else {
             activeColumns.forEach(function(col) {
-                if (activeTotals.indexOf(col.key) >= 0) {
+                if (activeTotals.indexOf(col.key) >= 0 || col.key === reportCfg.closing_key) {
                     foot += `<th class="text-end" data-total="${col.key}">0</th>`;
                 } else {
                     foot += '<th></th>';
@@ -288,8 +299,8 @@
             const weight = kind > 0 ? ' font-weight:bold;' : '';
             body += `<tr><td>${idx + 1}</td>`;
             printCols.forEach(function(col) {
-                const align = (col.type === 'amount' || col.type === 'amount_blank' || col.type === 'qty') ? ' style="text-align:right;' + weight + '"' : (weight ? ' style="' + weight + '"' : '');
-                body += `<td${align}>${fmtCell(col, row)}</td>`;
+                const align = (col.type === 'amount' || col.type === 'amount_blank' || col.type === 'qty' || col.type === 'drcr') ? ' style="text-align:right;' + weight + '"' : (weight ? ' style="' + weight + '"' : '');
+                body += `<td${align}>${col.footer_only ? '' : fmtCell(col, row)}</td>`;
                 if (kind === 0 && sums.hasOwnProperty(col.key)) sums[col.key] += parseFloat(row[col.key]) || 0;
             });
             body += '</tr>';
@@ -299,7 +310,10 @@
         if (activeTotals.length) {
             totalRow = '<tr><th>Total</th>';
             printCols.forEach(function(col) {
-                if (sums.hasOwnProperty(col.key)) {
+                if (col.key === reportCfg.closing_key) {
+                    const last = printRows.length ? printRows[printRows.length - 1][col.key] : 0;
+                    totalRow += `<th style="text-align:right;">${fmtDrCr(last)}</th>`;
+                } else if (sums.hasOwnProperty(col.key)) {
                     const v = (col.type === 'amount') ? fmtAmt(sums[col.key]) : fmtQty(sums[col.key]);
                     totalRow += `<th style="text-align:right;">${v}</th>`;
                 } else {
@@ -395,14 +409,19 @@
                 const trCls = kind > 0 ? ' class="fw-bold"' : '';
                 html += `<tr${trCls}><td>${idx + 1}</td>`;
                 activeColumns.forEach(function(col) {
-                    const cls = (col.type === 'amount' || col.type === 'qty') ? ' class="text-end"' : '';
-                    html += `<td${cls}>${fmtCell(col, row)}</td>`;
+                    const cls = (col.type === 'amount' || col.type === 'qty' || col.type === 'drcr') ? ' class="text-end"' : '';
+                    html += `<td${cls}>${col.footer_only ? '' : fmtCell(col, row)}</td>`;
                     if (kind === 0 && sums.hasOwnProperty(col.key)) sums[col.key] += parseFloat(row[col.key]) || 0;
                 });
                 html += '</tr>';
             });
             $('#reportBody').html(html);
             activeColumns.forEach(function(col) {
+                if (col.key === reportCfg.closing_key) {
+                    const last = data[data.length - 1][col.key];
+                    $(`#reportFoot [data-total="${col.key}"]`).text(fmtDrCr(last));
+                    return;
+                }
                 if (!sums.hasOwnProperty(col.key)) return;
                 const v = (col.type === 'amount') ? fmtAmt(sums[col.key]) : fmtQty(sums[col.key]);
                 $(`#reportFoot [data-total="${col.key}"]`).text(v);

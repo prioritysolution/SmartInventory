@@ -61,6 +61,63 @@ class AgentRequisition extends Controller
         return response()->json(array_values($items));
     }
 
+    public function barcodeItem(Request $request)
+    {
+        $code = trim((string) $request->input('barcode'));
+        $date = $request->input('date') ?: date('Y-m-d');
+        if ($code === '' || !ctype_digit($code)) {
+            return response()->json(['error' => 'Invalid barcode'], 404);
+        }
+
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+        $rows = DB::connection('coops')->select('CALL USP_GET_PROD_INFO(?, ?)', [$code, $date]);
+        if (empty($rows)) {
+            return response()->json(['error' => 'Invalid barcode'], 404);
+        }
+
+        $item = $rows[0];
+        $item->Barcode = $code;
+        return response()->json($item);
+    }
+
+    public function productBarcodes(Request $request)
+    {
+        $prodId = (int) $request->input('prod_id', 0);
+        $date = $request->input('date') ?: date('Y-m-d');
+        if ($prodId <= 0) {
+            return response()->json(['error' => 'Product is required'], 400);
+        }
+
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+
+        $rows = DB::connection('coops')->select("
+            SELECT
+                s.Barcode AS Barcode,
+                CAST(IFNULL(MAX(CASE WHEN s.Stock_Type IN (1, 2) THEN s.MRP END), MAX(s.MRP)) AS DECIMAL(10,2)) AS MRP,
+                IFNULL(SUM(
+                    CASE
+                        WHEN s.Stock_Type IN (1, 2, 6) THEN s.Quantity
+                        WHEN s.Stock_Type = 8 AND NOT EXISTS (
+                            SELECT 1 FROM trans_agent_stock a WHERE a.TrnsStock_Id = s.Stock_Id
+                        ) THEN s.Quantity
+                        WHEN s.Stock_Type IN (3, 4, 7, 9) THEN -s.Quantity
+                        ELSE 0
+                    END
+                ), 0) AS Avil_Qnty
+            FROM trns_stockinout s
+            WHERE s.Prod_Id = ?
+              AND s.InOut_Date <= ?
+              AND IFNULL(s.Barcode, 0) <> 0
+            GROUP BY s.Barcode
+            HAVING Avil_Qnty > 0
+            ORDER BY MAX(CASE WHEN s.Stock_Type = 2 THEN s.Stock_Id END) DESC, MAX(s.Stock_Id) DESC
+        ", [$prodId, $date]);
+
+        return response()->json($rows);
+    }
+
     private function searchItems(int $catId, int $subCatId, string $code): array
     {
         try {
@@ -158,12 +215,12 @@ class AgentRequisition extends Controller
             DB::connection('coops')->beginTransaction();
 
             DB::connection('coops')->statement('DROP TEMPORARY TABLE IF EXISTS tempitem');
-            DB::connection('coops')->statement('CREATE TEMPORARY TABLE tempitem (item_id INT, qnty SMALLINT, unit_id SMALLINT)');
+            DB::connection('coops')->statement('CREATE TEMPORARY TABLE tempitem (item_id INT, qnty SMALLINT, unit_id SMALLINT, barcode BIGINT NULL)');
 
             foreach ($request->items as $item) {
                 DB::connection('coops')->statement(
-                    'INSERT INTO tempitem (item_id, qnty, unit_id) VALUES (?, ?, ?)',
-                    [$item['item_id'], $item['qnty'], $item['unit_id']]
+                    'INSERT INTO tempitem (item_id, qnty, unit_id, barcode) VALUES (?, ?, ?, ?)',
+                    [$item['item_id'], $item['qnty'], $item['unit_id'], $item['barcode'] ?? null]
                 );
             }
 

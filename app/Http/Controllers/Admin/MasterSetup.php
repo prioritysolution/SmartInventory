@@ -150,7 +150,7 @@ public function indexAgent(Request $request)
             'join_date' => 'required|date|before_or_equal:today',
             'stock_limit' => 'nullable|numeric|min:0|max:99999999.99',
             'credit_sell_limit' => 'nullable|numeric|min:0|max:99999999.99',
-            'password' => 'nullable|string|min:6|max:20',
+            'password' => 'required|string|min:6|max:20',
         ], $this->addressMasterValidationRules()));
         try {
             Config::set('database.connections.coops.database', session('org_schema'));
@@ -1170,7 +1170,7 @@ public function storeProdCategory(Request $request)
         return $map[$type] ?? null;
     }
 
-    private function addressMasterValidationRules(bool $required = true): array
+    private function addressMasterValidationRules(bool $required = false): array
     {
         $rule = $required ? 'required|integer|min:1' : 'nullable|integer|min:0';
         return [

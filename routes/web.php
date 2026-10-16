@@ -101,6 +101,20 @@ Route::middleware('check.session')->group(function () {
   //test
   Route::get('/organization-profiless', [MasterSetup::class, 'organizationprofiless'])->name('organization-profile'); ///for testingggggggggggggggggggggggggggggggggggggggggggggggggggg
 
+  // Support
+  Route::get('/support', function () {
+      return view('Admin.support', [
+          'pageTitle'   => 'Support',
+          'spApi'       => env('SP_API'),
+          'spBase'      => env('SP_BASE'),
+          'spDomain'    => env('SP_DOMAIN'),
+          'spApiKey'    => env('SP_API_KEY'),
+          'spName'      => session('user_name'),
+          'spPhone'     => session('user_phone'),
+          'spEmail'     => session('user_email'),
+      ]);
+  })->name('support');
+
 
   //user creation
   Route::get('/user-creation', [UserManagement::class, 'index'])->name('user-creation');
@@ -120,6 +134,8 @@ Route::get('/good-received/subcats', [Purchase::class, 'getSubCats'])->name('goo
   Route::get('/wastage-damage/items', [Wastage::class, 'getItems'])->name('wastage-damage.items');
   Route::get('/wastage-damage/subcats', [Wastage::class, 'getSubCats'])->name('wastage-damage.subcats');
   Route::get('/wastage-damage/item-info', [Wastage::class, 'itemInfo'])->name('wastage-damage.item-info');
+  Route::get('/wastage-damage/barcode', [Wastage::class, 'barcode'])->name('wastage-damage.barcode');
+  Route::get('/wastage-damage/barcodes', [Wastage::class, 'barcodes'])->name('wastage-damage.barcodes');
   Route::post('/wastage-damage/save', [Wastage::class, 'store'])->name('wastage-damage.store');
   Route::get('/wastage-damage/search', [Wastage::class, 'search'])->name('wastage-damage.search');
   Route::get('/wastage-damage/details/{id}', [Wastage::class, 'details'])->name('wastage-damage.details');
@@ -132,6 +148,7 @@ Route::get('/good-received/subcats', [Purchase::class, 'getSubCats'])->name('goo
   Route::get('/purchase-return', [Purchase::class, 'purchaseReturnIndex'])->name('purchase-return');
   Route::post('/purchase-return/save', [Purchase::class, 'storePurchaseReturn'])->name('purchase-return.store');
   Route::get('/purchase-return/items', [Purchase::class, 'purchaseReturnGetItems'])->name('purchase-return.items');
+  Route::get('/purchase-return/barcodes', [Purchase::class, 'purchaseReturnBarcodes'])->name('purchase-return.barcodes');
   Route::get('/purchase-return/returnable-qty', [Purchase::class, 'getPurchaseReturnableQty'])->name('purchase-return.returnable-qty');
   Route::get('/purchase-return/subcats', [Purchase::class, 'purchaseReturnGetSubCats'])->name('purchase-return.subcats');
   Route::get('purchase-return/search', [Purchase::class, 'searchPurchaseReturn'])->name('purchase-return.search');
@@ -180,6 +197,7 @@ Route::get('/good-received/subcats', [Purchase::class, 'getSubCats'])->name('goo
   Route::get('/counter-sale/items', [Sales::class, 'getSaleItems'])->name('counter-sale.items');
   Route::get('/counter-sale/subcats', [Sales::class, 'getSaleSubCats'])->name('counter-sale.subcats');
   Route::get('/counter-sale/item-info', [Sales::class, 'getSaleItemByProd'])->name('counter-sale.item-info');
+  Route::get('/counter-sale/product-barcodes', [Sales::class, 'getProductBarcodes'])->name('counter-sale.product-barcodes');
   Route::get('/counter-sale/sale-rates', [Sales::class, 'getSaleRates'])->name('counter-sale.sale-rates');
   Route::get('/counter-sale/search', [Sales::class, 'countersalesearch'])->name('counter-sale.search');
   Route::get('/counter-sale/details/{id}', [Sales::class, 'details'])->name('counter-sale.details');
@@ -191,6 +209,7 @@ Route::get('/good-received/subcats', [Purchase::class, 'getSubCats'])->name('goo
   Route::get('/sale-return', [Sales::class, 'indexSaleReturn'])->name('sale-return');
   Route::post('/sale-return/save', [Sales::class, 'storeSaleReturn'])->name('sale-return.store');
   Route::get('/sale-return/barcode', [Sales::class, 'getItemByBarcodeReturn'])->name('sale-return.barcode');
+  Route::get('/sale-return/barcodes', [Sales::class, 'saleReturnBarcodes'])->name('sale-return.barcodes');
   Route::get('/sale-return/items', [Sales::class, 'getSaleItems'])->name('sale-return.items');
   Route::get('/sale-return/subcats', [Sales::class, 'getSaleSubCats'])->name('sale-return.subcats');
   Route::get('/sale-return/item-info', [Sales::class, 'getSaleItemByProd'])->name('sale-return.item-info');
@@ -219,6 +238,7 @@ Route::get('/good-received/subcats', [Purchase::class, 'getSubCats'])->name('goo
   // Inventory Reports
   Route::get('/stock-summary', [InventoryReports::class, 'stockSummary'])->name('stock-summary');
   Route::get('/stock-summary/search', [InventoryReports::class, 'stockSummarySearch'])->name('stock-summary.search');
+  Route::get('/stock-summary/details', [InventoryReports::class, 'stockSummaryDetails'])->name('stock-summary.details');
   Route::get('/stock-summary/subcats', [InventoryReports::class, 'stockSummarySubCats'])->name('stock-summary.subcats');
 
   Route::get('/purchase-register', [InventoryReports::class, 'purchaseRegister'])->name('purchase-register');
@@ -237,12 +257,11 @@ Route::get('/good-received/subcats', [Purchase::class, 'getSubCats'])->name('goo
   Route::get('/customer-register/search', [InventoryReports::class, 'customerRegisterSearch'])->name('customer-register.search');
   Route::get('/share-register', [InventoryReports::class, 'shareRegister'])->name('share-register');
   Route::get('/share-register/search', [InventoryReports::class, 'shareRegisterSearch'])->name('share-register.search');
-  Route::get('/user-scroll', [InventoryReports::class, 'userScroll'])->name('user-scroll');
-  Route::get('/user-scroll/search', [InventoryReports::class, 'userScrollSearch'])->name('user-scroll.search');
   Route::get('/gst-register', [InventoryReports::class, 'gstRegister'])->name('gst-register');
   Route::get('/gst-register/search', [InventoryReports::class, 'gstRegisterSearch'])->name('gst-register.search');
   Route::get('/stock-statement', [InventoryReports::class, 'stockStatement'])->name('stock-statement');
   Route::get('/stock-statement/search', [InventoryReports::class, 'stockStatementSearch'])->name('stock-statement.search');
+  Route::get('/stock-statement/details', [InventoryReports::class, 'stockStatementDetails'])->name('stock-statement.details');
   Route::get('/expiry-report', [InventoryReports::class, 'expiryReport'])->name('expiry-report');
   Route::get('/expiry-report/search', [InventoryReports::class, 'expiryReportSearch'])->name('expiry-report.search');
   Route::get('/reorder-report', [InventoryReports::class, 'reorderReport'])->name('reorder-report');
@@ -289,6 +308,8 @@ Route::prefix('agent')->group(function () {
     Route::get('/requisition', [AgentRequisition::class, 'index'])->name('agent.requisition');
     Route::get('/requisition/search-item', [AgentRequisition::class, 'searchItem'])->name('agent.requisition.search-item');
     Route::get('/requisition/items', [AgentRequisition::class, 'getItems'])->name('agent.requisition.items');
+    Route::get('/requisition/barcode', [AgentRequisition::class, 'barcodeItem'])->name('agent.requisition.barcode');
+    Route::get('/requisition/product-barcodes', [AgentRequisition::class, 'productBarcodes'])->name('agent.requisition.product-barcodes');
     Route::get('/requisition/subcats', [AgentRequisition::class, 'getSubCats'])->name('agent.requisition.subcats');
     Route::get('/requisition/search', [AgentRequisition::class, 'search'])->name('agent.requisition.search');
     Route::post('/requisition/save', [AgentRequisition::class, 'store'])->name('agent.requisition.store');
@@ -299,6 +320,7 @@ Route::prefix('agent')->group(function () {
     Route::get('/sale/items', [AgentSale::class, 'getItems'])->name('agent.sale.items');
     Route::get('/sale/subcats', [AgentSale::class, 'getSubCats'])->name('agent.sale.subcats');
     Route::get('/sale/item-info', [AgentSale::class, 'getItemByProd'])->name('agent.sale.item-info');
+    Route::get('/sale/product-barcodes', [AgentSale::class, 'productBarcodes'])->name('agent.sale.product-barcodes');
     Route::get('/sale/sale-rates', [AgentSale::class, 'getSaleRates'])->name('agent.sale.sale-rates');
     Route::post('/sale/save', [AgentSale::class, 'store'])->name('agent.sale.store');
 

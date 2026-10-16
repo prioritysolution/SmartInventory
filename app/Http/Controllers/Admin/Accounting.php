@@ -16,20 +16,38 @@ class Accounting extends Controller
 
         $allTypes = DB::select('CALL USP_GET_APPLICATION_OPTION(?)', [11]);
         $voucherTypes = array_values(array_filter($allTypes, function ($row) {
-            return in_array((int) $row->Value_Id, [1, 2], true);
+            return in_array((int) $row->Value_Id, [1, 2, 3, 4], true);
         }));
+        $have = array_map(function ($row) {
+            return (int) $row->Value_Id;
+        }, $voucherTypes);
+        foreach ([3 => 'Contra', 4 => 'Journal'] as $id => $name) {
+            if (!in_array($id, $have, true)) {
+                $voucherTypes[] = (object) ['Value_Id' => $id, 'Value_Name' => $name];
+            }
+        }
 
         $allLedgers = DB::connection('coops')->select('CALL USP_GET_ACCT_GLHEAD()');
-        $ledgers = array_values(array_filter($allLedgers, function ($row) {
-            $isCash = strtoupper((string) ($row->Account_For ?? '')) === 'C';
-            $isOff  = in_array($row->Is_Active ?? 1, [0, '0', false, "\x00"], true);
-            return !$isCash && !$isOff;
+        $active = array_values(array_filter($allLedgers, function ($row) {
+            return !in_array($row->Is_Active ?? 1, [0, '0', false, "\x00"], true);
         }));
+        $ledgers = array_values(array_filter($active, function ($row) {
+            return strtoupper((string) ($row->Account_For ?? '')) !== 'C';
+        }));
+        $pairLedgers = array_map(function ($ledger) {
+            return [
+                'id' => (int) $ledger->Account_Id,
+                'label' => $ledger->Account_Code . ' - ' . $ledger->Account_Desc,
+            ];
+        }, $active);
 
         $banks    = DB::connection('coops')->select('CALL USP_GET_BANK_LEDGER()');
         $vouchers = DB::connection('coops')->select('CALL USP_GET_GENERAL_VOUCHER_LIST(?)', [session('year_id')]);
+        foreach ($vouchers as $voucher) {
+            $voucher->Vou_Type_Name = $this->voucherTypeName((int) $voucher->Vou_Type, $voucher->Vou_Type_Name ?? '');
+        }
 
-        return view('Admin.general-voucher', compact('voucherTypes', 'ledgers', 'banks', 'vouchers'))
+        return view('Admin.general-voucher', compact('voucherTypes', 'ledgers', 'pairLedgers', 'banks', 'vouchers'))
             ->with('pageTitle', 'General Voucher');
     }
 
@@ -43,20 +61,47 @@ class Accounting extends Controller
     public function detailsGeneralVoucher($id)
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $data = DB::connection('coops')->select('CALL USP_GET_GENERAL_VOUCHER_DTLS(?)', [intval($id)]);
-        if (empty($data)) {
+        $row = DB::connection('coops')->selectOne("
+            SELECT m.Voucher_Id,
+                   DATE_FORMAT(m.Vou_Date, '%Y-%m-%d') AS Vou_Date,
+                   m.Vou_Type,
+                   m.Vou_Mode,
+                   m.Vou_No,
+                   m.Ref_Vou_No,
+                   m.Particulars,
+                   m.Instrument_No,
+                   dr.GlHead_Id AS Debit_Ledger,
+                   cr.GlHead_Id AS Credit_Ledger,
+                   dr.Vou_Amount AS Amount
+            FROM trans_voucher_master m
+            INNER JOIN trans_voucher_details dr
+                ON dr.Voucher_Id = m.Voucher_Id AND dr.Trans_Type = 'D'
+            INNER JOIN trans_voucher_details cr
+                ON cr.Voucher_Id = m.Voucher_Id AND cr.Trans_Type = 'C'
+            WHERE m.Voucher_Id = ?
+              AND m.Trans_Type = 9
+            LIMIT 1
+        ", [intval($id)]);
+        if (!$row) {
             return response()->json(['error' => 'Voucher not found'], 404);
         }
-        return response()->json($data[0]);
+        $type = (int) $row->Vou_Type;
+        $row->Ledger_Id = $type === 1 ? $row->Credit_Ledger : $row->Debit_Ledger;
+        $row->Bank_Ledg = (int) $row->Vou_Mode === 2
+            ? ($type === 1 ? $row->Debit_Ledger : $row->Credit_Ledger)
+            : 0;
+        return response()->json($row);
     }
 
     public function storeGeneralVoucher(Request $request)
     {
         $request->validate([
             'voucher_date' => 'required|date',
-            'voucher_type' => 'required|in:1,2',
-            'trans_mode'   => 'required|in:1,2',
-            'ledger_id'    => 'required|integer',
+            'voucher_type' => 'required|in:1,2,3,4',
+            'trans_mode'   => 'nullable|in:1,2',
+            'ledger_id'    => 'nullable|integer',
+            'debit_ledger' => 'nullable|integer',
+            'credit_ledger' => 'nullable|integer',
             'amount'       => 'required|numeric|min:0.01|max:99999999.99',
             'particulars'  => 'required|string|max:200',
             'ref_vouch_no' => 'nullable|string|max:50',
@@ -65,11 +110,30 @@ class Accounting extends Controller
             'vouch_id'     => 'nullable|integer',
         ]);
 
-        if ((int) $request->trans_mode === 2 && !$request->bank_id) {
-            return response()->json(['error' => 'Please select a Bank'], 400);
-        }
-        if ((int) $request->trans_mode === 2 && !trim((string) $request->input('instrument_no', ''))) {
-            return response()->json(['error' => 'Instrument No is required for Bank'], 400);
+        $voucherType = (int) $request->input('voucher_type');
+        $isPair = in_array($voucherType, [3, 4], true);
+        $debitLedger = (int) $request->input('debit_ledger', 0);
+        $creditLedger = (int) $request->input('credit_ledger', 0);
+        if ($isPair) {
+            if ($debitLedger <= 0 || $creditLedger <= 0) {
+                return response()->json(['error' => 'Select debit ledger and credit ledger'], 400);
+            }
+            if ($debitLedger === $creditLedger) {
+                return response()->json(['error' => 'Debit ledger and credit ledger must be different'], 400);
+            }
+        } else {
+            if ((int) $request->input('ledger_id', 0) <= 0) {
+                return response()->json(['error' => 'Please select a Ledger'], 400);
+            }
+            if (!in_array((int) $request->input('trans_mode'), [1, 2], true)) {
+                return response()->json(['error' => 'Select Cash or Bank'], 400);
+            }
+            if ((int) $request->trans_mode === 2 && !$request->bank_id) {
+                return response()->json(['error' => 'Please select a Bank'], 400);
+            }
+            if ((int) $request->trans_mode === 2 && !trim((string) $request->input('instrument_no', ''))) {
+                return response()->json(['error' => 'Instrument No is required for Bank'], 400);
+            }
         }
 
         $yearStart = session('year_start');
@@ -110,7 +174,22 @@ class Accounting extends Controller
 
             Log::channel('trading')->info('USP_ADD_EDIT_GENERAL_VOUCHER params', $spParams);
 
-            $result = $conn->select('CALL USP_ADD_EDIT_GENERAL_VOUCHER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', array_values($spParams));
+            if ($isPair) {
+                $result = $this->savePairVoucher(
+                    $conn,
+                    $vouchId,
+                    $mode,
+                    $voucherType,
+                    $request->input('voucher_date'),
+                    $debitLedger,
+                    $creditLedger,
+                    floatval($request->input('amount')),
+                    $request->input('particulars'),
+                    (string) $request->input('ref_vouch_no', '')
+                );
+            } else {
+                $result = $conn->select('CALL USP_ADD_EDIT_GENERAL_VOUCHER(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', array_values($spParams));
+            }
 
             Log::channel('trading')->info('USP_ADD_EDIT_GENERAL_VOUCHER result', ['result' => $result]);
 
@@ -126,6 +205,103 @@ class Accounting extends Controller
             Log::channel('trading')->error('General voucher error: ' . $e->getMessage());
             return response()->json(['error' => $e->getMessage()], 500);
         }
+    }
+
+    private function voucherTypeName(int $type, string $current): string
+    {
+        if ($type === 3) {
+            return 'Contra';
+        }
+        if ($type === 4) {
+            return 'Journal';
+        }
+        return $current !== '' ? $current : ($type === 1 ? 'Receipt' : 'Payment');
+    }
+
+    private function savePairVoucher($conn, int $vouchId, int $mode, int $voucherType, string $vouDate, int $debitLedger, int $creditLedger, float $amount, string $particulars, string $refNo): array
+    {
+        $heads = $conn->select(
+            'SELECT Account_Id, Is_Active FROM mst_acct_glhead WHERE Account_Id IN (?, ?)',
+            [$debitLedger, $creditLedger]
+        );
+        $active = [];
+        foreach ($heads as $head) {
+            $off = in_array($head->Is_Active ?? 1, [0, '0', false, "\x00"], true);
+            if (!$off) {
+                $active[(int) $head->Account_Id] = true;
+            }
+        }
+        if (empty($active[$debitLedger]) || empty($active[$creditLedger])) {
+            return [(object) ['Error_No' => -1, 'Message' => 'Debit or credit ledger is not active']];
+        }
+
+        $userId = (int) session('user_id');
+        $yearId = (int) session('year_id');
+        $branchId = (int) session('branch_id');
+        $vouMode = $voucherType === 3 ? 3 : 4;
+
+        if ($mode === 1) {
+            $prefix = $voucherType === 3 ? 'CON' : 'JOU';
+            $this->ensureNumberSeries($conn, $prefix, $yearId, $branchId);
+            $generated = $conn->selectOne('SELECT UDF_GEN_SYS_NO(?, ?, ?) AS Vou_No', [$prefix, $yearId, $branchId]);
+            $vouNo = trim((string) ($generated->Vou_No ?? ''));
+            if ($vouNo === '' || str_ends_with($vouNo, '/')) {
+                return [(object) ['Error_No' => -1, 'Message' => 'Voucher number could not be generated']];
+            }
+            $ref = trim($refNo) === '' ? $vouNo : trim($refNo);
+            $conn->insert(
+                'INSERT INTO trans_voucher_master
+                    (Year_Id, Vou_Date, Vou_Type, Vou_Mode, Vou_No, Ref_Vou_No, Particulars, Trans_Type, Type_Id, Status, Created_By, Approved_By, Approved_On)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 9, 0, 2, ?, ?, CURRENT_TIMESTAMP())',
+                [$yearId, $vouDate, $voucherType, $vouMode, $vouNo, $ref, $particulars, $userId, $userId]
+            );
+            $vouchId = (int) $conn->getPdo()->lastInsertId();
+        } else {
+            $existing = $conn->selectOne(
+                'SELECT Voucher_Id, Vou_No FROM trans_voucher_master WHERE Voucher_Id = ? AND Trans_Type = 9 AND IFNULL(Type_Id, 0) = 0',
+                [$vouchId]
+            );
+            if (!$existing) {
+                return [(object) ['Error_No' => -1, 'Message' => 'Voucher not found']];
+            }
+            $vouNo = $existing->Vou_No;
+            $ref = trim($refNo) === '' ? $vouNo : trim($refNo);
+            $conn->update(
+                'UPDATE trans_voucher_master
+                    SET Vou_Date = ?, Vou_Type = ?, Vou_Mode = ?, Ref_Vou_No = ?, Particulars = ?, Instrument_No = NULL
+                  WHERE Voucher_Id = ?',
+                [$vouDate, $voucherType, $vouMode, $ref, $particulars, $vouchId]
+            );
+            $conn->delete('DELETE FROM trans_voucher_details WHERE Voucher_Id = ?', [$vouchId]);
+        }
+
+        $conn->insert(
+            'INSERT INTO trans_voucher_details (Voucher_Id, Trans_Type, GlHead_Id, Vou_Amount) VALUES (?, ?, ?, ?)',
+            [$vouchId, 'D', $debitLedger, $amount]
+        );
+        $conn->insert(
+            'INSERT INTO trans_voucher_details (Voucher_Id, Trans_Type, GlHead_Id, Vou_Amount) VALUES (?, ?, ?, ?)',
+            [$vouchId, 'C', $creditLedger, $amount]
+        );
+
+        $verb = $mode === 1 ? 'Voucher saved. No is ' : 'Voucher updated. No is ';
+        return [(object) ['Error_No' => 0, 'Message' => $verb . $vouNo]];
+    }
+
+    private function ensureNumberSeries($conn, string $element, int $yearId, int $branchId): void
+    {
+        $row = $conn->selectOne(
+            'SELECT Id FROM stores_id WHERE Element_Name = ? AND Year_Id = ? AND (Branch_Id IS NULL OR Branch_Id = ?) LIMIT 1',
+            [$element, $yearId, $branchId]
+        );
+        if ($row) {
+            return;
+        }
+        $for = $element === 'CON' ? 'For Contra Voucher Generate' : 'For Journal Voucher Generate';
+        $conn->insert(
+            'INSERT INTO stores_id (Element_Name, Element_For, Cur_Val, Year_Id, Branch_Id) VALUES (?, ?, 0, ?, ?)',
+            [$element, $for, $yearId, $branchId]
+        );
     }
 
     public function indexSupplierPayment()
