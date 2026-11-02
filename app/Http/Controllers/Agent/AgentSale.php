@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Agent;
 
+use App\Http\Controllers\Concerns\ResolvesOrganisationAddress;
 use App\Http\Controllers\Concerns\SearchesItemsByCode;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -11,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 
 class AgentSale extends Controller
 {
+    use ResolvesOrganisationAddress;
     use SearchesItemsByCode;
 
     public function index()
@@ -24,6 +26,7 @@ class AgentSale extends Controller
             session('agent_id'),
         ]);
         $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        $this->organisationAddress();
         return view('Agent.sale', [
             'customers'  => $customers,
             'categories' => $categories,

@@ -1,8 +1,4 @@
 @extends('Dashboard.Layouts.layout')
-<div id="pageLoader"
-    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.7); z-index:9999; justify-content:center; align-items:center;">
-    <div class="spinner-border text-primary" style="width:3rem; height:3rem;"></div>
-</div>
 
 @section('content')
     <div class="page-wrapper">
@@ -64,9 +60,6 @@
                                 <h6 class="mb-0" id="panelTitle"></h6>
                             </div>
                             <div class="table-responsive">
-                                <div id="loadingSpinner" class="text-center py-3" style="display:none;">
-                                    <div class="spinner-border spinner-border-sm text-primary"></div> Loading...
-                                </div>
                                 <table id="chartTable" class="table table-nowrap" style="display:none;">
                                     <thead class="thead-light" id="tableHead"></thead>
                                     <tbody id="tableBody"></tbody>
@@ -112,7 +105,6 @@
 
             currentSection = type;
             $('#dataPanel').show();
-            $('#pageLoader').css('display', 'flex');
             destroyChartTable();
             $('#chartTable').hide();
 
@@ -151,7 +143,6 @@
 
                 $('#tableHead').html(head);
                 $('#tableBody').html(body);
-                $('#pageLoader').hide();
                 $('#chartTable').show();
                 chartDT = $('#chartTable').DataTable({
                     pageLength: 10,
@@ -171,7 +162,6 @@
                     }
                 });
             }).fail(function() {
-                $('#pageLoader').hide();
                 $('#chartTable').show();
             });
         }

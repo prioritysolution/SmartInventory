@@ -204,7 +204,7 @@ class AgentRequisition extends Controller
             'date'    => 'required|date',
             'items'   => 'required|array|min:1',
             'items.*.item_id' => 'required|integer',
-            'items.*.qnty'    => 'required|numeric|min:1',
+            'items.*.qnty'    => 'required|numeric|min:1|max:32767',
             'items.*.unit_id' => 'required|integer',
         ]);
 

@@ -347,6 +347,7 @@
     const yearEnd   = "{{ $year_end }}";
     const today     = "{{ date('Y-m-d') }}";
     const ORG_NAME = @json(session('org_name', ''));
+    const ORG_ADDRESS = @json(session('org_address', ''));
     const BRANCH_NAME = @json(session('branch_name', ''));
     const AGENT_NAME = @json(session('agent_name', ''));
     const AGENT_CODE = @json(session('agent_code', ''));
@@ -1031,6 +1032,7 @@
         <div class="bill-container">
             <div class="bill-header">
                 <h3>${billData.Org_Name || ORG_NAME || 'Smart Inventory'}</h3>
+                ${(billData.Org_Address || ORG_ADDRESS) ? `<p>${billData.Org_Address || ORG_ADDRESS}</p>` : ''}
                 ${(billData.Branch_Name || BRANCH_NAME) ? `<p>${billData.Branch_Name || BRANCH_NAME}</p>` : ''}
             </div>
             <div class="bill-title">BILL</div>

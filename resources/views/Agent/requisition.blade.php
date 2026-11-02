@@ -74,7 +74,7 @@
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Qty <span class="text-danger">*</span></label>
-                    <input type="number" id="itemQty" class="form-control" min="1" placeholder="0">
+                    <input type="number" id="itemQty" class="form-control" min="1" max="32767" step="1" placeholder="0">
                 </div>
             </div>
 
@@ -553,6 +553,7 @@ $('#reqSearchModal').on('hidden.bs.modal', function () {
 
         if (!itemId)         { Swal.fire('Error', 'Please select an item', 'error'); return; }
         if (!qty || qty < 1) { Swal.fire('Error', 'Enter a valid quantity', 'error'); return; }
+        if (qty > 32767) { Swal.fire('Error', 'Quantity cannot be more than 32767', 'error'); return; }
         if (itemList.find(i => String(i.item_id) === String(itemId))) { Swal.fire('Error', 'This item is already added', 'error'); return; }
 
         itemList.push({ item_id: itemId, item_name: itemName, unit_id: unitId, unit_name: unitName, qnty: qty });

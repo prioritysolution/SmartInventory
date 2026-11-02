@@ -178,6 +178,14 @@
             font-size: 13px;
         }
 
+        .bill-date {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin: 0 0 4px;
+            font-size: 13px;
+        }
+
         .bill-customer,
         .bill-agent {
             margin: 6px 0;
@@ -210,6 +218,11 @@
 
         .items-table .item-name {
             word-break: break-word;
+        }
+
+        .items-table .item-code {
+            display: block;
+            font-size: 11px;
         }
 
         .items-table .text-right {
@@ -366,6 +379,7 @@
                                 <input type="text" class="form-control calc-label" id="itemSelected" readonly
                                     placeholder="Scan barcode to select item">
                                 <input type="hidden" id="selectedItemId">
+                                <input type="hidden" id="selectedProdCode">
                                 <input type="hidden" id="selectedHsnCode">
                                 <input type="hidden" id="unitId">
                                 <input type="hidden" id="saleMrp">
@@ -676,6 +690,7 @@
         let currentSaleId = 0;
         const GST_TYPE = {{ session('gst_type', 1) }};
         const ORG_NAME = @json(session('org_name', ''));
+        const ORG_ADDRESS = @json(session('org_address', ''));
         const BRANCH_NAME = @json(session('branch_name', ''));
         const AGENT_NAME = @json(session('agent_name', ''));
         const AGENT_CODE = @json(session('agent_code', ''));
@@ -684,11 +699,14 @@
         let barcodeScanner = null;
         let barcodeScannerRunning = false;
 
+        let currentSaleBill = null;
+
         function showBillModal(billData) {
             if (!billData) {
                 Swal.fire('Error', 'No bill data available', 'error');
                 return;
             }
+            currentSaleBill = billData;
             document.getElementById('billContent').innerHTML = generateBillHTML(billData);
             new bootstrap.Modal(document.getElementById('billModal')).show();
         }
@@ -709,6 +727,31 @@
 
         function fmtDate(d) {
             return (window.siDate && siDate.toDisplay) ? siDate.toDisplay(d) : (d || '');
+        }
+
+        function fmtNow() {
+            const d = new Date();
+            const hour = d.getHours();
+            const h12 = hour % 12 || 12;
+            return String(h12).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + (hour >= 12 ? 'PM' : 'AM');
+        }
+
+        function splitBillItem(item) {
+            let name = String(pickVal(item, ['item_name', 'Item_Name', 'Prod_ShortNm', 'Prod_Name'], 'N/A') || '');
+            let code = String(pickVal(item, ['item_code', 'Prod_Code', 'prod_code', 'Item_Code'], '') || '').trim();
+            if (code) {
+                const suffix = ' - ' + code;
+                if (name.toLowerCase().endsWith(suffix.toLowerCase())) {
+                    name = name.slice(0, name.length - suffix.length).trim();
+                }
+            } else {
+                const cut = name.lastIndexOf(' - ');
+                if (cut > 0) {
+                    code = name.slice(cut + 3).trim();
+                    name = name.slice(0, cut).trim();
+                }
+            }
+            return { name: name || 'N/A', code: code };
         }
 
         function numberToWords(amount) {
@@ -754,9 +797,11 @@
             const agentLabel = [AGENT_NAME, AGENT_CODE].filter(Boolean).join(' - ');
             return {
                 Org_Name: ORG_NAME,
+                Org_Address: ORG_ADDRESS,
                 Branch_Name: BRANCH_NAME,
                 Invoice_No: '',
                 Invoice_Date: $('#saleDate').val(),
+                Bill_Time: fmtNow(),
                 Cust_Name: customer,
                 Agent_Name: agentLabel,
                 Discount: $('#totalDiscountAmount').val() || 0,
@@ -766,6 +811,7 @@
                 Gross_Amt: $('#summaryTotalAmount').val() || 0,
                 items: itemsArray.map(item => ({
                     item_name: item.item_name,
+                    item_code: item.item_code || '',
                     qty: item.quantity,
                     rate: item.sale_mrp || item.rate,
                     amount: item.total_amount
@@ -780,9 +826,11 @@
                 : (snapshot.items || []);
             return {
                 Org_Name: pickVal(src, ['Org_Name', 'org_name'], snapshot.Org_Name),
+                Org_Address: pickVal(src, ['Org_Address', 'org_address'], snapshot.Org_Address),
                 Branch_Name: pickVal(src, ['Branch_Name', 'branch_name'], snapshot.Branch_Name),
                 Invoice_No: pickVal(src, ['Invoice_No', 'invoice_no', 'Sale_No'], snapshot.Invoice_No),
                 Invoice_Date: pickVal(src, ['Invoice_Date', 'invoice_date', 'Sale_Date'], snapshot.Invoice_Date),
+                Bill_Time: pickVal(src, ['Bill_Time', 'bill_time'], snapshot.Bill_Time) || fmtNow(),
                 Cust_Name: pickVal(src, ['Cust_Name', 'cust_name', 'Party_Name'], snapshot.Cust_Name),
                 Agent_Name: pickVal(src, ['Agent_Name', 'agent_name'], snapshot.Agent_Name),
                 Discount: pickVal(src, ['Discount', 'Disc_Amt', 'discount'], snapshot.Discount),
@@ -790,7 +838,11 @@
                 Round_Off: pickVal(src, ['Round_Off', 'round_off'], snapshot.Round_Off),
                 Tot_Amount: pickVal(src, ['Tot_Amount', 'Net_Amt', 'net_amount'], snapshot.Tot_Amount),
                 Gross_Amt: pickVal(src, ['Gross_Amt', 'Tot_Amt', 'gross'], snapshot.Gross_Amt),
-                items: items
+                items: items.map(function (item, index) {
+                    const snap = (snapshot.items || [])[index] || {};
+                    const code = pickVal(item, ['item_code', 'Prod_Code', 'prod_code', 'Item_Code'], snap.item_code || '');
+                    return Object.assign({}, item, { item_code: code });
+                })
             };
         }
 
@@ -798,13 +850,15 @@
             let itemsHtml = '';
             const rows = billData.items && Array.isArray(billData.items) ? billData.items : [];
             rows.forEach((item) => {
-                const name = pickVal(item, ['item_name', 'Item_Name', 'Prod_ShortNm', 'Prod_Name'], 'N/A');
+                const label = splitBillItem(item);
+                const name = label.name;
+                const code = label.code;
                 const qty = pickVal(item, ['qty', 'Qty', 'quantity', 'Qnty'], '0');
                 const rate = pickVal(item, ['rate', 'Rate', 'MRP'], 0);
                 const amount = pickVal(item, ['amount', 'Amount', 'net_amount', 'Net_Amt', 'total_amount', 'Item_Total'], 0);
                 itemsHtml += `
                 <tr>
-                    <td class="item-name">${name}</td>
+                    <td class="item-name">${name}${code ? `<div class="item-code">${code}</div>` : ''}</td>
                     <td class="text-center">${qty}</td>
                     <td class="text-right">${fmtAmt(rate)}</td>
                     <td class="text-right">${fmtAmt(amount)}</td>
@@ -826,12 +880,16 @@
         <div class="bill-container">
             <div class="bill-header">
                 <h3>${billData.Org_Name || 'Smart Inventory'}</h3>
+                ${billData.Org_Address ? `<p>${billData.Org_Address}</p>` : ''}
                 ${billData.Branch_Name ? `<p>${billData.Branch_Name}</p>` : ''}
             </div>
             <div class="bill-title">BILL</div>
             <div class="bill-meta">
                 <span>No. : ${billData.Invoice_No || 'N/A'}</span>
+            </div>
+            <div class="bill-date">
                 <span>Date : ${fmtDate(billData.Invoice_Date) || 'N/A'}</span>
+                <span>${billData.Bill_Time || ''}</span>
             </div>
             <div class="bill-customer">Customer Name : ${billData.Cust_Name || 'Cash'}</div>
             <div class="bill-agent">Agent Name : ${agentLabel}</div>
@@ -864,11 +922,352 @@
                     </tr>
                 </tbody>
             </table>
-            <div class="bill-signature">Signature</div>
         </div>`;
         }
 
+        function escPosByte(n) {
+            let hex = (n & 255).toString(16);
+            if (hex.length < 2) hex = '0' + hex;
+            return '%' + hex;
+        }
+
+        function escPosText(value) {
+            const text = String(value == null ? '' : value);
+            let out = '';
+            for (let i = 0; i < text.length; i++) {
+                const code = text.charCodeAt(i);
+                out += escPosByte(code > 31 && code < 127 ? code : 63);
+            }
+            return out;
+        }
+
+        function escPosPad(value, width, alignRight) {
+            let text = String(value == null ? '' : value);
+            if (text.length > width) text = text.slice(0, width);
+            const gap = ' '.repeat(width - text.length);
+            return alignRight ? gap + text : text + gap;
+        }
+
+        function escPosWrap(value, width) {
+            const words = String(value || '').split(/\s+/).filter(Boolean);
+            const lines = [];
+            let line = '';
+            words.forEach(function (word) {
+                const next = line ? line + ' ' + word : word;
+                if (next.length > width && line) {
+                    lines.push(line);
+                    line = word;
+                } else {
+                    line = next;
+                }
+            });
+            if (line) lines.push(line);
+            return lines.length ? lines : [''];
+        }
+
+        function phoneBillFont(ctx, size, bold) {
+            ctx.font = (bold ? 'bold ' : '') + size + 'px Arial, Helvetica, sans-serif';
+            ctx.fillStyle = '#000';
+            ctx.textBaseline = 'top';
+        }
+
+        function phoneBillWrap(ctx, text, maxWidth) {
+            const words = String(text || '').split(/\s+/).filter(Boolean);
+            const lines = [];
+            let line = '';
+            words.forEach(function (word) {
+                if (ctx.measureText(word).width > maxWidth) {
+                    if (line) {
+                        lines.push(line);
+                        line = '';
+                    }
+                    let chunk = '';
+                    for (let i = 0; i < word.length; i++) {
+                        const next = chunk + word.charAt(i);
+                        if (ctx.measureText(next).width > maxWidth && chunk) {
+                            lines.push(chunk);
+                            chunk = word.charAt(i);
+                        } else {
+                            chunk = next;
+                        }
+                    }
+                    line = chunk;
+                    return;
+                }
+                const next = line ? line + ' ' + word : word;
+                if (ctx.measureText(next).width > maxWidth && line) {
+                    lines.push(line);
+                    line = word;
+                } else {
+                    line = next;
+                }
+            });
+            if (line) lines.push(line);
+            return lines.length ? lines : [''];
+        }
+
+        function drawPhoneBill(billData, showAgent) {
+            const width = 384;
+            const scratch = document.createElement('canvas').getContext('2d');
+            const rows = billData.items && Array.isArray(billData.items) ? billData.items : [];
+            const discount = parseFloat(billData.Discount) || 0;
+            const roundOff = parseFloat(billData.Round_Off) || 0;
+            const totalAmount = parseFloat(billData.Tot_Amount) || 0;
+            const grossAmt = parseFloat(billData.Gross_Amt) || 0;
+            let discPct = parseFloat(billData.Disc_Percent) || 0;
+            if (!discPct && grossAmt > 0 && discount > 0) discPct = (discount / grossAmt) * 100;
+            const agentLabel = showAgent
+                ? (billData.Agent_Name || [AGENT_NAME, AGENT_CODE].filter(Boolean).join(' - '))
+                : '';
+            const tableX = 6;
+            const tableW = width - 12;
+            const qtyW = 48;
+            const mrpW = 74;
+            const amtW = 78;
+            const itemW = tableW - qtyW - mrpW - amtW;
+            const cellPad = 5;
+            phoneBillFont(scratch, 17, false);
+            const itemRows = rows.map(function (item) {
+                const label = splitBillItem(item);
+                phoneBillFont(scratch, 17, false);
+                const nameLines = phoneBillWrap(scratch, label.name, itemW - cellPad * 2);
+                phoneBillFont(scratch, 15, false);
+                const codeLines = label.code ? phoneBillWrap(scratch, label.code, itemW - cellPad * 2) : [];
+                const h = Math.max(34, cellPad * 2 + nameLines.length * 21 + codeLines.length * 18);
+                return {
+                    nameLines: nameLines,
+                    codeLines: codeLines,
+                    h: h,
+                    qty: String(pickVal(item, ['qty', 'Qty', 'quantity', 'Qnty'], '0')),
+                    rate: fmtAmt(pickVal(item, ['rate', 'Rate', 'MRP'], 0)),
+                    amount: fmtAmt(pickVal(item, ['amount', 'Amount', 'net_amount', 'Net_Amt', 'total_amount', 'Item_Total'], 0))
+                };
+            });
+            phoneBillFont(scratch, 16, false);
+            const wordLines = phoneBillWrap(scratch, numberToWords(totalAmount), itemW + qtyW + mrpW - cellPad * 2);
+            const wordH = Math.max(32, cellPad * 2 + wordLines.length * 20);
+            const layout = [];
+            let y = 8;
+            phoneBillFont(scratch, 20, true);
+            const orgLines = phoneBillWrap(scratch, (billData.Org_Name || 'Smart Inventory').toUpperCase(), width - 16);
+            layout.push({ type: 'text', y: y, size: 20, bold: true, lines: orgLines, align: 'center', lineH: 24 });
+            y += orgLines.length * 24 + 2;
+            if (billData.Org_Address) {
+                phoneBillFont(scratch, 16, false);
+                const addressLines = phoneBillWrap(scratch, billData.Org_Address, width - 16);
+                layout.push({ type: 'text', y: y, size: 16, bold: false, lines: addressLines, align: 'center', lineH: 20 });
+                y += addressLines.length * 20 + 2;
+            }
+            if (billData.Branch_Name) {
+                phoneBillFont(scratch, 16, false);
+                const branchLines = phoneBillWrap(scratch, billData.Branch_Name, width - 16);
+                layout.push({ type: 'text', y: y, size: 16, bold: false, lines: branchLines, align: 'center', lineH: 20 });
+                y += branchLines.length * 20 + 2;
+            }
+            y += 6;
+            layout.push({ type: 'title', y: y });
+            y += 30;
+            phoneBillFont(scratch, 16, false);
+            layout.push({ type: 'line', y: y, size: 16, left: 'No. : ' + (billData.Invoice_No || 'N/A') });
+            y += 22;
+            layout.push({
+                type: 'pair',
+                y: y,
+                size: 16,
+                left: 'Date : ' + (fmtDate(billData.Invoice_Date) || 'N/A'),
+                right: billData.Bill_Time || fmtNow()
+            });
+            y += 22;
+            phoneBillWrap(scratch, 'Customer Name : ' + (billData.Cust_Name || 'Cash'), width - 16).forEach(function (line) {
+                layout.push({ type: 'line', y: y, size: 16, left: line });
+                y += 22;
+            });
+            if (agentLabel) {
+                phoneBillWrap(scratch, 'Agent Name : ' + agentLabel, width - 16).forEach(function (line) {
+                    layout.push({ type: 'line', y: y, size: 16, left: line });
+                    y += 22;
+                });
+            }
+            y += 8;
+            const tableTop = y;
+            const headerH = 32;
+            y += headerH;
+            itemRows.forEach(function (row) {
+                row.y = y;
+                y += row.h;
+            });
+            const amountY = y;
+            y += 30;
+            const discY = y;
+            y += 30;
+            let roundY = 0;
+            if (roundOff != 0) {
+                roundY = y;
+                y += 30;
+            }
+            const wordsY = y;
+            y += wordH;
+            const tableBottom = y;
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = y + 12;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            layout.forEach(function (block) {
+                if (block.type === 'text') {
+                    phoneBillFont(ctx, block.size, block.bold);
+                    block.lines.forEach(function (line, index) {
+                        const tw = ctx.measureText(line).width;
+                        ctx.fillText(line, (width - tw) / 2, block.y + index * block.lineH);
+                    });
+                } else if (block.type === 'title') {
+                    phoneBillFont(ctx, 20, true);
+                    const tw = ctx.measureText('BILL').width;
+                    const x = (width - tw) / 2;
+                    ctx.fillText('BILL', x, block.y);
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([]);
+                    ctx.beginPath();
+                    ctx.moveTo(x, block.y + 22);
+                    ctx.lineTo(x + tw, block.y + 22);
+                    ctx.stroke();
+                } else if (block.type === 'line') {
+                    phoneBillFont(ctx, block.size, false);
+                    ctx.fillText(block.left, 8, block.y);
+                } else if (block.type === 'pair') {
+                    phoneBillFont(ctx, block.size, false);
+                    ctx.fillText(block.left, 8, block.y);
+                    ctx.fillText(block.right, width - 8 - ctx.measureText(block.right).width, block.y);
+                }
+            });
+            const cols = [tableX, tableX + itemW, tableX + itemW + qtyW, tableX + itemW + qtyW + mrpW, tableX + tableW];
+            const rowTops = [tableTop];
+            itemRows.forEach(function (row) { rowTops.push(row.y); });
+            rowTops.push(amountY, discY);
+            if (roundOff != 0) rowTops.push(roundY);
+            rowTops.push(wordsY, tableBottom);
+            ctx.save();
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 4]);
+            rowTops.forEach(function (ry) {
+                ctx.beginPath();
+                ctx.moveTo(tableX, ry);
+                ctx.lineTo(tableX + tableW, ry);
+                ctx.stroke();
+            });
+            [cols[0], cols[4]].forEach(function (x) {
+                ctx.beginPath();
+                ctx.moveTo(x, tableTop);
+                ctx.lineTo(x, tableBottom);
+                ctx.stroke();
+            });
+            [cols[1], cols[2], cols[3]].forEach(function (x) {
+                ctx.beginPath();
+                ctx.moveTo(x, tableTop);
+                ctx.lineTo(x, amountY);
+                ctx.stroke();
+            });
+            ctx.beginPath();
+            ctx.moveTo(cols[3], amountY);
+            ctx.lineTo(cols[3], tableBottom);
+            ctx.stroke();
+            ctx.restore();
+            phoneBillFont(ctx, 16, true);
+            ctx.fillText('ITEM', cols[0] + cellPad, tableTop + 7);
+            ctx.fillText('QTY', cols[1] + (qtyW - ctx.measureText('QTY').width) / 2, tableTop + 7);
+            ctx.fillText('MRP', cols[2] + mrpW - ctx.measureText('MRP').width - cellPad, tableTop + 7);
+            ctx.fillText('AMT', cols[3] + amtW - ctx.measureText('AMT').width - cellPad, tableTop + 7);
+            itemRows.forEach(function (row) {
+                phoneBillFont(ctx, 17, false);
+                let ty = row.y + cellPad;
+                row.nameLines.forEach(function (line) {
+                    ctx.fillText(line, cols[0] + cellPad, ty);
+                    ty += 21;
+                });
+                phoneBillFont(ctx, 15, false);
+                row.codeLines.forEach(function (line) {
+                    ctx.fillText(line, cols[0] + cellPad, ty);
+                    ty += 18;
+                });
+                phoneBillFont(ctx, 16, false);
+                const mid = row.y + (row.h - 16) / 2;
+                ctx.fillText(row.qty, cols[1] + (qtyW - ctx.measureText(row.qty).width) / 2, mid);
+                ctx.fillText(row.rate, cols[2] + mrpW - ctx.measureText(row.rate).width - cellPad, mid);
+                ctx.fillText(row.amount, cols[3] + amtW - ctx.measureText(row.amount).width - cellPad, mid);
+            });
+            const paintTotal = function (ry, h, left, right, alignRight) {
+                phoneBillFont(ctx, 16, false);
+                const ty = ry + (h - 16) / 2;
+                if (alignRight) {
+                    ctx.fillText(left, cols[3] - ctx.measureText(left).width - cellPad, ty);
+                } else {
+                    ctx.fillText(left, cols[0] + cellPad, ty);
+                }
+                ctx.fillText(right, cols[3] + amtW - ctx.measureText(right).width - cellPad, ty);
+            };
+            paintTotal(amountY, 30, 'Amount :', fmtAmt(grossAmt || totalAmount), true);
+            paintTotal(discY, 30, '(-) Disc @ ' + (discPct > 0 ? fmtAmt(discPct) : '') + '% :', discount > 0 ? fmtAmt(discount) : '', false);
+            if (roundOff != 0) paintTotal(roundY, 30, 'Round Off', fmtAmt(roundOff), false);
+            phoneBillFont(ctx, 16, false);
+            wordLines.forEach(function (line, index) {
+                ctx.fillText(line, cols[0] + cellPad, wordsY + cellPad + index * 20);
+            });
+            phoneBillFont(ctx, 16, true);
+            const totalText = fmtAmt(totalAmount);
+            ctx.fillText(totalText, cols[3] + amtW - ctx.measureText(totalText).width - cellPad, wordsY + (wordH - 16) / 2);
+            return canvas;
+        }
+
+        function canvasToEscPos(canvas) {
+            const width = canvas.width;
+            const height = canvas.height;
+            const data = canvas.getContext('2d').getImageData(0, 0, width, height).data;
+            const widthBytes = width / 8;
+            const out = [0x1b, 0x40];
+            const chunk = 128;
+            for (let y0 = 0; y0 < height; y0 += chunk) {
+                const y1 = Math.min(height, y0 + chunk);
+                const rows = y1 - y0;
+                out.push(0x1d, 0x76, 0x30, 0x00, widthBytes & 255, (widthBytes >> 8) & 255, rows & 255, (rows >> 8) & 255);
+                for (let y = y0; y < y1; y++) {
+                    for (let xb = 0; xb < widthBytes; xb++) {
+                        let byte = 0;
+                        for (let bit = 0; bit < 8; bit++) {
+                            const x = xb * 8 + bit;
+                            const i = (y * width + x) * 4;
+                            const lum = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                            byte = (byte << 1) | ((data[i + 3] > 40 && lum < 200) ? 1 : 0);
+                        }
+                        out.push(byte);
+                    }
+                }
+            }
+            out.push(0x1b, 0x64, 0x03);
+            return Uint8Array.from(out);
+        }
+
+        function sendBillToRawBt() {
+            const billData = currentSaleBill;
+            if (!billData) {
+                Swal.fire('Error', 'No bill data available', 'error');
+                return;
+            }
+            const bytes = canvasToEscPos(drawPhoneBill(billData, true));
+            let binary = '';
+            for (let i = 0; i < bytes.length; i += 8192) {
+                binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+            }
+            window.location.href = 'intent:base64,' + btoa(binary) + '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;';
+        }
+
         function printBill() {
+            if (/Android/i.test(navigator.userAgent)) {
+                sendBillToRawBt();
+                return;
+            }
             const billHtml = document.getElementById('billContent').innerHTML;
             let frame = document.getElementById('printFrame');
             if (frame) frame.remove();
@@ -914,16 +1313,16 @@ body { width: 46mm; }
 .bill-title { text-align:center; font-weight:bold; text-decoration:underline; text-transform:uppercase; letter-spacing:1px; margin:4px 0 6px; font-size:10px; }
 .bill-meta { display:block; overflow:hidden; margin:2px 0; font-size:8px; }
 .bill-meta span { display:block; width:100%; text-align:left; }
-.bill-meta span:last-child { text-align:left; }
+.bill-date { display:flex; justify-content:space-between; margin:2px 0; font-size:8px; }
 .bill-customer, .bill-agent { margin:3px 0 6px; font-size:8px; word-break:break-word; }
 .items-table { width:100%; border-collapse:collapse; font-size:8px; table-layout:fixed; }
 .items-table th, .items-table td { border:1px dashed #000; padding:2px 2px; text-align:left; vertical-align:top; }
 .items-table th { font-weight:bold; text-transform:uppercase; }
 .items-table .item-name { word-break:break-word; }
+.item-code { display:block; font-size:7px; }
 .text-right { text-align:right; white-space:nowrap; }
 .text-center { text-align:center; white-space:nowrap; }
 .bill-words { font-size:7px; line-height:1.2; white-space:normal; word-break:break-word; }
-.bill-signature { margin-top:12px; font-size:8px; }
 </style>
 </head>
 <body>${billHtml}</body>
@@ -1381,6 +1780,7 @@ body { width: 46mm; }
                     item_id: $('#selectedItemId').val(),
                     hsn_code: $('#selectedHsnCode').val() || '',
                     item_name: $('#itemSelected').val(),
+                    item_code: $('#selectedProdCode').val() || '',
                     quantity: $('#quantity').val(),
                     unit_id: $('#unitId').val(),
                     unit_name: $('#unitDisplay').val(),
@@ -1402,9 +1802,20 @@ body { width: 46mm; }
                 renderItemsTable();
                 clearItemSelection();
                 $('#saleDate').prop('disabled', true);
-                $('#barcodeInput').val('').focus();
-
+                $('#barcodeInput').val('');
                 $('#addItemBtn').text('+ Add Item').data('editing', false);
+
+                if (window.matchMedia('(max-width: 767.98px)').matches) {
+                    if (document.activeElement && document.activeElement.blur) {
+                        document.activeElement.blur();
+                    }
+                    const addedRow = document.querySelector('#itemsTableBody tr:last-child');
+                    if (addedRow) {
+                        addedRow.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                } else {
+                    $('#barcodeInput').focus();
+                }
             });
 
             $(document).on('click', '.removeItem', function() {
@@ -1419,6 +1830,7 @@ body { width: 46mm; }
                 // Populate the form with item data for editing
                 $('#selectedItemId').val(item.item_id);
                 $('#selectedHsnCode').val(item.hsn_code);
+                $('#selectedProdCode').val(item.item_code || '');
                 $('#itemSelected').val(item.item_name);
                 $('#unitId').val(item.unit_id);
                 $('#unitDisplay').val(item.unit_name);
@@ -1659,6 +2071,7 @@ body { width: 46mm; }
 
             $('#selectedItemId').val(item.Prod_Id);
             $('#selectedHsnCode').val('');
+            $('#selectedProdCode').val(item.Prod_Code || '');
             $('#itemSelected').val(item.Prod_ShortNm);
             $('#unitId').val(item.Unit_Id);
             $('#unitDisplay').val(item.Unit_Name);
@@ -1863,7 +2276,7 @@ body { width: 46mm; }
         }
 
         function clearItemSelection() {
-            $('#selectedItemId, #selectedHsnCode, #unitId').val('');
+            $('#selectedItemId, #selectedHsnCode, #selectedProdCode, #unitId').val('');
             $('#itemSelected, #unitDisplay, #saleMrp, #itemSaleDate').val('');
             $('#barcodeInput').removeData('scanned-barcode').removeData('available-qty');
             $('#cgstRate, #sgstRate').val('');

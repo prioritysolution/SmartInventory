@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\ResolvesOrganisationAddress;
 use App\Http\Controllers\Concerns\SearchesItemsByCode;
 use App\Http\Controllers\Controller;
 use App\Support\AgentIndentType;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Log;
 
 class Sales extends Controller
 {
+    use ResolvesOrganisationAddress;
     use SearchesItemsByCode;
 
     public function indexAgentIndent()
@@ -464,6 +466,7 @@ class Sales extends Controller
         $customers  = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [2, $branchId, 0]);
         $banks      = DB::connection('coops')->select('CALL USP_GET_BANK_LEDGER()');
         $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        $this->organisationAddress();
         return view('Admin.counter-sale', compact('customers', 'banks', 'categories'))
             ->with('pageTitle', 'Counter Sale');
     }
@@ -1108,6 +1111,7 @@ class Sales extends Controller
                 p.Prod_Id,
                 i.Cate_Id AS Cat_Id,
                 i.Prod_ShortNm AS Prod_Name,
+                i.Prod_Code,
                 p.Gst_Code AS hsn_code,
                 p.Item_Qty AS qnty,
                 p.Item_Rate,
