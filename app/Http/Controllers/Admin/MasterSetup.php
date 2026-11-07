@@ -120,24 +120,36 @@ class MasterSetup extends Controller
     //agent profile
 public function indexAgent(Request $request)
 {
-    $branchId = session('branch_id');
+    if (!$request->ajax()) {
+        return view('Admin.agent-profile')
+            ->with('pageTitle', 'Agent Profile');
+    }
+
+    $branchId = (int) session('branch_id');
     $page     = (int) $request->input('page', 1);
-    $pageSize = 10;
-    $search   = $request->input('search', '');
+    $pageSize = 50;
+    $search   = trim((string) $request->input('search', ''));
 
     Config::set('database.connections.coops.database', session('org_schema'));
+    DB::purge('coops');
 
     $pdo  = DB::connection('coops')->getPdo();
     $stmt = $pdo->prepare('CALL USP_GET_AGENT_LIST(?, ?, ?, ?)');
     $stmt->execute([$branchId, $search, $page, $pageSize]);
     $agents   = $stmt->fetchAll(\PDO::FETCH_OBJ);
-    $stmt->nextRowset();
-    $totalRow = $stmt->fetch(\PDO::FETCH_OBJ);
-    $total    = $totalRow->Total ?? 0;
+    $total    = count($agents);
+    if ($stmt->nextRowset()) {
+        $totalRow = $stmt->fetch(\PDO::FETCH_OBJ);
+        if ($totalRow && isset($totalRow->Total)) {
+            $total = (int) $totalRow->Total;
+        }
+    }
+    $stmt->closeCursor();
     $lastPage = $total > 0 ? (int) ceil($total / $pageSize) : 1;
 
-    return view('Admin.agent-profile', compact('agents', 'total', 'page', 'pageSize', 'lastPage'))
-        ->with('pageTitle', 'Agent Profile');
+    $viewData = compact('agents', 'total', 'page', 'pageSize', 'lastPage');
+
+    return view('Admin.partials.agent-list', $viewData);
 }
 
 

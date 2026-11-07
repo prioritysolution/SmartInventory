@@ -17,89 +17,9 @@
 
             <div class="card">
                 <div class="card-body">
-                    <!-- Search + Page size -->
-                    <div class="d-flex justify-content-end align-items-center mb-3">
-                        <form method="GET" action="{{ route('agent-profile') }}" class="d-flex gap-2">
-                            <input type="text" class="form-control form-control-sm" name="search"
-                                value="{{ request('search') }}" placeholder="Search agent..." style="width:250px;">
-                            <button class="btn btn-primary btn-sm">
-                                <i class="fa-solid fa-magnifying-glass"></i>
-                            </button>
-                            @if (request('search'))
-                                <a href="{{ route('agent-profile') }}" class="btn btn-secondary btn-sm">Clear</a>
-                            @endif
-                        </form>
+                    <div id="agentListContainer">
+                        <div class="text-center text-muted py-4">Loading agents...</div>
                     </div>
-
-                    <div class="table-responsive">
-                        <table class="table table-nowrap table-bordered">
-                            <thead class="thead-light">
-                                <tr>
-                                    <th>Sl</th>
-                                    <th>Agent Code</th>
-                                    <th>Agent Name</th>
-                                    <th>Address</th>
-                                    <th>Mobile No</th>
-                                    <th class="text-center">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody id="agentTableBody">
-                                @foreach ($agents as $key => $agent)
-                                    <tr>
-                                        <td>{{ ($page - 1) * $pageSize + $key + 1 }}</td>
-                                        <td>{{ $agent->Agent_Code }}</td>
-                                        <td>{{ $agent->Agent_Name }}</td>
-                                        <td>{{ $agent->Address }}</td>
-                                        <td>{{ $agent->Contact_No }}</td>
-                                        <td class="text-center">
-                                            <button class="btn btn-primary btn-sm editRow" data-id="{{ $agent->Agent_Id }}"
-                                                data-code="{{ $agent->Agent_Code }}" data-name="{{ $agent->Agent_Name }}"
-                                                data-address="{{ $agent->Address }}"
-                                                data-mobile="{{ $agent->Contact_No }}" data-join="{{ $agent->Join_Date }}"
-                                                data-limit="{{ $agent->Stock_Limit }}"
-                                                data-credit-limit="{{ $agent->Credit_Sell_Limit }}"
-                                                data-village="{{ $agent->Village_Id ?? '' }}"
-                                                data-ps="{{ $agent->Ps_Id ?? '' }}"
-                                                data-post="{{ $agent->Post_Id ?? '' }}"
-                                                data-dist="{{ $agent->Dist_Id ?? '' }}"
-                                                data-password="">Edit</button>
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- Pagination info + controls -->
-                    <div class="d-flex justify-content-between align-items-center mt-3">
-                        <small class="text-muted">
-                            Showing {{ ($page - 1) * $pageSize + 1 }} to {{ min($page * $pageSize, $total) }} of
-                            {{ $total }} entries
-                        </small>
-                        @if ($lastPage > 1)
-                            <ul class="pagination pagination-sm mb-0">
-                                <li class="page-item {{ $page == 1 ? 'disabled' : '' }}">
-                                    <a class="page-link"
-                                        href="{{ request()->fullUrlWithQuery(['page' => $page - 1]) }}">Previous</a>
-                                </li>
-                                @for ($i = 1; $i <= $lastPage; $i++)
-                                    @if ($i == 1 || $i == $lastPage || abs($i - $page) <= 2)
-                                        <li class="page-item {{ $page == $i ? 'active' : '' }}">
-                                            <a class="page-link"
-                                                href="{{ request()->fullUrlWithQuery(['page' => $i]) }}">{{ $i }}</a>
-                                        </li>
-                                    @elseif(abs($i - $page) == 3)
-                                        <li class="page-item disabled"><span class="page-link">...</span></li>
-                                    @endif
-                                @endfor
-                                <li class="page-item {{ $page == $lastPage ? 'disabled' : '' }}">
-                                    <a class="page-link"
-                                        href="{{ request()->fullUrlWithQuery(['page' => $page + 1]) }}">Next</a>
-                                </li>
-                            </ul>
-                        @endif
-                    </div>
-
                 </div>
             </div>
         </div>
@@ -189,6 +109,56 @@
     <script src="{{ asset('template/assets/js/address-master-form.js') }}?v=5"></script>
     <script>
         $(document).ready(function() {
+            let agentListRequest = null;
+
+            function fetchAgentPage(page, search) {
+                if (agentListRequest) {
+                    agentListRequest.abort();
+                }
+
+                agentListRequest = $.ajax({
+                    url: "{{ route('agent-profile.list') }}",
+                    type: 'GET',
+                    data: { page: page, search: search },
+                    success: function(html) {
+                        $('#agentListContainer').html(html);
+                    },
+                    error: function(xhr, status) {
+                        if (status !== 'abort') {
+                            Swal.fire('Error', 'Failed to load agents. Please try again.', 'error');
+                        }
+                    },
+                    complete: function() {
+                        agentListRequest = null;
+                    }
+                });
+            }
+
+            $('#agentListContainer').on('click', '.agent-page-link', function(event) {
+                event.preventDefault();
+                const page = Number($(this).data('page'));
+                if (!page || $(this).closest('.page-item').hasClass('disabled') ||
+                    $(this).closest('.page-item').hasClass('active')) {
+                    return;
+                }
+                fetchAgentPage(page, $('#agentSearch').val());
+            });
+
+            $('#agentListContainer').on('submit', '#agentSearchForm', function(event) {
+                event.preventDefault();
+                fetchAgentPage(1, $('#agentSearch').val());
+            });
+
+            $('#agentListContainer').on('click', '#clearAgentSearch', function() {
+                $('#agentSearch').val('');
+                fetchAgentPage(1, '');
+            });
+
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.delete('page');
+            window.history.replaceState({}, '', currentUrl);
+            fetchAgentPage(1, @json(request('search', '')));
+
             $('#eyeIcon').on('click', function() {
                 let input = $('#password');
                 if (input.attr('type') === 'password') {
