@@ -111,34 +111,63 @@
                                 @php
                                     $parents = [];
                                     foreach ($menus as $menu) {
-                                        if (empty($menu->Child_Id)) {
+                                        $isParentRow = $menu->Child_Id === null || $menu->Child_Id === '';
+                                        if ($isParentRow && ($menu->Parraint_Name ?? '') !== '') {
                                             $parents[] = $menu;
                                         }
                                     }
+                                    usort($parents, function ($a, $b) {
+                                        $rank = function ($row) {
+                                            $name = strtolower(trim((string) ($row->Parraint_Name ?? '')));
+                                            return $name === 'dashboard' ? 0 : 1;
+                                        };
+                                        $cmp = $rank($a) <=> $rank($b);
+                                        if ($cmp !== 0) {
+                                            return $cmp;
+                                        }
+                                        return ((int) $a->Parraint_Id) <=> ((int) $b->Parraint_Id);
+                                    });
                                 @endphp
                                 @foreach ($parents as $parent)
+                                    @php
+                                        $parentId = (string) ((int) $parent->Parraint_Id);
+                                        $childCount = 0;
+                                        foreach ($menus as $child) {
+                                            if ((int) $child->Parraint_Id === (int) $parent->Parraint_Id
+                                                && $child->Child_Id !== null
+                                                && $child->Child_Id !== ''
+                                                && (int) $child->Child_Id !== 0) {
+                                                $childCount++;
+                                            }
+                                        }
+                                    @endphp
                                     <div class="menu-block mb-2">
                                         <div class="menu-header d-flex align-items-center">
                                             <input type="checkbox" class="parent-menu me-2"
-                                                data-parent="{{ $parent->Parraint_Id }}">
+                                                data-parent="{{ $parentId }}">
                                             <span class="menu-title">
                                                 {{ $parent->Parraint_Name }}
                                             </span>
-                                            <button type="button" class="toggle-menu ms-2"
-                                                data-parent="{{ $parent->Parraint_Id }}">
-                                                +
-                                            </button>
+                                            @if ($childCount > 0)
+                                                <button type="button" class="toggle-menu ms-2"
+                                                    data-parent="{{ $parentId }}">
+                                                    +
+                                                </button>
+                                            @endif
                                         </div>
 
-                                        <div class="child-container ms-4 mt-2" id="child-{{ $parent->Parraint_Id }}"
+                                        <div class="child-container ms-4 mt-2" id="child-{{ $parentId }}"
                                             style="display:none">
                                             @foreach ($menus as $child)
-                                                @if ($child->Parraint_Id == $parent->Parraint_Id && !empty($child->Child_Id))
+                                                @if ((int) $child->Parraint_Id === (int) $parent->Parraint_Id
+                                                    && $child->Child_Id !== null
+                                                    && $child->Child_Id !== ''
+                                                    && (int) $child->Child_Id !== 0)
                                                     <div class="child-item mb-1">
                                                         <label class="d-flex align-items-center">
                                                             <input type="checkbox" class="child-menu me-2"
-                                                                data-parent="{{ $parent->Parraint_Id }}"
-                                                                value="{{ $parent->Parraint_Id }}|{{ $child->Child_Id }}">
+                                                                data-parent="{{ $parentId }}"
+                                                                value="{{ $parentId }}|{{ $child->Child_Id }}">
                                                             {{ $child->Child_Name }}
                                                         </label>
                                                     </div>
@@ -210,7 +239,7 @@
             $('#groupTable').DataTable();
             /* Expand Collapse */
             $(document).on('click', '.toggle-menu', function() {
-                let parent = $(this).data('parent');
+                let parent = String($(this).attr('data-parent'));
                 let box = $("#child-" + parent);
                 if (box.is(':visible')) {
                     box.slideUp();
@@ -220,15 +249,27 @@
                     $(this).text('-');
                 }
             });
+            function syncParentCheck(parent) {
+                parent = String(parent);
+                const children = $('.child-menu[data-parent="' + parent + '"]');
+                const $parentBox = $('.parent-menu[data-parent="' + parent + '"]');
+                if (!children.length) {
+                    return;
+                }
+                $parentBox.prop('checked', children.filter(':checked').length > 0);
+            }
+
             /* Parent Check */
             $(document).on('change', '.parent-menu', function() {
-                let parent = $(this).data('parent');
+                let parent = String($(this).attr('data-parent'));
                 let children = $('.child-menu[data-parent="' + parent + '"]');
                 let box = $("#child-" + parent);
                 if ($(this).is(':checked')) {
-                    box.slideDown();
-                    children.prop('checked', true);
-                    $('.toggle-menu[data-parent="' + parent + '"]').text('-');
+                    if (children.length) {
+                        box.slideDown();
+                        children.prop('checked', true);
+                        $('.toggle-menu[data-parent="' + parent + '"]').text('-');
+                    }
                 } else {
                     children.prop('checked', false);
                     box.slideUp();
@@ -236,16 +277,9 @@
                 }
             });
 
-            /* Child Check */
+            /* Child Check — uncheck parent when every child is unchecked */
             $(document).on('change', '.child-menu', function() {
-                let parent = $(this).data('parent');
-                let children = $('.child-menu[data-parent="' + parent + '"]');
-                let checked = children.filter(':checked').length;
-                if (checked > 0) {
-                    $('.parent-menu[data-parent="' + parent + '"]').prop('checked', true);
-                } else {
-                    $('.parent-menu[data-parent="' + parent + '"]').prop('checked', false);
-                }
+                syncParentCheck($(this).attr('data-parent'));
             });
 
 
@@ -267,34 +301,33 @@
 
                 // Load group permissions
                 $.ajax({
-                    url: "/user-roles/permissions/" + grpId,
+                    url: "{{ url('user-roles/permissions') }}/" + grpId,
                     type: "GET",
                     success: function(permissions) {
                         console.log('Permissions:', permissions);
 
-                        permissions.forEach(function(perm) {
-                            // Check if it's a parent-only menu (no child)
-                            if (perm.SubMenu_Id === null || perm.SubMenu_Id === 0) {
-                                // Check the parent checkbox
-                                $('.parent-menu[data-parent="' + perm.Menu_Id + '"]')
-                                    .prop('checked', true);
-                            } else {
-                                // Check child menu
-                                let checkbox = $('.child-menu[value="' + perm.Menu_Id +
-                                    '|' + perm.SubMenu_Id + '"]');
+                        (permissions || []).forEach(function(perm) {
+                            const menuId = String(perm.Menu_Id);
+                            const subId = perm.SubMenu_Id;
+                            const childCount = $('#child-' + menuId + ' .child-menu').length;
+                            const isParentOnly = subId === null || subId === '' || Number(subId) === 0;
 
-                                if (checkbox.length > 0) {
-                                    checkbox.prop('checked', true);
-
-                                    // Show parent container and check parent
-                                    let parent = checkbox.data('parent');
-                                    $('#child-' + parent).show();
-                                    $('.toggle-menu[data-parent="' + parent + '"]')
-                                        .text('-');
-                                    $('.parent-menu[data-parent="' + parent + '"]')
-                                        .prop('checked', true);
+                            if (isParentOnly) {
+                                if (childCount === 0) {
+                                    $('.parent-menu[data-parent="' + menuId + '"]').prop('checked', true);
                                 }
+                                return;
                             }
+
+                            const checkbox = $('.child-menu[value="' + menuId + '|' + subId + '"]');
+                            if (checkbox.length > 0) {
+                                checkbox.prop('checked', true);
+                                $('#child-' + menuId).show();
+                                $('.toggle-menu[data-parent="' + menuId + '"]').text('-');
+                            }
+                        });
+                        $('.parent-menu').each(function() {
+                            syncParentCheck($(this).attr('data-parent'));
                         });
                         $('#groupModal').modal('show');
                     },
@@ -315,28 +348,26 @@
                 }
                 let menus = [];
                 $('.child-menu:checked').each(function() {
-                    let val = $(this).val().split('|');
+                    let val = String($(this).val() || '').split('|');
+                    if (!val[0] || !val[1]) return;
                     menus.push({
                         parent: val[0],
                         child: val[1]
                     });
                 });
-                // Collect parent menus that have no children (standalone parents)
                 $('.parent-menu:checked').each(function() {
-                    let parent = $(this).data('parent');
+                    let parent = String($(this).attr('data-parent'));
                     let hasChildren = $('#child-' + parent + ' .child-menu').length;
-
-                    // If parent has no children, add it
                     if (hasChildren === 0) {
                         menus.push({
                             parent: parent,
-                            child: null // or 0
+                            child: 0
                         });
                     }
                 });
                 let grp_id = $('#grp_id').val();
                 $.ajax({
-                    url: "/user-roles/save",
+                    url: "{{ route('user-roles.store') }}",
                     type: "POST",
                     data: {
                         _token: "{{ csrf_token() }}",

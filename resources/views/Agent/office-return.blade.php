@@ -7,6 +7,18 @@
     }
     #itemPickerTable tbody tr { cursor: pointer; }
     #itemPickerTable tbody tr:hover { background-color: #e8f4ff; }
+    #barcodeScanBtn { min-width: 42px; }
+    #barcodeScanner {
+        min-height: 240px;
+        background: #111;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    #barcodeScanner video,
+    #barcodeScanner canvas {
+        width: 100% !important;
+        border-radius: 8px;
+    }
 </style>
 @endpush
 
@@ -28,29 +40,28 @@
                         max="{{ min($year_end, date('Y-m-d')) }}"
                         value="{{ date('Y-m-d') }}">
                 </div>
-                <div class="col-md-5">
+                <div class="col-md-4">
                     <label class="form-label">Select Item</label>
                     <div class="input-group">
                         <input type="text" id="barcodeInput" class="form-control"
                             placeholder="Scan barcode or search item" autocomplete="off">
+                        <button class="btn btn-outline-primary" type="button" id="barcodeScanBtn" title="Scan barcode">
+                            <i class="fas fa-barcode"></i>
+                        </button>
                         <button class="btn btn-primary" type="button" id="itemSearchBtn">
                             <i class="fas fa-search"></i>
                         </button>
                     </div>
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label">Remarks</label>
-                    <input type="text" id="remarks" class="form-control" maxlength="100" autocomplete="off">
-                </div>
-            </div>
-
-            <div class="row g-3 mb-2">
-                <div class="col-md-4">
+                <div class="col-md-5">
                     <label class="form-label">Item Selected</label>
                     <input type="text" id="itemSelected" class="form-control bg-light" readonly placeholder="Select item">
                     <input type="hidden" id="selectedItemId">
                     <input type="hidden" id="unitId">
                 </div>
+            </div>
+
+            <div class="row g-3 align-items-end">
                 <div class="col-md-2">
                     <label class="form-label">Unit</label>
                     <input type="text" id="unitDisplay" class="form-control bg-light" readonly>
@@ -63,7 +74,11 @@
                     <label class="form-label">Qty <span class="text-danger">*</span></label>
                     <input type="number" id="quantity" class="form-control" step="0.01" min="0.01" autocomplete="off">
                 </div>
-                <div class="col-md-2 d-flex align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label">Remarks</label>
+                    <input type="text" id="remarks" class="form-control" maxlength="100" autocomplete="off" placeholder="Optional">
+                </div>
+                <div class="col-md-2">
                     <button type="button" class="btn btn-success w-100" id="addItemBtn">Add</button>
                 </div>
             </div>
@@ -157,10 +172,26 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="barcodeScanModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Scan Barcode</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="barcodeScanner"></div>
+                <p class="text-muted small text-center mt-2 mb-0">Point the camera at the barcode</p>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
     const baseUrl   = "{{ url('/') }}";
     const csrfToken = "{{ csrf_token() }}";
@@ -169,8 +200,25 @@
 
     let itemsArray   = [];
     let itemPickerDT = null;
+    let barcodeScanner = null;
+    let barcodeScannerRunning = false;
 
     $(document).ready(function () {
+        $('#barcodeScanBtn').on('click', function (e) {
+            e.preventDefault();
+            if (!$('#returnDate').val()) {
+                Swal.fire('Error', 'Please select return date first', 'error');
+                return;
+            }
+            $('#barcodeScanModal').modal('show');
+        });
+        $('#barcodeScanModal').on('shown.bs.modal', function () {
+            startBarcodeScanner();
+        });
+        $('#barcodeScanModal').on('hidden.bs.modal', function () {
+            stopBarcodeScanner();
+        });
+
         $('#barcodeInput').on('keydown', function (e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -305,6 +353,88 @@
             return;
         }
         openItemPicker(data || [], code);
+    }
+
+    function getBarcodeScanFormats() {
+        if (typeof Html5QrcodeSupportedFormats === 'undefined') {
+            return undefined;
+        }
+        return [
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.QR_CODE
+        ];
+    }
+
+    function stopBarcodeScanner() {
+        if (!barcodeScanner || !barcodeScannerRunning) {
+            if (barcodeScanner) {
+                try { barcodeScanner.clear(); } catch (e) {}
+                barcodeScanner = null;
+            }
+            $('#barcodeScanner').empty();
+            return;
+        }
+        barcodeScannerRunning = false;
+        barcodeScanner.stop().then(function () {
+            try { barcodeScanner.clear(); } catch (e) {}
+            barcodeScanner = null;
+            $('#barcodeScanner').empty();
+        }).catch(function () {
+            barcodeScanner = null;
+            $('#barcodeScanner').empty();
+        });
+    }
+
+    function startBarcodeScanner() {
+        if (typeof Html5Qrcode === 'undefined') {
+            $('#barcodeScanModal').modal('hide');
+            Swal.fire('Error', 'Barcode scanner could not load. Check your internet connection.', 'error');
+            return;
+        }
+        if (barcodeScannerRunning) {
+            return;
+        }
+
+        $('#barcodeScanner').empty();
+        barcodeScanner = new Html5Qrcode('barcodeScanner');
+        const config = {
+            fps: 12,
+            qrbox: function (viewfinderWidth, viewfinderHeight) {
+                return {
+                    width: Math.floor(Math.min(viewfinderWidth * 0.9, 280)),
+                    height: Math.floor(Math.min(viewfinderHeight * 0.35, 120))
+                };
+            }
+        };
+        const formats = getBarcodeScanFormats();
+        if (formats) {
+            config.formatsToSupport = formats;
+        }
+
+        let scanHandled = false;
+        barcodeScanner.start(
+            { facingMode: 'environment' },
+            config,
+            function (decodedText) {
+                if (scanHandled || !decodedText) return;
+                scanHandled = true;
+                $('#barcodeInput').val(decodedText.trim());
+                $('#barcodeScanModal').modal('hide');
+                lookupBarcode();
+            }
+        ).then(function () {
+            barcodeScannerRunning = true;
+        }).catch(function () {
+            barcodeScannerRunning = false;
+            barcodeScanner = null;
+            $('#barcodeScanModal').modal('hide');
+            Swal.fire('Camera Error', 'Unable to open the camera. Allow camera access and try again.', 'error');
+        });
     }
 
     function lookupBarcode() {

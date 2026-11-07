@@ -165,7 +165,9 @@
 
                 $(this).prop('disabled', true).text('Saving...');
                 let id = $('#gstId').val();
-                let url = id ? `/gst-codes/${id}` : "{{ route('gst-codes.store') }}";
+                let url = id
+                    ? (typeof siApiUrl === 'function' ? siApiUrl('gst-codes/' + id) : ("{{ url('gst-codes') }}/" + id))
+                    : "{{ route('gst-codes.store') }}";
                 let data = {
                     _token: "{{ csrf_token() }}",
                     gst_code: $('#gstCode').val().trim(),

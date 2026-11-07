@@ -11,6 +11,34 @@
 
     <meta name="description" content="Smart Inventory Dashboard">
     <meta name="keywords" content="inventory, sales, purchase, dashboard">
+    <meta name="app-base" content="{{ rtrim(request()->root(), '/') }}">
+    <script>
+        window.APP_BASE = @json(rtrim(request()->root(), '/'));
+        window.siApiUrl = function (path) {
+            var base = String(window.APP_BASE || '').replace(/\/$/, '');
+            try {
+                if (base) {
+                    var u = new URL(base, window.location.href);
+                    if (u.origin !== window.location.origin) {
+                        var pathOnly = (u.pathname || '').replace(/\/$/, '');
+                        base = window.location.origin + (pathOnly && pathOnly !== '/' ? pathOnly : '');
+                    } else {
+                        base = (u.origin + u.pathname).replace(/\/$/, '');
+                    }
+                }
+            } catch (e) {}
+            if (!base) {
+                var segs = window.location.pathname.split('/').filter(Boolean);
+                if (segs.length && /smartinventory/i.test(segs[0])) {
+                    base = window.location.origin + '/' + segs[0];
+                } else {
+                    base = window.location.origin;
+                }
+            }
+            var clean = String(path || '').replace(/^\//, '');
+            return base + '/' + clean;
+        };
+    </script>
 
     <!-- Favicon -->
     <link rel="shortcut icon" type="image/png" href="{{ asset('template/assets/img/favicon.png') }}?v=2">
@@ -52,6 +80,8 @@
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
     <!-- Custom DataTables Styles -->
     <link rel="stylesheet" href="{{ asset('template/assets/css/custom-datatable.css') }}">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="{{ asset('template/assets/css/select2-custom.css') }}?v=2" rel="stylesheet" />
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 

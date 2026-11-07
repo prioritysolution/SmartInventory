@@ -14,7 +14,6 @@
                 <div class="col-md-3">
                     <label class="form-label">As on Date <span class="text-danger">*</span></label>
                     <input type="date" class="form-control" id="asOnDate"
-                        min="{{ $year_start }}" max="{{ $year_end }}"
                         value="{{ min($year_end, date('Y-m-d')) }}">
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
@@ -25,6 +24,11 @@
                 <div class="col-md-2 d-flex align-items-end">
                     <button type="button" class="btn btn-outline-secondary w-100" id="printBtn" disabled>
                         <i class="fas fa-print me-1"></i> Print
+                    </button>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="button" class="btn btn-outline-success w-100" id="downloadBtn" disabled>
+                        <i class="fas fa-download me-1"></i> Download
                     </button>
                 </div>
             </div>
@@ -64,23 +68,66 @@
     const agentName = @json($agent_name);
     let printRows = [];
 
-    function printStock() {
-        if (!printRows.length) {
-            Swal.fire('Error', 'Search the report first', 'error');
-            return;
-        }
+    function escapeHtml(value) {
+        return $('<div>').text(value ?? '').html();
+    }
+
+    function buildStockCsv(rows) {
+        const asOn = siDate.toDisplay($('#asOnDate').val());
+        const meta = [
+            ['Organization', orgName || 'Smart Inventory'],
+            ['Report', 'Stock Report'],
+            ['Agent', agentName || ''],
+            ['As on Date', asOn],
+            ['Generated At', (window.siDate && siDate.toDisplay ? siDate.toDisplay(new Date()) : new Date().toLocaleString())]
+        ];
+
+        const headers = ['Sl', 'Item Code', 'Item Name', 'Unit', 'Qty'];
+
+        let totQty = 0;
+        const dataRows = (rows || []).map(function(row, idx) {
+            const q = parseFloat(row.Qty) || 0;
+            totQty += q;
+            return [
+                String(idx + 1),
+                row.Prod_Code || '',
+                row.Prod_ShortNm || '',
+                row.Unit_Name || '',
+                siFmtQty(q)
+            ];
+        });
+
+        const totals = ['Total', '', '', '', siFmtQty(totQty)];
+
+        return siBuildCsv({
+            meta: meta,
+            headers: headers,
+            rows: dataRows,
+            totals: totals
+        });
+    }
+
+    function buildStockHtml(rows) {
         const asOn = siDate.toDisplay($('#asOnDate').val());
         let body = '';
-        printRows.forEach((row, idx) => {
+        let totQty = 0;
+        (rows || []).forEach((row, idx) => {
+            const q = parseFloat(row.Qty) || 0;
+            totQty += q;
             body += `<tr>
-                <td>${idx + 1}</td>
-                <td>${row.Prod_Code ?? ''}</td>
-                <td>${row.Prod_ShortNm ?? ''}</td>
-                <td>${row.Unit_Name ?? ''}</td>
-                <td style="text-align:right;">${row.Qty ?? 0}</td>
+                <td>${escapeHtml(idx + 1)}</td>
+                <td>${escapeHtml(row.Prod_Code)}</td>
+                <td>${escapeHtml(row.Prod_ShortNm)}</td>
+                <td>${escapeHtml(row.Unit_Name)}</td>
+                <td style="text-align:right;">${escapeHtml(siFmtQty(q))}</td>
             </tr>`;
         });
-        siPrint(`<!DOCTYPE html><html><head><title>Stock Report</title>
+        body += `<tr>
+            <th colspan="4" style="text-align:right;">Total</th>
+            <th style="text-align:right;">${escapeHtml(siFmtQty(totQty))}</th>
+        </tr>`;
+
+        return `<!DOCTYPE html><html><head><title>Stock Report</title>
             <style>
                 body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
                 h3, h4, p { margin: 0 0 6px 0; text-align: center; }
@@ -88,19 +135,69 @@
                 th, td { border: 1px solid #000; padding: 4px 6px; }
                 th { background: #f0f0f0; }
             </style></head><body>
-            <h3>${orgName || 'Smart Inventory'}</h3>
+            <h3>${escapeHtml(orgName || 'Smart Inventory')}</h3>
             <h4>Stock Report</h4>
-            <p>Agent: ${agentName || ''} &nbsp;|&nbsp; As on: ${asOn}</p>
+            <p>Agent: ${escapeHtml(agentName || '')} &nbsp;|&nbsp; As on: ${escapeHtml(asOn)}</p>
             <table>
                 <thead><tr>
                     <th>Sl</th><th>Item Code</th><th>Item Name</th><th>Unit</th><th>Qty</th>
                 </tr></thead>
                 <tbody>${body}</tbody>
             </table>
-            </body></html>`);
+            </body></html>`;
+    }
+
+    function downloadStockZip() {
+        if (!printRows.length) {
+            Swal.fire('Error', 'Search the report first', 'error');
+            return;
+        }
+        if (window.Swal) {
+            Swal.fire({
+                title: 'Generating ZIP...',
+                text: 'Packaging records',
+                allowOutsideClick: false,
+                didOpen: function() { Swal.showLoading(); }
+            });
+        }
+        setTimeout(function() {
+            try {
+                const csvContent = buildStockCsv(printRows);
+                const htmlContent = buildStockHtml(printRows);
+                const safeName = 'Stock_Report_' + siDateStamp();
+                const zipName = safeName + '.zip';
+                const files = [
+                    { name: safeName + '.csv', content: csvContent },
+                    { name: safeName + '.html', content: htmlContent }
+                ];
+                siDownloadZip(zipName, files);
+                if (window.Swal) Swal.close();
+            } catch (e) {
+                if (window.Swal) {
+                    Swal.close();
+                    Swal.fire('Error', 'Failed to generate ZIP: ' + (e.message || e), 'error');
+                }
+            }
+        }, 50);
+    }
+
+    function printStock() {
+        if (!printRows.length) {
+            Swal.fire('Error', 'Search the report first', 'error');
+            return;
+        }
+        if (printRows.length > 1000) {
+            siWarnPrintLimit(printRows.length, downloadStockZip);
+            return;
+        }
+        const html = buildStockHtml(printRows);
+        siPrint(html);
     }
 
     $('#printBtn').on('click', printStock);
+    $(document).on('click', '#downloadBtn', function() {
+        downloadStockZip();
+    });
 
     $('#searchBtn').on('click', function () {
         const asOnDate = $('#asOnDate').val();
@@ -111,31 +208,38 @@
 
         printRows = [];
         $('#printBtn').prop('disabled', true);
-        $('#stockBody').html('<tr><td colspan="5" class="text-center">Loading...</td></tr>');
-
-        $.get(searchUrl, { as_on_date: asOnDate }, function (data) {
-            if (!data.length) {
-                $('#stockBody').html('<tr><td colspan="5" class="text-center text-muted">No stock found</td></tr>');
-                return;
-            }
-            printRows = data;
-            let html = '';
-            data.forEach((row, idx) => {
-                html += `<tr>
+        $('#downloadBtn').prop('disabled', true);
+        if (window._stockLazy) window._stockLazy.destroy();
+        window._stockLazy = SiLazyScroll.create({
+            scrollEl: $('#stockBody').closest('.report-scroll'),
+            tbody: '#stockBody',
+            url: searchUrl,
+            pageSize: 40,
+            showEndRow: false,
+            colSpan: 5,
+            params: function () { return { as_on_date: asOnDate }; },
+            emptyHtml: '<tr><td colspan="5" class="text-center text-muted">No stock found</td></tr>',
+            renderRow: function (row, idx) {
+                return `<tr>
                     <td>${idx + 1}</td>
-                    <td>${row.Prod_Code ?? ''}</td>
-                    <td>${row.Prod_ShortNm ?? ''}</td>
-                    <td>${row.Unit_Name ?? ''}</td>
-                    <td class="text-end">${row.Qty ?? 0}</td>
+                    <td>${$('<div>').text(row.Prod_Code ?? '').html()}</td>
+                    <td>${$('<div>').text(row.Prod_ShortNm ?? '').html()}</td>
+                    <td>${$('<div>').text(row.Unit_Name ?? '').html()}</td>
+                    <td class="text-end">${siFmtQty(row.Qty)}</td>
                 </tr>`;
-            });
-            $('#stockBody').html(html);
-            $('#printBtn').prop('disabled', false);
-        }).fail(function (xhr) {
-            const msg = xhr.responseJSON?.message || 'Failed to load stock report. Run USP_AGENT_REPORTS.sql on the organisation database.';
-            Swal.fire('Error', msg, 'error');
-            $('#stockBody').html('<tr><td colspan="5" class="text-center text-danger">Failed to load</td></tr>');
+            },
+            onChunk: function (rows, payload, reset) {
+                if (reset) printRows = [];
+                printRows = printRows.concat(rows);
+                $('#printBtn').prop('disabled', printRows.length === 0);
+                $('#downloadBtn').prop('disabled', printRows.length === 0);
+            },
+            onError: function (xhr) {
+                const msg = xhr.responseJSON?.message || 'Failed to load stock report. Run USP_AGENT_REPORTS.sql on the organisation database.';
+                Swal.fire('Error', msg, 'error');
+            }
         });
+        window._stockLazy.resetAndLoad();
     });
 
     if (new URLSearchParams(window.location.search).get('today') === '1') {

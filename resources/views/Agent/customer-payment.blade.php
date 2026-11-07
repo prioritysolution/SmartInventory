@@ -39,11 +39,6 @@
                             <label class="form-label">Select Customer<span class="text-danger">*</span></label>
                             <select class="form-select" id="partyId">
                                 <option value="">-- Select Customer --</option>
-                                @foreach ($customers as $party)
-                                    <option value="{{ $party->Party_Id }}">
-                                        {{ $party->Party_Code }} - {{ $party->Party_Name }}
-                                    </option>
-                                @endforeach
                             </select>
                             <small class="text-muted" id="dueHint">Outstanding: ₹ 0.00</small>
                         </div>
@@ -150,10 +145,20 @@
             hideGlobalLoader(true);
         }
 
-        $('#partyId').select2({
-            placeholder: '-- Select Customer --',
-            allowClear: true
-        });
+        if (typeof siAjaxSelect2 === 'function') {
+            siAjaxSelect2('#partyId', {
+                url: "{{ route('agent.parties.search') }}",
+                placeholder: '-- Select Customer --',
+                partyType: 2,
+                minLength: 0
+            });
+        } else {
+            $('#partyId').select2({
+                placeholder: '-- Select Customer --',
+                allowClear: true,
+                width: '100%'
+            });
+        }
         $('input[name="transMode"]').on('change', toggleBank);
         $('#cancelBtn').on('click', resetForm);
         $('#partyId').on('change', loadCustomerDue);

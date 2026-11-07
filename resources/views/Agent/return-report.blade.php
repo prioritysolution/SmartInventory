@@ -13,13 +13,11 @@
             <div class="row g-3">
                 <div class="col-md-3">
                     <label class="form-label">From Date <span class="text-danger">*</span></label>
-                    <input type="date" class="form-control" id="frmDate"
-                        min="{{ $year_start }}" max="{{ $year_end }}" value="{{ $year_start }}">
+                    <input type="date" class="form-control" id="frmDate" value="{{ $year_start }}">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">To Date <span class="text-danger">*</span></label>
                     <input type="date" class="form-control" id="toDate"
-                        min="{{ $year_start }}" max="{{ $year_end }}"
                         value="{{ min($year_end, date('Y-m-d')) }}">
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
@@ -30,6 +28,11 @@
                 <div class="col-md-2 d-flex align-items-end">
                     <button type="button" class="btn btn-outline-secondary w-100" id="printBtn" disabled>
                         <i class="fas fa-print me-1"></i> Print
+                    </button>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="button" class="btn btn-outline-success w-100" id="downloadBtn" disabled>
+                        <i class="fas fa-download me-1"></i> Download
                     </button>
                 </div>
             </div>
@@ -50,10 +53,11 @@
                             <th>Item Name</th>
                             <th class="text-end">Qty</th>
                             <th>Unit</th>
+                            <th>Status</th>
                         </tr>
                     </thead>
                     <tbody id="reportBody">
-                        <tr><td colspan="8" class="text-center text-muted">Select dates and click Search</td></tr>
+                        <tr><td colspan="9" class="text-center text-muted">Select dates and click Search</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -72,15 +76,54 @@
     const agentName = @json($agent_name);
     let printRows = [];
 
-    function printReport() {
-        if (!printRows.length) {
-            Swal.fire('Error', 'Search the report first', 'error');
-            return;
-        }
+    function buildReturnCsv(rows) {
+        const frm = siDate.toDisplay($('#frmDate').val());
+        const to = siDate.toDisplay($('#toDate').val());
+        const meta = [
+            ['Organization', orgName || 'Smart Inventory'],
+            ['Report', 'Return Report'],
+            ['Agent', agentName || ''],
+            ['Period', (frm && to ? `From ${frm} To ${to}` : '')],
+            ['Generated At', (window.siDate && siDate.toDisplay ? siDate.toDisplay(new Date()) : new Date().toLocaleString())]
+        ];
+
+        const headers = ['Sl', 'Return No', 'Date', 'Type', 'Item Code', 'Item Name', 'Qty', 'Unit', 'Status'];
+
+        let totQty = 0;
+        const dataRows = (rows || []).map(function(row, idx) {
+            const q = parseFloat(row.Quantity) || 0;
+            totQty += q;
+            return [
+                String(idx + 1),
+                row.Doc_No || '',
+                siDate.toDisplay(row.Doc_Date),
+                row.Return_Type || '',
+                row.Prod_Code || '',
+                row.Prod_ShortNm || '',
+                siFmtQty(q),
+                row.Unit_Name || '',
+                row.Status || ''
+            ];
+        });
+
+        const totals = ['Total', '', '', '', '', '', siFmtQty(totQty), '', ''];
+
+        return siBuildCsv({
+            meta: meta,
+            headers: headers,
+            rows: dataRows,
+            totals: totals
+        });
+    }
+
+    function buildReturnHtml(rows) {
         const frm = siDate.toDisplay($('#frmDate').val());
         const to = siDate.toDisplay($('#toDate').val());
         let body = '';
-        printRows.forEach((row, idx) => {
+        let totQty = 0;
+        (rows || []).forEach((row, idx) => {
+            const q = parseFloat(row.Quantity) || 0;
+            totQty += q;
             body += `<tr>
                 <td>${idx + 1}</td>
                 <td>${row.Doc_No ?? ''}</td>
@@ -88,11 +131,18 @@
                 <td>${row.Return_Type ?? ''}</td>
                 <td>${row.Prod_Code ?? ''}</td>
                 <td>${row.Prod_ShortNm ?? ''}</td>
-                <td style="text-align:right;">${row.Quantity ?? 0}</td>
+                <td style="text-align:right;">${siFmtQty(q)}</td>
                 <td>${row.Unit_Name ?? ''}</td>
+                <td>${row.Status ?? ''}</td>
             </tr>`;
         });
-        siPrint(`<!DOCTYPE html><html><head><title>Return Report</title>
+        body += `<tr>
+            <th colspan="6" style="text-align:right;">Total</th>
+            <th style="text-align:right;">${siFmtQty(totQty)}</th>
+            <th colspan="2"></th>
+        </tr>`;
+
+        return `<!DOCTYPE html><html><head><title>Return Report</title>
             <style>
                 body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
                 h3, h4, p { margin: 0 0 6px 0; text-align: center; }
@@ -106,14 +156,64 @@
             <table>
                 <thead><tr>
                     <th>Sl</th><th>Return No</th><th>Date</th><th>Type</th>
-                    <th>Item Code</th><th>Item Name</th><th>Qty</th><th>Unit</th>
+                    <th>Item Code</th><th>Item Name</th><th>Qty</th><th>Unit</th><th>Status</th>
                 </tr></thead>
                 <tbody>${body}</tbody>
             </table>
-            </body></html>`);
+            </body></html>`;
+    }
+
+    function downloadReturnZip() {
+        if (!printRows.length) {
+            Swal.fire('Error', 'Search the report first', 'error');
+            return;
+        }
+        if (window.Swal) {
+            Swal.fire({
+                title: 'Generating ZIP...',
+                text: 'Packaging records',
+                allowOutsideClick: false,
+                didOpen: function() { Swal.showLoading(); }
+            });
+        }
+        setTimeout(function() {
+            try {
+                const csvContent = buildReturnCsv(printRows);
+                const htmlContent = buildReturnHtml(printRows);
+                const safeName = 'Return_Report_' + siDateStamp();
+                const zipName = safeName + '.zip';
+                const files = [
+                    { name: safeName + '.csv', content: csvContent },
+                    { name: safeName + '.html', content: htmlContent }
+                ];
+                siDownloadZip(zipName, files);
+                if (window.Swal) Swal.close();
+            } catch (e) {
+                if (window.Swal) {
+                    Swal.close();
+                    Swal.fire('Error', 'Failed to generate ZIP: ' + (e.message || e), 'error');
+                }
+            }
+        }, 50);
+    }
+
+    function printReport() {
+        if (!printRows.length) {
+            Swal.fire('Error', 'Search the report first', 'error');
+            return;
+        }
+        if (printRows.length > 1000) {
+            siWarnPrintLimit(printRows.length, downloadReturnZip);
+            return;
+        }
+        const html = buildReturnHtml(printRows);
+        siPrint(html);
     }
 
     $('#printBtn').on('click', printReport);
+    $(document).on('click', '#downloadBtn', function() {
+        downloadReturnZip();
+    });
 
     $('#searchBtn').on('click', function () {
         const frmDate = $('#frmDate').val();
@@ -129,33 +229,49 @@
 
         printRows = [];
         $('#printBtn').prop('disabled', true);
-        $('#reportBody').html('<tr><td colspan="8" class="text-center">Loading...</td></tr>');
-
-        $.get(searchUrl, { frm_date: frmDate, to_date: toDate }, function (data) {
-            if (!data.length) {
-                $('#reportBody').html('<tr><td colspan="8" class="text-center text-muted">No records found</td></tr>');
-                return;
-            }
-            printRows = data;
-            let html = '';
-            data.forEach((row, idx) => {
-                html += `<tr>
+        $('#downloadBtn').prop('disabled', true);
+        if (window._returnLazy) window._returnLazy.destroy();
+        window._returnLazy = SiLazyScroll.create({
+            scrollEl: $('#reportBody').closest('.report-scroll'),
+            tbody: '#reportBody',
+            url: searchUrl,
+            pageSize: 40,
+            showEndRow: false,
+            colSpan: 9,
+            params: function () { return { frm_date: frmDate, to_date: toDate }; },
+            emptyHtml: '<tr><td colspan="9" class="text-center text-muted">No records found</td></tr>',
+            renderRow: function (row, idx) {
+                const status = row.Status || '';
+                const statusHtml = status === 'Pending'
+                    ? '<span class="badge bg-warning text-dark">Pending</span>'
+                    : (status === 'Accepted'
+                        ? '<span class="badge bg-success">Accepted</span>'
+                        : (status
+                            ? '<span class="badge bg-info text-dark">' + status + '</span>'
+                            : ''));
+                return `<tr>
                     <td>${idx + 1}</td>
                     <td>${row.Doc_No ?? ''}</td>
                     <td>${siDate.toDisplay(row.Doc_Date)}</td>
                     <td>${row.Return_Type ?? ''}</td>
                     <td>${row.Prod_Code ?? ''}</td>
                     <td>${row.Prod_ShortNm ?? ''}</td>
-                    <td class="text-end">${row.Quantity ?? 0}</td>
+                    <td class="text-end">${siFmtQty(row.Quantity)}</td>
                     <td>${row.Unit_Name ?? ''}</td>
+                    <td>${statusHtml}</td>
                 </tr>`;
-            });
-            $('#reportBody').html(html);
-            $('#printBtn').prop('disabled', false);
-        }).fail(function (xhr) {
-            Swal.fire('Error', xhr.responseJSON?.message || 'Failed to load report', 'error');
-            $('#reportBody').html('<tr><td colspan="8" class="text-center text-danger">Failed to load</td></tr>');
+            },
+            onChunk: function (rows, payload, reset) {
+                if (reset) printRows = [];
+                printRows = printRows.concat(rows);
+                $('#printBtn').prop('disabled', printRows.length === 0);
+                $('#downloadBtn').prop('disabled', printRows.length === 0);
+            },
+            onError: function (xhr) {
+                Swal.fire('Error', xhr.responseJSON?.message || 'Failed to load report', 'error');
+            }
         });
+        window._returnLazy.resetAndLoad();
     });
 
     if (new URLSearchParams(window.location.search).get('today') === '1') {

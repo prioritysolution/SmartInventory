@@ -66,10 +66,16 @@
         const reportTitle = @json($reportTitle);
         const extraFields = @json($extraFields ?? []);
         let printBills = [];
+        let totalRecordsCount = null;
+        let lastSearchPayload = null;
+        let billLazy = null;
+        let rawRows = [];
 
         function fmtQtyUnit(qty, unit) {
-            const v = parseFloat(qty);
-            const q = (isNaN(v) ? 0 : v).toFixed(3);
+            const q = (window.siFmtQty || function (v) {
+                const n = parseFloat(v);
+                return isNaN(n) ? '0' : String(Math.round(n));
+            })(qty);
             const name = String(unit || '').trim();
             return name ? q + ' - ' + name : q;
         }
@@ -183,7 +189,10 @@
 
         function resetTable(message, isError) {
             printBills = [];
+            rawRows = [];
+            totalRecordsCount = null;
             $('#printBtn').prop('disabled', true);
+            $('#downloadBtn').prop('disabled', true);
             $('#itemTotal').text(fmtAmt(0));
             $('#gstTotal').text(fmtAmt(0));
             $('#roundTotal').text(fmtAmt(0));
@@ -192,14 +201,75 @@
             $('#reportBody').html(`<tr><td colspan="10" class="text-center ${cls}">${esc(message)}</td></tr>`);
         }
 
-        function printRegister() {
-            if (!printBills.length) {
-                Swal.fire('Error', 'Search the report first', 'error');
-                return;
-            }
+        function buildBillwiseCsv(items) {
             const frm = showDate($('#frmDate').val());
             const to = showDate($('#toDate').val());
-            const drawn = renderRegister(printBills);
+            const meta = [
+                ['Organization', orgName || 'Smart Inventory'],
+                ['Branch', branchName || ''],
+                ['Report', reportTitle || 'Register'],
+                ['Period', (frm && to ? `From ${frm} To ${to}` : '')],
+                ['Generated At', (window.siDate && siDate.toDisplay ? siDate.toDisplay(new Date()) : new Date().toLocaleString())]
+            ];
+
+            const headers = [
+                'Bill No', 'Date', 'Party / Customer', 'Pay Mode',
+                'Product Name', 'HSN Code', 'Item Qty', 'Unit',
+                'Rate', 'Item Total', 'GST Rate (%)', 'Gross GST Amount',
+                'Round Off', 'Net Amount'
+            ];
+
+            let sumItemTotal = 0;
+            let sumGst = 0;
+            let sumRound = 0;
+            let sumNet = 0;
+
+            const rows = (items || []).map(function(item) {
+                const itemTot = parseFloat(item.Item_Total) || 0;
+                const gstTot = parseFloat(item.GST_Amt) || 0;
+                const roundOff = parseFloat(item.Round_Off) || 0;
+                const netTot = parseFloat(item.Net_Amt) || 0;
+
+                sumItemTotal += itemTot;
+                sumGst += gstTot;
+                sumRound += roundOff;
+                sumNet += netTot;
+
+                return [
+                    item.Invoice_No || '',
+                    showDate(item.Invoice_Date),
+                    item.Party_Name || item.Agent_Name || '',
+                    item.Pay_Mode || '',
+                    item.Item_Name || '',
+                    item.HSN_No || '',
+                    item.Item_Qty != null ? String(item.Item_Qty) : '',
+                    item.Unit_Name || '',
+                    parseFloat(item.Item_Rate || 0).toFixed(2),
+                    itemTot.toFixed(2),
+                    parseFloat(item.GST_Prcnt || 0).toFixed(2),
+                    gstTot.toFixed(2),
+                    roundOff.toFixed(2),
+                    netTot.toFixed(2)
+                ];
+            });
+
+            const totals = [
+                'GRAND TOTAL', '', '', '', '', '', '', '', '',
+                sumItemTotal.toFixed(2), '', sumGst.toFixed(2), sumRound.toFixed(2), sumNet.toFixed(2)
+            ];
+
+            return siBuildCsv({
+                meta: meta,
+                headers: headers,
+                rows: rows,
+                totals: totals
+            });
+        }
+
+        function buildBillwiseHtml(bills) {
+            const frm = showDate($('#frmDate').val());
+            const to = showDate($('#toDate').val());
+            const drawn = renderRegister(bills || []);
             const totalRow = `<tr>
                 <th colspan="5" style="text-align:center;">GRAND TOTAL</th>
                 <th style="text-align:right;">${fmtAmt(drawn.itemTotal)}</th>
@@ -208,18 +278,18 @@
                 <th style="text-align:right;">${fmtAmt(drawn.roundTotal)}</th>
                 <th style="text-align:right;">${fmtAmt(drawn.netTotal)}</th>
             </tr>`;
-            siPrint(`<!DOCTYPE html><html><head><title>${esc(reportTitle)}</title>
+            return `<!DOCTYPE html><html><head><title>${esc(reportTitle)}</title>
                 <style>
                     @page { size: landscape; }
                     body { font-family: Arial, sans-serif; font-size: 11px; color: #000; }
                     h3, h4, p { margin: 0 0 4px 0; text-align: center; }
                     table { width: 100%; border-collapse: collapse; margin-top: 10px; }
                     th, td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
-                    th { text-align: center; }
+                    th { text-align: center; background: #f0f0f0; }
                     td.num, th.num { text-align: right; white-space: nowrap; }
                     td.label { text-align: center; font-weight: 700; }
                     td.bill-no { font-weight: 700; }
-                    tr.date-row td { font-weight: 700; }
+                    tr.date-row td { font-weight: 700; background: #f4f7fb; }
                     tr.bill-total td { font-weight: 700; }
                 </style></head><body>
                 <h3>${esc(orgName || 'Smart Inventory')}</h3>
@@ -233,10 +303,101 @@
                     </tr></thead>
                     <tbody>${drawn.html}${totalRow}</tbody>
                 </table>
-                </body></html>`);
+                </body></html>`;
+        }
+
+        function downloadBillwiseZip(prefetchedRows) {
+            function runDownload(items) {
+                if (!items || !items.length) {
+                    Swal.fire('Error', 'No records to download', 'error');
+                    return;
+                }
+                if (window.Swal) {
+                    Swal.fire({
+                        title: 'Generating ZIP...',
+                        text: 'Packaging ' + items.length + ' records',
+                        allowOutsideClick: false,
+                        didOpen: function() { Swal.showLoading(); }
+                    });
+                }
+                setTimeout(function() {
+                    try {
+                        const bills = groupBills(items);
+                        const csvContent = buildBillwiseCsv(items);
+                        const htmlContent = buildBillwiseHtml(bills);
+                        const safeName = siSanitizeFilename(reportTitle || 'Register') + '_' + siDateStamp();
+                        const zipName = safeName + '.zip';
+                        const files = [
+                            { name: safeName + '.csv', content: csvContent },
+                            { name: safeName + '.html', content: htmlContent }
+                        ];
+                        siDownloadZip(zipName, files);
+                        if (window.Swal) Swal.close();
+                    } catch (e) {
+                        if (window.Swal) {
+                            Swal.close();
+                            Swal.fire('Error', 'Failed to generate ZIP: ' + (e.message || e), 'error');
+                        }
+                    }
+                }, 50);
+            }
+
+            if (Array.isArray(prefetchedRows) && prefetchedRows.length) {
+                runDownload(prefetchedRows);
+                return;
+            }
+
+            if (lastSearchPayload && searchUrl) {
+                if (window.Swal) {
+                    Swal.fire({
+                        title: 'Fetching Records...',
+                        text: 'Please wait while all searched records are fetched for download',
+                        allowOutsideClick: false,
+                        didOpen: function() { Swal.showLoading(); }
+                    });
+                }
+                $.get(searchUrl, $.extend({}, lastSearchPayload, { limit: 0 }), function(data) {
+                    if (window.Swal) Swal.close();
+                    const allRows = window.SiLazyScroll && SiLazyScroll.unwrap ? SiLazyScroll.unwrap(data) : (Array.isArray(data) ? data : []);
+                    runDownload(allRows);
+                }).fail(function(xhr) {
+                    if (window.Swal) {
+                        Swal.close();
+                        Swal.fire('Error', xhr.responseJSON?.message || 'Failed to fetch records for download', 'error');
+                    }
+                });
+                return;
+            }
+
+            runDownload(rawRows);
+        }
+
+        function printRegister() {
+            // Guard 1: Fast check if search already revealed > 1000 items
+            if (totalRecordsCount !== null && totalRecordsCount > 1000) {
+                siWarnPrintLimit(totalRecordsCount, downloadBillwiseZip);
+                return;
+            }
+
+            // Guard 2: If items in rawRows exceed 1000
+            if (rawRows && rawRows.length > 1000) {
+                siWarnPrintLimit(rawRows.length, downloadBillwiseZip);
+                return;
+            }
+
+            if (!printBills.length) {
+                Swal.fire('Error', 'Search the report first', 'error');
+                return;
+            }
+
+            const html = buildBillwiseHtml(printBills);
+            siPrint(html);
         }
 
         $('#printBtn').on('click', printRegister);
+        $(document).on('click', '#downloadBtn', function() {
+            downloadBillwiseZip();
+        });
 
         $('#searchBtn').on('click', function() {
             const frmDate = $('#frmDate').val();
@@ -253,26 +414,49 @@
             Object.keys(extraFields).forEach(function(key) {
                 payload[key] = $(extraFields[key]).val() || 0;
             });
-            resetTable('Loading...', false);
-            $.get(searchUrl, payload, function(data) {
-                const bills = groupBills(data || []);
-                if (!bills.length) {
-                    resetTable('No records found', false);
-                    return;
+            lastSearchPayload = payload;
+            rawRows = [];
+            printBills = [];
+            totalRecordsCount = null;
+            $('#printBtn').prop('disabled', true);
+            $('#downloadBtn').prop('disabled', true);
+            if (billLazy) billLazy.destroy();
+            billLazy = SiLazyScroll.create({
+                scrollEl: $('#reportTable').closest('.report-scroll'),
+                tbody: '#reportBody',
+                url: searchUrl,
+                pageSize: 40,
+                showEndRow: false,
+                colSpan: 10,
+                params: function() { return lastSearchPayload; },
+                emptyHtml: '<tr><td colspan="10" class="text-center text-muted">No records found</td></tr>',
+                onChunk: function(rows, payload, reset) {
+                    if (reset) {
+                        rawRows = [];
+                        totalRecordsCount = (payload && payload.recordsTotal != null) ? Number(payload.recordsTotal) : null;
+                    }
+                    rawRows = rawRows.concat(rows);
+                    const bills = groupBills(rawRows);
+                    if (!bills.length) {
+                        resetTable('No records found', false);
+                        return;
+                    }
+                    printBills = bills;
+                    const drawn = renderRegister(bills);
+                    $('#reportBody').html(drawn.html);
+                    $('#itemTotal').text(fmtAmt(drawn.itemTotal));
+                    $('#gstTotal').text(fmtAmt(drawn.gstTotal));
+                    $('#roundTotal').text(fmtAmt(drawn.roundTotal));
+                    $('#netTotal').text(fmtAmt(drawn.netTotal));
+                    $('#printBtn').prop('disabled', false);
+                    $('#downloadBtn').prop('disabled', false);
+                },
+                onError: function(xhr) {
+                    Swal.fire('Error', xhr.responseJSON?.message || 'Failed to load report', 'error');
+                    resetTable('Failed to load', true);
                 }
-                printBills = bills;
-                const drawn = renderRegister(bills);
-                $('#reportBody').html(drawn.html);
-                $('#itemTotal').text(fmtAmt(drawn.itemTotal));
-                $('#gstTotal').text(fmtAmt(drawn.gstTotal));
-                $('#roundTotal').text(fmtAmt(drawn.roundTotal));
-                $('#netTotal').text(fmtAmt(drawn.netTotal));
-                $('#printBtn').prop('disabled', false);
-            }).fail(function(xhr) {
-                const msg = xhr.responseJSON?.message || 'Failed to load report';
-                Swal.fire('Error', msg, 'error');
-                resetTable('Failed to load', true);
             });
+            billLazy.resetAndLoad();
         });
     </script>
 @endpush

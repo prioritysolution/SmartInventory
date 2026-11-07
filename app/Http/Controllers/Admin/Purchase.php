@@ -48,6 +48,19 @@ class Purchase extends Controller
 
     public function store(Request $request)
     {
+        $items = $request->input('items', []);
+        if (is_array($items)) {
+            foreach ($items as $i => $item) {
+                if (isset($item['quantity']) && is_numeric($item['quantity'])) {
+                    $qty = (float) $item['quantity'];
+                    if (abs($qty - round($qty)) < 0.0001) {
+                        $items[$i]['quantity'] = (int) round($qty);
+                    }
+                }
+            }
+            $request->merge(['items' => $items]);
+        }
+
         $request->validate([
             'purchase_date' => 'required|date',
             'purchase_no'   => 'nullable|string|max:20',
@@ -61,10 +74,13 @@ class Purchase extends Controller
             'freight_amt'   => 'nullable|numeric|min:0|max:999999.99',
             'round_off'     => 'nullable|numeric',
             'net_amt'       => 'nullable|numeric',
-            'items.*.quantity' => 'required|numeric|max:99999999.99|min:0.01',
+            'items.*.quantity' => 'required|numeric|min:1',
             'items.*.rate'     => 'required|numeric|max:99999999.99|min:0',
             'items.*.sale_mrp' => 'required|numeric|min:0.01',
             'vouch_id' => 'nullable|integer',
+        ], [
+            'items.*.quantity.numeric' => 'Quantity must be a valid number.',
+            'items.*.quantity.min' => 'Quantity must be at least 1.',
         ]);
         $yearStart = session('year_start');
         $yearEnd   = session('year_end');
@@ -182,12 +198,7 @@ class Purchase extends Controller
         } catch (\Exception $e) {
             $conn->rollBack();
             Log::channel('trading')->error('Purchase store error: ' . $e->getMessage());
-            return response()->json([
-                'error'   => 'Failed to save purchase',
-                'message' => $e->getMessage(),  
-                'line'    => $e->getLine(),     
-                'file'    => $e->getFile(),    
-            ], 500);
+            return response()->json(['error' => 'Failed to save purchase'], 500);
         }
     }
 
@@ -205,17 +216,65 @@ class Purchase extends Controller
 
     public function search(Request $request)
     {
-        Config::set('database.connections.coops.database', session('org_schema'));
+        $filters = $this->purchaseSearchFilters($request, false);
+        if ($filters instanceof \Illuminate\Http\JsonResponse) {
+            return $filters;
+        }
 
-        // amazonq-ignore-next-line
-        $results = DB::connection('coops')->select('CALL USP_SEARCH_PURCHASE(?, ?, ?, ?)', [
-            $request->input('from_date'),
-            $request->input('to_date'),
-            $request->input('party_id') ?: 0,
-            session('branch_id'),
+        Config::set('database.connections.coops.database', session('org_schema'));
+        $limit = min(100, max(10, (int) $request->input('limit', 30)));
+        $offset = max(0, (int) $request->input('offset', 0));
+
+        $results = DB::connection('coops')->select('CALL USP_SEARCH_PURCHASE_PAGE(?, ?, ?, ?, ?, ?)', [
+            $filters['from_date'],
+            $filters['to_date'],
+            $filters['party_id'],
+            $filters['bill_like'],
+            $limit,
+            $offset,
+        ]);
+        $total = (int) ($results[0]->Total_Count ?? count($results));
+
+        return response()->json([
+            'results' => $results,
+            'recordsTotal' => $total,
+            'has_more' => ($offset + count($results)) < $total,
+        ]);
+    }
+
+    private function purchaseSearchFilters(Request $request, bool $partyRequired): array|\Illuminate\Http\JsonResponse
+    {
+        $validated = $request->validate([
+            'from_date' => 'nullable|date_format:Y-m-d',
+            'to_date' => 'nullable|date_format:Y-m-d',
+            'party_id' => 'nullable|integer|min:0',
+            'bill_no' => 'nullable|string|max:120',
         ]);
 
-        return response()->json($results);
+        $fromDate = $validated['from_date'] ?? null;
+        $toDate = $validated['to_date'] ?? null;
+        $partyId = (int) ($validated['party_id'] ?? 0);
+        $billNo = trim($validated['bill_no'] ?? '');
+
+        if ($partyRequired && $partyId <= 0) {
+            return response()->json(['error' => 'Please select a Party'], 422);
+        }
+        if ($billNo !== '' && $partyId <= 0) {
+            return response()->json(['error' => 'Please select a Party when searching by Bill No or Ref Bill No'], 422);
+        }
+        if (($fromDate === null) !== ($toDate === null)) {
+            return response()->json(['error' => 'Please select both From Date and To Date'], 422);
+        }
+        if ($billNo === '' && ($fromDate === null || $toDate === null)) {
+            return response()->json(['error' => 'Enter Bill No or Ref Bill No, or select From Date and To Date'], 422);
+        }
+
+        return [
+            'from_date' => $fromDate,
+            'to_date' => $toDate,
+            'party_id' => $partyId,
+            'bill_like' => $billNo === '' ? null : '%' . $billNo . '%',
+        ];
     }
 
     public function details($id)
@@ -241,79 +300,18 @@ class Purchase extends Controller
     }
 
     /**
-     * One row per purchase line. The details procedure joins every stock row of
-     * the same product, so two rates of one item are returned twice.
+     * One row per purchase line (via USP_GET_PURCHASE_LINE_ITEMS).
      */
     private function purchaseLineItems(int $tradingId): array
     {
-        $rows = DB::connection('coops')->select("
-            SELECT
-                p.Prod_Id,
-                i.Cate_Id AS Cat_Id,
-                i.Prod_ShortNm AS Prod_Name,
-                p.Gst_Code AS hsn_code,
-                p.Item_Qty AS qnty,
-                p.Item_Rate,
-                p.Unit_Id,
-                UDF_GET_UNIT_NAME(p.Unit_Id) AS Unit_Name,
-                p.Item_Total,
-                p.MRP,
-                IFNULL(i.Sale_Margin, 0) AS Sale_Margin,
-                p.Disc_Prcnt,
-                p.Disc_Amt,
-                p.Taxable_Amt,
-                p.SGST_Prcnt,
-                p.CGST_Prcnt,
-                p.SGST_Amt,
-                p.CGST_Amt,
-                p.Net_Amt,
-                s.Pack_Date
-            FROM (
-                SELECT tp.*,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY tp.Prod_Id, tp.Item_Qty, ROUND(tp.Item_Rate, 2), ROUND(IFNULL(tp.MRP, 0), 2)
-                           ORDER BY tp.Sl
-                       ) AS line_no
-                FROM trans_trading_products tp
-                WHERE tp.Trading_Id = ?
-            ) p
-            JOIN mst_product i ON i.Prod_Id = p.Prod_Id
-            LEFT JOIN (
-                SELECT
-                    st.Prod_Id,
-                    st.Quantity,
-                    ROUND(st.Rate, 2) AS Rate,
-                    ROUND(IFNULL(st.MRP, 0), 2) AS MRP,
-                    st.Pack_Date,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY st.Prod_Id, st.Quantity, ROUND(st.Rate, 2), ROUND(IFNULL(st.MRP, 0), 2)
-                        ORDER BY st.Stock_Id
-                    ) AS line_no
-                FROM trns_stockinout st
-                WHERE st.Type_Id = ?
-            ) s ON s.Prod_Id = p.Prod_Id
-               AND s.Quantity = p.Item_Qty
-               AND s.Rate = ROUND(p.Item_Rate, 2)
-               AND s.MRP = ROUND(IFNULL(p.MRP, 0), 2)
-               AND s.line_no = p.line_no
-            ORDER BY p.Sl
-        ", [$tradingId, $tradingId]);
+        $rows = DB::connection('coops')->select('CALL USP_GET_PURCHASE_LINE_ITEMS(?)', [$tradingId]);
 
         return array_map(static fn ($row) => (array) $row, $rows);
     }
 
     public function searchForReturn(Request $request)
     {
-        Config::set('database.connections.coops.database', session('org_schema'));
-
-        $results = DB::connection('coops')->select('CALL USP_SEARCH_PURCHASE_FOR_RETURN(?, ?, ?, ?)', [
-            $request->input('from_date'),
-            $request->input('to_date'),
-            $request->input('party_id') ?: 0,
-            session('branch_id'),
-        ]);
-
-        return response()->json($results);
+        return $this->search($request);
     }
 
     public function returnableDetails($id)
@@ -337,22 +335,10 @@ class Purchase extends Controller
         $refNo = trim((string) ($row->Ref_No ?? ''));
         $returnPool = [];
         if ($partyId > 0) {
-            $returnRows = DB::connection('coops')->select("
-                SELECT rp.Prod_Id,
-                       ROUND(rp.Item_Rate, 2) AS Item_Rate,
-                       SUM(rp.Item_Qty) AS Returned_Qty
-                FROM trans_trading r
-                INNER JOIN trans_trading_products rp ON rp.Trading_Id = r.Trading_Id
-                WHERE r.Tranding_Type = 4
-                  AND IFNULL(r.Status_Cd, 1) = 1
-                  AND r.Party_Id = ?
-                  AND (
-                        IFNULL(TRIM(r.Ref_No), '') = ''
-                     OR r.Ref_No = ?
-                     OR r.Ref_No = ?
-                  )
-                GROUP BY rp.Prod_Id, ROUND(rp.Item_Rate, 2)
-            ", [$partyId, $invoiceNo, $refNo]);
+            $returnRows = DB::connection('coops')->select(
+                'CALL USP_GET_PURCHASE_RETURN_POOL(?, ?, ?)',
+                [$partyId, $invoiceNo, $refNo]
+            );
             foreach ($returnRows as $returnRow) {
                 $key = ((int) $returnRow->Prod_Id) . '|' . number_format((float) $returnRow->Item_Rate, 2, '.', '');
                 $returnPool[$key] = (float) $returnRow->Returned_Qty;
@@ -652,24 +638,30 @@ class Purchase extends Controller
 
     public function searchPurchaseReturn(Request $request)
     {
+        $filters = $this->purchaseSearchFilters($request, true);
+        if ($filters instanceof \Illuminate\Http\JsonResponse) {
+            return $filters;
+        }
+
         Config::set('database.connections.coops.database', session('org_schema'));
+        $limit = min(100, max(10, (int) $request->input('limit', 30)));
+        $offset = max(0, (int) $request->input('offset', 0));
 
-        Log::channel('trading')->info('Purchase Return Search Params', [
-            'from_date' => $request->input('from_date'),
-            'to_date'   => $request->input('to_date'),
-            'party_id'  => $request->input('party_id'),
-            'branch_id' => session('branch_id'),
-            'schema'    => session('org_schema'),
+        $results = DB::connection('coops')->select('CALL USP_SEARCH_PURCHASE_RETURN_PAGE(?, ?, ?, ?, ?, ?)', [
+            $filters['from_date'],
+            $filters['to_date'],
+            $filters['party_id'],
+            $filters['bill_like'],
+            $limit,
+            $offset,
         ]);
-        // amazonq-ignore-next-line
-        $results = DB::connection('coops')->select('CALL USP_SEARCH_PURCHASE_RETURN(?, ?, ?, ?)', [
-            $request->input('from_date'),
-            $request->input('to_date'),
-            $request->input('party_id'),
-            session('branch_id'),
-        ]);
+        $total = (int) ($results[0]->Total_Count ?? count($results));
 
-        return response()->json($results);
+        return response()->json([
+            'results' => $results,
+            'recordsTotal' => $total,
+            'has_more' => ($offset + count($results)) < $total,
+        ]);
     }
 
     public function purchaseReturnDetails($id)
@@ -712,8 +704,7 @@ class Purchase extends Controller
 
     private function qtyText(float $qty): string
     {
-        $qty = round($qty, 2);
-        return abs($qty - round($qty)) < 0.001 ? (string) (int) round($qty) : number_format($qty, 2, '.', '');
+        return (string) (int) round($qty);
     }
 
     /**
@@ -722,28 +713,10 @@ class Purchase extends Controller
      */
     private function officeQtyForPartyProduct(int $partyId, int $prodId, string $date, int $excludeId): float
     {
-        $signed = $this->officeSignedQtySql();
-        $row = DB::connection('coops')->selectOne("
-            SELECT IFNULL(SUM(CASE WHEN q.Qty > 0 THEN q.Qty ELSE 0 END), 0) AS Office_Qty
-            FROM (
-                SELECT IFNULL(SUM({$signed}), 0) AS Qty
-                FROM trns_stockinout s
-                WHERE s.InOut_Date <= ?
-                  AND s.Barcode IN (
-                      SELECT DISTINCT p.Barcode
-                      FROM trns_stockinout p
-                      INNER JOIN trans_trading t
-                          ON t.Trading_Id = p.Type_Id
-                         AND t.Tranding_Type = 2
-                      WHERE p.Stock_Type = 2
-                        AND p.Prod_Id = ?
-                        AND t.Party_Id = ?
-                        AND IFNULL(p.Barcode, 0) <> 0
-                        AND p.InOut_Date <= ?
-                  )
-                GROUP BY s.Barcode
-            ) q
-        ", [$excludeId, $excludeId, $date, $prodId, $partyId, $date]);
+        $row = DB::connection('coops')->selectOne(
+            'CALL USP_GET_OFFICE_QTY_PARTY_PRODUCT(?, ?, ?, ?)',
+            [$excludeId, $date, $prodId, $partyId]
+        );
 
         return (float) ($row->Office_Qty ?? 0);
     }
@@ -753,15 +726,11 @@ class Purchase extends Controller
         if ($barcodes === []) {
             return [];
         }
-        $signed = $this->officeSignedQtySql();
-        $placeholders = implode(',', array_fill(0, count($barcodes), '?'));
-        $rows = DB::connection('coops')->select("
-            SELECT s.Barcode, IFNULL(SUM({$signed}), 0) AS Qty
-            FROM trns_stockinout s
-            WHERE s.InOut_Date <= ?
-              AND s.Barcode IN ({$placeholders})
-            GROUP BY s.Barcode
-        ", array_merge([$excludeId, $excludeId, $date], $barcodes));
+
+        $rows = DB::connection('coops')->select(
+            'CALL USP_GET_OFFICE_QTY_BY_BARCODES(?, ?, ?)',
+            [$excludeId, $date, implode(',', $barcodes)]
+        );
 
         $qty = [];
         foreach ($rows as $row) {
@@ -771,78 +740,15 @@ class Purchase extends Controller
         return $qty;
     }
 
-    private function officeSignedQtySql(): string
-    {
-        return "
-            CASE
-                WHEN s.Stock_Type IN (1, 2, 6) THEN s.Quantity
-                WHEN s.Stock_Type = 8 AND NOT EXISTS (
-                    SELECT 1 FROM trans_agent_stock a WHERE a.TrnsStock_Id = s.Stock_Id
-                ) THEN s.Quantity
-                WHEN s.Stock_Type = 7 AND ? > 0 AND IFNULL(s.Type_Id, 0) = ? THEN 0
-                WHEN s.Stock_Type IN (3, 4, 7, 9) THEN -s.Quantity
-                ELSE 0
-            END
-        ";
-    }
-
     /**
      * Barcodes purchased from this supplier that still have quantity to return.
      */
     private function purchaseBarcodesForReturn(int $partyId, string $date, int $prodId, string $barcode, int $excludeId): array
     {
-        $sql = "
-            SELECT
-                s.Barcode,
-                CAST(IFNULL(MAX(s.MRP), 0) AS DECIMAL(10,2)) AS MRP,
-                p.Prod_Id,
-                IFNULL(p.Prod_Code, '') AS Prod_Code,
-                p.Prod_ShortNm,
-                p.Unit_Id,
-                UDF_GET_UNIT_NAME(p.Unit_Id) AS Unit_Name,
-                p.Gst_Id,
-                IFNULL(c.Is_Fmcg, 0) + 0 AS Is_Fmcg,
-                UDF_GET_ITEM_GST_DETAILS(p.Gst_Id) AS GST_Data,
-                SUM(s.Quantity) AS Purchased_Qty,
-                IFNULL(MAX(ret.Returned_Qty), 0) AS Returned_Qty,
-                SUM(s.Quantity) - IFNULL(MAX(ret.Returned_Qty), 0) AS Remaining_Qty
-            FROM trns_stockinout s
-            INNER JOIN trans_trading t
-                ON t.Trading_Id = s.Type_Id
-               AND t.Tranding_Type = 2
-            INNER JOIN mst_product p ON p.Prod_Id = s.Prod_Id
-            LEFT JOIN mst_prod_category c ON c.Prd_CateId = p.Cate_Id
-            LEFT JOIN (
-                SELECT Barcode, SUM(Quantity) AS Returned_Qty
-                FROM trns_stockinout
-                WHERE Stock_Type = 7
-                  AND IFNULL(Barcode, 0) <> 0
-                  AND InOut_Date <= ?
-                  AND (? = 0 OR IFNULL(Type_Id, 0) <> ?)
-                GROUP BY Barcode
-            ) ret ON ret.Barcode = s.Barcode
-            WHERE s.Stock_Type = 2
-              AND IFNULL(s.Barcode, 0) <> 0
-              AND t.Party_Id = ?
-              AND s.InOut_Date <= ?
-              AND (? = 0 OR s.Prod_Id = ?)
-              AND (? = '' OR s.Barcode = ?)
-            GROUP BY s.Barcode, p.Prod_Id, p.Prod_Code, p.Prod_ShortNm, p.Unit_Id, p.Gst_Id, c.Is_Fmcg
-            HAVING SUM(s.Quantity) - IFNULL(MAX(ret.Returned_Qty), 0) > 0
-            ORDER BY MAX(s.Stock_Id) DESC
-        ";
-
-        $rows = DB::connection('coops')->select($sql, [
-            $date,
-            $excludeId,
-            $excludeId,
-            $partyId,
-            $date,
-            $prodId,
-            $prodId,
-            $barcode,
-            $barcode,
-        ]);
+        $rows = DB::connection('coops')->select(
+            'CALL USP_GET_PURCHASE_RETURN_BARCODES(?, ?, ?, ?, ?)',
+            [$date, $excludeId, $partyId, $prodId, $barcode]
+        );
 
         $office = $this->officeQtyByBarcode(array_map(function ($row) {
             return (string) $row->Barcode;
@@ -875,23 +781,10 @@ class Purchase extends Controller
             }
             $mrp = round((float) ($item['sale_mrp'] ?? 0), 2);
             if ($mrp <= 0) {
-                $purchase = $conn->selectOne(
-                    'SELECT IFNULL(MAX(MRP), 0) AS MRP FROM trns_stockinout WHERE Barcode = ? AND Stock_Type IN (1, 2)',
-                    [$barcode]
-                );
+                $purchase = $conn->selectOne('CALL USP_GET_BARCODE_INWARD_MRP(?)', [$barcode]);
                 $mrp = round((float) ($purchase->MRP ?? 0), 2);
             }
-            $conn->statement("
-                UPDATE trns_stockinout
-                SET Barcode = ?,
-                    MRP = CASE WHEN IFNULL(MRP, 0) = 0 THEN ? ELSE MRP END
-                WHERE Stock_Type = 7
-                  AND Prod_Id = ?
-                  AND IFNULL(Barcode, 0) = 0
-                  AND InOut_Date = ?
-                ORDER BY Stock_Id ASC
-                LIMIT 1
-            ", [$barcode, $mrp, $prodId, $date]);
+            $conn->select('CALL USP_ASSIGN_PURCHASE_RETURN_BARCODE(?, ?, ?, ?)', [$barcode, $mrp, $prodId, $date]);
         }
     }
 }

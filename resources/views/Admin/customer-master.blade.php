@@ -16,7 +16,7 @@
     <div class="card">
         <div class="card-body">
             <div class="table-responsive">
-                <table id="customerTable" class="table table-nowrap datatable">
+                <table id="customerTable" class="table table-nowrap">
                     <thead class="thead-light">
                         <tr>
                             <th>Sl</th>
@@ -28,49 +28,7 @@
                             <th class="text-center">Action</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        @foreach ($customers as $key => $customer)
-                        <tr>
-                            <td>{{ $key + 1 }}</td>
-                            <td>{{ $customer->Party_Code }}</td>
-                            <td>{{ $customer->Party_Name }}</td>
-                            <td>{{ $customer->Contact_No }}</td>
-                            <td>{{ $customer->Address_Line1 }}</td>
-                            <td>{{ $customer->Status_Cd == 1 ? 'Active' : 'Inactive' }}</td>
-                            <td class="text-center">
-                                <button class="btn btn-primary btn-sm editRow me-1"
-                                    data-id="{{ $customer->Party_Id }}"
-                                    data-code="{{ $customer->Party_Code }}"
-                                    data-name="{{ $customer->Party_Name }}"
-                                    data-mobile="{{ $customer->Contact_No }}"
-                                    data-altmobile="{{ $customer->AltContact_No }}"
-                                    data-email="{{ $customer->EMail }}"
-                                    data-address1="{{ $customer->Address_Line1 }}"
-                                    data-address2="{{ $customer->Address_Line2 }}"
-                                    data-city="{{ $customer->City }}"
-                                    data-state="{{ $customer->State }}"
-                                    data-pin="{{ $customer->Pin_Code ?? '' }}"
-                                    data-village="{{ $customer->Village_Id ?? '' }}"
-                                    data-ps="{{ $customer->Ps_Id ?? '' }}"
-                                    data-post="{{ $customer->Post_Id ?? '' }}"
-                                    data-dist="{{ $customer->Dist_Id ?? '' }}"
-                                    data-pan="{{ $customer->Pan_No }}"
-                                    data-gst="{{ $customer->GstIn }}"
-                                    data-statecode="{{ $customer->State_Cd }}"
-                                    data-credit="{{ $customer->Credit_Limit }}"
-                                    data-opening="{{ $customer->Opening_Bal }}"
-                                    data-agent="{{ $customer->Cust_Agent_Id ?? '' }}">
-                                    Edit
-                                </button>
-                                <button class="btn btn-danger btn-sm deleteRow"
-                                    data-id="{{ $customer->Party_Id }}"
-                                    data-name="{{ $customer->Party_Name }}">
-                                    Delete
-                                </button>
-                            </td>
-                        </tr>
-                        @endforeach
-                    </tbody>
+                    <tbody></tbody>
                 </table>
             </div>
         </div>
@@ -98,11 +56,8 @@
     </div>
     <div class="col-md-3 mb-3">
         <label class="form-label">Select Agent</label>
-        <select class="form-select form-control-lg" id="custAgentId">
+        <select class="form-select form-control-lg" id="custAgentId" data-si-ajax="agents">
             <option value="">Select Agent</option>
-            @foreach ($agents as $agent)
-                <option value="{{ $agent->Agent_Id }}">{{ $agent->Agent_Code }} - {{ $agent->Agent_Name }}</option>
-            @endforeach
         </select>
     </div>
     <div class="col-md-3 mb-3">
@@ -170,131 +125,230 @@
 @endsection
 
 @push('scripts')
-<script src="{{ asset('template/assets/js/address-master-form.js') }}?v=3"></script>
+<script src="{{ asset('template/assets/js/address-master-form.js') }}?v=5"></script>
 <script>
-$(document).ready(function () {
+(function () {
+    function apiUrl(path) {
+        if (typeof window.siApiUrl === 'function') {
+            return window.siApiUrl(path);
+        }
+        const base = String(window.APP_BASE || '').replace(/\/$/, '');
+        const clean = String(path || '').replace(/^\//, '');
+        return base ? (base + '/' + clean) : ('/' + clean);
+    }
 
-    $(document).on('click', '.editRow', function () {
-        $('#partyId').val($(this).data('id'));
-        $('#partyName').val($(this).data('name'));
-        $('#custAgentId').val($(this).data('agent') || '');
-        $('#mobileNo').val($(this).data('mobile'));
-        $('#altMobileNo').val($(this).data('altmobile'));
-        $('#mailId').val($(this).data('email'));
-        $('#address1').val($(this).data('address1'));
-        $('#address2').val($(this).data('address2'));
-        $('#city').val($(this).data('city'));
-        $('#state').val($(this).data('state'));
-        AddressMasterForm.setValues('', {
-            village_id: $(this).data('village'),
-            ps_id: $(this).data('ps'),
-            post_id: $(this).data('post'),
-            dist_id: $(this).data('dist'),
-            pin_code: $(this).data('pin')
+    let customerTable = null;
+
+    $(document).ready(function () {
+        function initCustomerTable() {
+            const $table = $('#customerTable').removeClass('datatable');
+            if ($.fn.DataTable.isDataTable($table)) {
+                try { $table.DataTable().destroy(); } catch (e) {}
+            }
+
+            customerTable = $table.DataTable({
+                processing: true,
+                serverSide: true,
+                searching: true,
+                pageLength: 25,
+                order: [],
+                destroy: true,
+                autoWidth: false,
+                ajax: {
+                    url: apiUrl('customer-master/list'),
+                    type: 'GET',
+                    error: function (xhr) {
+                        const msg = xhr.responseJSON?.error || xhr.responseJSON?.message || 'Failed to load customers';
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire('Error', msg, 'error');
+                        }
+                    }
+                },
+                columns: [
+                    { data: 'DT_RowIndex', orderable: false, searchable: false },
+                    { data: 'Party_Code', defaultContent: '' },
+                    { data: 'Party_Name', defaultContent: '' },
+                    { data: 'Contact_No', defaultContent: '' },
+                    { data: 'Address_Line1', defaultContent: '' },
+                    {
+                        data: 'Status_Cd',
+                        defaultContent: 1,
+                        render: function (v) { return Number(v) === 1 ? 'Active' : 'Inactive'; }
+                    },
+                    {
+                        data: 'Party_Id',
+                        orderable: false,
+                        searchable: false,
+                        className: 'text-center',
+                        render: function (id, type, row) {
+                            return '<button type="button" class="btn btn-primary btn-sm editRow me-1" data-id="' + id + '">Edit</button>' +
+                                '<button type="button" class="btn btn-danger btn-sm deleteRow" data-id="' + id + '" data-name="' +
+                                $('<div>').text(row.Party_Name || '').html() + '">Delete</button>';
+                        }
+                    }
+                ],
+                language: {
+                    processing: 'Loading customers...',
+                    emptyTable: 'No customers found',
+                    zeroRecords: 'No matching customers',
+                    search: '',
+                    searchPlaceholder: 'Search...',
+                    sLengthMenu: 'Row Per Page _MENU_ Entries',
+                    info: '_START_ - _END_ of _TOTAL_ items',
+                    paginate: {
+                        next: '<i class="isax isax-arrow-right-1"></i>',
+                        previous: '<i class="isax isax-arrow-left"></i>'
+                    }
+                }
+            });
+        }
+
+        // Run after script.js's immediate `.datatable` init (footer loads before stacked scripts).
+        setTimeout(initCustomerTable, 0);
+
+        $(document).on('click', '.editRow', function () {
+            const id = $(this).data('id');
+            $.get(apiUrl('customer-master/details/' + id))
+                .done(function (c) {
+                    $('#partyId').val(c.Party_Id);
+                    $('#partyName').val(c.Party_Name || '');
+                    const agentId = c.Cust_Agent_Id || '';
+                    const agentLabel = (c.Agent_Name || '') + (c.Agent_Code ? ' (' + c.Agent_Code + ')' : '');
+                    if (typeof siSetAjaxSelect2Value === 'function') {
+                        siSetAjaxSelect2Value('#custAgentId', agentId, agentLabel || agentId);
+                    } else {
+                        $('#custAgentId').val(agentId).trigger('change');
+                    }
+                    $('#mobileNo').val(c.Contact_No || '');
+                    $('#altMobileNo').val(c.AltContact_No || '');
+                    $('#mailId').val(c.EMail || '');
+                    $('#address1').val(c.Address_Line1 || '');
+                    $('#address2').val(c.Address_Line2 || '');
+                    $('#city').val(c.City || '');
+                    $('#state').val(c.State || '');
+                    AddressMasterForm.setValues('', {
+                        village_id: c.Village_Id || '',
+                        ps_id: c.Ps_Id || '',
+                        post_id: c.Post_Id || '',
+                        dist_id: c.Dist_Id || '',
+                        pin_code: c.Pin_Code || ''
+                    });
+                    $('#panNo').val(c.Pan_No || '');
+                    $('#gstin').val(c.GstIn || '');
+                    $('#stateCode').val(c.State_Cd || '');
+                    $('#creditLimit').val(c.Credit_Limit || '');
+                    $('#openingBalance').val(c.Opening_Bal || '');
+                    $('#modalTitle').text('Edit Customer');
+                    $('#saveCustomer').prop('disabled', false).text('Update');
+                    $('#customerModal').modal('show');
+                })
+                .fail(function (xhr) {
+                    Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load customer', 'error');
+                });
         });
-        $('#panNo').val($(this).data('pan'));
-        $('#gstin').val($(this).data('gst'));
-        $('#stateCode').val($(this).data('statecode'));
-        $('#creditLimit').val($(this).data('credit'));
-        $('#openingBalance').val($(this).data('opening'));
-        $('#modalTitle').text('Edit Customer');
-        $('#saveCustomer').text('Update');
-        $('#customerModal').modal('show');
-    });
 
-    $(document).on('click', '.deleteRow', function () {
-        let id   = $(this).data('id');
-        let name = $(this).data('name');
-        Swal.fire({
-            title: 'Delete Customer?',
-            text: name,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#d33',
-            confirmButtonText: 'Yes, Delete'
-        }).then(result => {
-            if (!result.isConfirmed) return;
+        $(document).on('click', '.deleteRow', function () {
+            const id = $(this).data('id');
+            const name = $(this).data('name');
+            Swal.fire({
+                title: 'Delete Customer?',
+                text: name,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: 'Yes, Delete'
+            }).then(result => {
+                if (!result.isConfirmed) return;
+                $.ajax({
+                    url: apiUrl('customer-master/' + id),
+                    type: 'POST',
+                    data: { _token: "{{ csrf_token() }}", _method: 'DELETE' },
+                    success: res => {
+                        Swal.fire('Deleted', res.message, 'success');
+                        if (customerTable) customerTable.ajax.reload(null, false);
+                    },
+                    error: xhr => Swal.fire('Error', xhr.responseJSON?.message || 'Failed to delete', 'error')
+                });
+            });
+        });
+
+        $('#saveCustomer').click(function () {
+            if (!validateForm()) return;
+
+            $(this).prop('disabled', true).text('Saving...');
+
+            const partyId = $('#partyId').val();
+            const url = partyId ? apiUrl('customer-master/' + partyId) : apiUrl('customer-master/save');
+
+            const data = Object.assign({
+                _token: "{{ csrf_token() }}",
+                party_name:   $('#partyName').val(),
+                mobile_no:    $('#mobileNo').val(),
+                alt_mobile_no: $('#altMobileNo').val(),
+                mail_id:      $('#mailId').val(),
+                address1:     $('#address1').val(),
+                address2:     $('#address2').val(),
+                city:         $('#city').val(),
+                district:     AddressMasterForm.selectedName('', 'dist'),
+                state:        $('#state').val(),
+                pin_code:     AddressMasterForm.selectedName('', 'pin'),
+                pan_no:       $('#panNo').val(),
+                gstin:        $('#gstin').val(),
+                state_code:   $('#stateCode').val(),
+                credit_limit: $('#creditLimit').val(),
+                opening_balance: $('#openingBalance').val(),
+                cust_agent_id: $('#custAgentId').val() || 0
+            }, AddressMasterForm.collect(''));
+
+            if (partyId) data._method = 'PUT';
+
             $.ajax({
-                url: `/customer-master/${id}`,
+                url: url,
                 type: 'POST',
-                data: { _token: "{{ csrf_token() }}", _method: 'DELETE' },
-                success: res => Swal.fire('Deleted', res.message, 'success').then(() => location.reload()),
-                error: xhr => Swal.fire('Error', xhr.responseJSON?.message || 'Failed to delete', 'error')
+                data: data,
+                success: function (res) {
+                    $('#customerModal').modal('hide');
+                    const msg = res.message + (res.party_code ? '<br><b>Party Code: ' + res.party_code + '</b>' : '');
+                    Swal.fire({ title: 'Success', html: msg, icon: 'success' });
+                    if (customerTable) customerTable.ajax.reload(null, false);
+                },
+                error: function (xhr) {
+                    $('#saveCustomer').prop('disabled', false).text(partyId ? 'Update' : 'Save');
+                    if (xhr.status === 422) {
+                        const message = xhr.responseJSON?.errors
+                            ? Object.values(xhr.responseJSON.errors)[0][0]
+                            : (xhr.responseJSON?.error || 'Validation failed');
+                        Swal.fire('Validation Error', message, 'error');
+                    } else {
+                        Swal.fire('Error', xhr.responseJSON?.error || xhr.responseJSON?.message || 'Failed to save customer', 'error');
+                    }
+                }
             });
         });
     });
 
-    $('#saveCustomer').click(function () {
-        if (!validateForm()) return;
+    window.validateForm = function () {
+        if (!$('#partyName').val()) { Swal.fire('Validation Error', 'Party Name required', 'error'); return false; }
+        if ($('#mobileNo').val() && !/^\d{10}$/.test($('#mobileNo').val())) { Swal.fire('Validation Error', 'Mobile No must be 10 digits', 'error'); return false; }
+        return true;
+    };
 
-        $(this).prop('disabled', true).text('Saving...');
-
-        let partyId = $('#partyId').val();
-        let url = partyId ? `/customer-master/${partyId}` : "{{ route('customer-master.store') }}";
-
-        let data = Object.assign({
-            _token: "{{ csrf_token() }}",
-            party_name:   $('#partyName').val(),
-            mobile_no:    $('#mobileNo').val(),
-            alt_mobile_no: $('#altMobileNo').val(),
-            mail_id:      $('#mailId').val(),
-            address1:     $('#address1').val(),
-            address2:     $('#address2').val(),
-            city:         $('#city').val(),
-            district:     AddressMasterForm.selectedName('', 'dist'),
-            state:        $('#state').val(),
-            pin_code:     AddressMasterForm.selectedName('', 'pin'),
-            pan_no:       $('#panNo').val(),
-            gstin:        $('#gstin').val(),
-            state_code:   $('#stateCode').val(),
-            credit_limit: $('#creditLimit').val(),
-            opening_balance: $('#openingBalance').val(),
-            cust_agent_id: $('#custAgentId').val() || 0
-        }, AddressMasterForm.collect(''));
-
-        if (partyId) data._method = 'PUT';
-
-        $.ajax({
-            url: url,
-            type: 'POST',
-            data: data,
-            success: function (res) {
-                $('#customerModal').modal('hide');
-                let msg = res.message + (res.party_code ? '<br><b>Party Code: ' + res.party_code + '</b>' : '');
-                Swal.fire({ title: 'Success', html: msg, icon: 'success' }).then(() => location.reload());
-            },
-            error: function (xhr) {
-                $('#saveCustomer').prop('disabled', false).text(partyId ? 'Update' : 'Save');
-                if (xhr.status === 422) {
-                    let message = xhr.responseJSON?.errors
-                        ? Object.values(xhr.responseJSON.errors)[0][0]
-                        : (xhr.responseJSON?.error || 'Validation failed');
-                    Swal.fire('Validation Error', message, 'error');
-                } else {
-                    Swal.fire('Error', xhr.responseJSON?.error || xhr.responseJSON?.message || 'Failed to save customer', 'error');
-                }
-            }
-        });
-    });
-});
-
-function validateForm() {
-    if (!$('#partyName').val()) { Swal.fire('Validation Error', 'Party Name required', 'error'); return false; }
-    if ($('#mobileNo').val() && !/^\d{10}$/.test($('#mobileNo').val())) { Swal.fire('Validation Error', 'Mobile No must be 10 digits', 'error'); return false; }
-    return true;
-}
-
-function openAddModal() {
-    $('#partyId').val('');
-    $('#partyName, #mobileNo, #altMobileNo, #mailId').val('');
-    $('#custAgentId').val('');
-    $('#address1, #address2, #city, #state').val('');
-    AddressMasterForm.clearValues('');
-    $('#panNo, #gstin, #creditLimit, #openingBalance').val('');
-      $('#stateCode').val('19');
-    $('#modalTitle').text('Add New Customer');
-    $('#saveCustomer').text('Save');
-    $('#customerModal').modal('show');
-}
+    window.openAddModal = function () {
+        $('#partyId').val('');
+        $('#partyName, #mobileNo, #altMobileNo, #mailId').val('');
+        if (typeof siSetAjaxSelect2Value === 'function') {
+            siSetAjaxSelect2Value('#custAgentId', '', '');
+        } else {
+            $('#custAgentId').val('').trigger('change');
+        }
+        $('#address1, #address2, #city, #state').val('');
+        AddressMasterForm.clearValues('');
+        $('#panNo, #gstin, #creditLimit, #openingBalance').val('');
+        $('#stateCode').val('19');
+        $('#modalTitle').text('Add New Customer');
+        $('#saveCustomer').prop('disabled', false).text('Save');
+        $('#customerModal').modal('show');
+    };
+})();
 </script>
 @endpush

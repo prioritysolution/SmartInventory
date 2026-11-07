@@ -15,14 +15,8 @@ class AgentCustomerPayment extends Controller
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
 
-        $customers = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [
-            2,
-            session('branch_id'),
-            session('agent_id'),
-        ]);
-        $customers = array_values(array_filter($customers, function ($row) {
-            return (int) ($row->Status_Cd ?? 1) === 1;
-        }));
+        // Customers via AJAX Select2 (agent.parties.search)
+        $customers = [];
 
         $vouchers = $this->agentCollectionList();
 
@@ -229,7 +223,7 @@ class AgentCustomerPayment extends Controller
     private function customerBelongsToAgent(int $partyId): bool
     {
         $party = DB::connection('coops')->selectOne(
-            'SELECT Party_Id FROM mst_party WHERE Party_Id = ? AND Party_Type = 2 AND Cust_Agent_Id = ? LIMIT 1',
+            'CALL USP_VALIDATE_AGENT_CUSTOMER(?, ?)',
             [$partyId, session('agent_id')]
         );
 
@@ -239,20 +233,8 @@ class AgentCustomerPayment extends Controller
     private function paymentBelongsToAgent(int $paymentId): bool
     {
         $row = DB::connection('coops')->selectOne(
-            'SELECT t.Id
-               FROM trn_party_trans t
-               INNER JOIN mst_party p
-                       ON p.Party_Id = t.Party_Id
-                      AND p.Party_Type = 2
-                      AND p.Cust_Agent_Id = ?
-              WHERE t.Id = ?
-                AND t.Trans_Type = \'C\'
-                AND IFNULL(t.Trading_Id, 0) = 0
-                AND t.Trans_Mode IN (1, 2)
-                AND t.Created_By = ?
-                AND IFNULL(t.Txn_Id, 0) = 0
-              LIMIT 1',
-            [session('agent_id'), $paymentId, session('agent_id')]
+            'CALL USP_VALIDATE_AGENT_PAYMENT_OWNERSHIP(?, ?)',
+            [session('agent_id'), $paymentId]
         );
 
         return (bool) $row;
@@ -261,45 +243,8 @@ class AgentCustomerPayment extends Controller
     private function paymentDetails(int $paymentId): ?object
     {
         $row = DB::connection('coops')->selectOne(
-            'SELECT t.Id AS Payment_Id,
-                    t.Id AS Voucher_Id,
-                    t.Trans_Date AS Vou_Date,
-                    t.Party_Id,
-                    t.Amount,
-                    t.Trans_Mode AS Vou_Mode,
-                    t.Txn_Id,
-                    CASE
-                        WHEN LOCATE(\'|\', t.Remarks) > 0
-                        THEN TRIM(SUBSTRING_INDEX(t.Remarks, \'|\', 1))
-                        ELSE COALESCE(m.Vou_No, CONCAT(\'ACP-\', t.Id))
-                    END AS Vou_No,
-                    CASE
-                        WHEN (LENGTH(t.Remarks) - LENGTH(REPLACE(t.Remarks, \'|\', \'\'))) >= 2
-                        THEN TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(t.Remarks, \'|\', 2), \'|\', -1))
-                        ELSE \'\'
-                    END AS Ref_Vou_No,
-                    CASE
-                        WHEN (LENGTH(t.Remarks) - LENGTH(REPLACE(t.Remarks, \'|\', \'\'))) >= 2
-                        THEN TRIM(SUBSTRING_INDEX(t.Remarks, \'|\', -1))
-                        WHEN LOCATE(\'|\', t.Remarks) > 0
-                        THEN TRIM(SUBSTRING_INDEX(t.Remarks, \'|\', -1))
-                        ELSE IFNULL(t.Remarks, \'\')
-                    END AS Particulars,
-                    CASE WHEN IFNULL(t.Txn_Id, 0) = 0 THEN 1 ELSE 0 END AS Can_Edit
-               FROM trn_party_trans t
-               INNER JOIN mst_party p
-                       ON p.Party_Id = t.Party_Id
-                      AND p.Party_Type = 2
-                      AND p.Cust_Agent_Id = ?
-               LEFT JOIN trans_voucher_master m
-                      ON m.Voucher_Id = t.Txn_Id
-              WHERE t.Id = ?
-                AND t.Trans_Type = \'C\'
-                AND IFNULL(t.Trading_Id, 0) = 0
-                AND t.Trans_Mode IN (1, 2)
-                AND t.Created_By = ?
-              LIMIT 1',
-            [session('agent_id'), $paymentId, session('agent_id')]
+            'CALL USP_GET_AGENT_PAYMENT_DTLS(?, ?)',
+            [session('agent_id'), $paymentId]
         );
 
         return $row ?: null;
@@ -308,32 +253,8 @@ class AgentCustomerPayment extends Controller
     private function agentCollectionList(): array
     {
         return DB::connection('coops')->select(
-            'SELECT t.Id AS Payment_Id,
-                    t.Id AS Voucher_Id,
-                    DATE_FORMAT(t.Trans_Date, \'%d-%m-%Y\') AS Vou_Date_Disp,
-                    t.Trans_Date AS Vou_Date,
-                    CASE
-                        WHEN LOCATE(\'|\', t.Remarks) > 0
-                        THEN TRIM(SUBSTRING_INDEX(t.Remarks, \'|\', 1))
-                        ELSE COALESCE(m.Vou_No, CONCAT(\'ACP-\', t.Id))
-                    END AS Vou_No,
-                    p.Party_Name,
-                    t.Amount,
-                    CASE WHEN IFNULL(t.Txn_Id, 0) = 0 THEN 1 ELSE 0 END AS Can_Edit
-               FROM trn_party_trans t
-               INNER JOIN mst_party p
-                       ON p.Party_Id = t.Party_Id
-                      AND p.Party_Type = 2
-                      AND p.Cust_Agent_Id = ?
-               LEFT JOIN trans_voucher_master m
-                      ON m.Voucher_Id = t.Txn_Id
-              WHERE t.Trans_Type = \'C\'
-                AND IFNULL(t.Trading_Id, 0) = 0
-                AND t.Trans_Mode IN (1, 2)
-                AND t.Created_By = ?
-              ORDER BY t.Id DESC
-              LIMIT 10',
-            [session('agent_id'), session('agent_id')]
+            'CALL USP_GET_AGENT_PAYMENT_LIST(?)',
+            [session('agent_id')]
         );
     }
 }

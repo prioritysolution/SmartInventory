@@ -92,28 +92,10 @@ class AgentRequisition extends Controller
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
 
-        $rows = DB::connection('coops')->select("
-            SELECT
-                s.Barcode AS Barcode,
-                CAST(IFNULL(MAX(CASE WHEN s.Stock_Type IN (1, 2) THEN s.MRP END), MAX(s.MRP)) AS DECIMAL(10,2)) AS MRP,
-                IFNULL(SUM(
-                    CASE
-                        WHEN s.Stock_Type IN (1, 2, 6) THEN s.Quantity
-                        WHEN s.Stock_Type = 8 AND NOT EXISTS (
-                            SELECT 1 FROM trans_agent_stock a WHERE a.TrnsStock_Id = s.Stock_Id
-                        ) THEN s.Quantity
-                        WHEN s.Stock_Type IN (3, 4, 7, 9) THEN -s.Quantity
-                        ELSE 0
-                    END
-                ), 0) AS Avil_Qnty
-            FROM trns_stockinout s
-            WHERE s.Prod_Id = ?
-              AND s.InOut_Date <= ?
-              AND IFNULL(s.Barcode, 0) <> 0
-            GROUP BY s.Barcode
-            HAVING Avil_Qnty > 0
-            ORDER BY MAX(CASE WHEN s.Stock_Type = 2 THEN s.Stock_Id END) DESC, MAX(s.Stock_Id) DESC
-        ", [$prodId, $date]);
+        $rows = DB::connection('coops')->select(
+            'CALL USP_GET_OFFICE_BARCODE_STOCK_SIMPLE(?, ?)',
+            [$prodId, $date]
+        );
 
         return response()->json($rows);
     }

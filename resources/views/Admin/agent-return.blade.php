@@ -17,6 +17,26 @@
         #itemPickerTable tbody tr:hover {
             background-color: #e8f4ff;
         }
+
+        #barcodePickerTable tbody tr.barcode-pick-row {
+            cursor: pointer;
+        }
+
+        #barcodePickerTable tbody tr.barcode-pick-row:hover {
+            background-color: #e8f4ff;
+        }
+
+        .barcode-picker-scroll {
+            max-height: 320px;
+            overflow-y: auto;
+        }
+
+        .barcode-picker-scroll thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #f6f6f6;
+        }
     </style>
 @endpush
 
@@ -37,13 +57,8 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Select Agent<span class="text-danger">*</span></label>
-                            <select class="form-select select2-agent" id="agentId">
+                            <select class="form-select select2-agent" id="agentId" data-si-ajax="agents">
                                 <option value="">Select Agent</option>
-                                @foreach ($agents as $agent)
-                                    <option value="{{ $agent->Agent_Id }}">{{ $agent->Agent_Name }}
-                                        ({{ $agent->Agent_Code }})
-                                    </option>
-                                @endforeach
                             </select>
 
                         </div>
@@ -85,9 +100,7 @@
                             </div>
                             <div class="col-md-2">
                                 <label class="form-label">MRP<span class="text-danger">*</span></label>
-                                <select class="form-select" id="mrp" disabled>
-                                    <option value="">-- Select MRP --</option>
-                                </select>
+                                <input type="text" class="form-control" id="mrp" readonly placeholder="Select barcode">
                             </div>
                             <div class="col-md-2">
                                 <label class="form-label">Agent Available Qty</label>
@@ -226,6 +239,7 @@
             </div>
         </div>
     </div>
+    @include('Admin.partials.barcode-picker-modal')
 @endsection
 
 @push('scripts')
@@ -236,6 +250,7 @@
         let itemPickerDT = null;
         let currentMrpOptions = [];
         let currentTotalQty = 0;
+        let pendingBarcodePick = null;
 
         $(document).ready(function() {
 
@@ -246,6 +261,108 @@
             });
 
             dataTable = $('#itemsTable').DataTable();
+
+            function filterBarcodePickerRows() {
+                const needle = String($('#barcodePickerSearch').val() || '').trim().toLowerCase();
+                const $rows = $('#barcodePickerTable tbody tr.barcode-pick-row');
+                let visible = 0;
+                $rows.each(function() {
+                    const hay = String($(this).attr('data-search') || '').toLowerCase();
+                    const show = !needle || hay.indexOf(needle) !== -1;
+                    $(this).toggle(show);
+                    if (show) visible++;
+                });
+                $('#barcodePickerEmpty').toggleClass('d-none', !$rows.length || visible > 0);
+            }
+
+            function openBarcodePicker(payload) {
+                const item = payload.item || {};
+                const name = item.Prod_ShortNm || '';
+                const rows = payload.barcodes || [];
+                $('#barcodePickerTitle').text(name ? ('Select Barcode — ' + name) : 'Select Barcode');
+                $('#barcodePickerSearch').val('');
+                $('#barcodePickerEmpty').addClass('d-none');
+                const $body = $('#barcodePickerTable tbody').empty();
+                if (!rows.length) {
+                    $body.append('<tr><td colspan="5" class="text-center text-muted">No returnable barcode stock for this agent / product</td></tr>');
+                } else {
+                    rows.forEach(function(row, i) {
+                        const barcode = String(row.Barcode || '');
+                        const mrp = parseFloat(row.MRP) || 0;
+                        const qty = parseFloat(row.Avil_Qnty);
+                        const qtyText = isNaN(qty) ? '' : String(qty);
+                        const searchText = [i + 1, barcode, name, mrp.toFixed(2), qtyText].join(' ');
+                        const $tr = $('<tr class="barcode-pick-row"></tr>');
+                        $tr.attr('data-barcode', barcode);
+                        $tr.attr('data-mrp', mrp);
+                        $tr.attr('data-qty', qtyText);
+                        $tr.attr('data-search', searchText);
+                        $tr.append($('<td></td>').text(i + 1));
+                        $tr.append($('<td></td>').text(barcode));
+                        $tr.append($('<td></td>').text(name));
+                        $tr.append($('<td class="text-end"></td>').text(mrp.toFixed(2)));
+                        $tr.append($('<td class="text-end"></td>').text(qtyText));
+                        $body.append($tr);
+                    });
+                }
+                $('#barcodePickerModal').data('item', item);
+                $('#barcodePickerModal').modal('show');
+                setTimeout(function() { $('#barcodePickerSearch').trigger('focus'); }, 250);
+            }
+
+            function selectProductForReturn(prodId) {
+                if (!prodId) return;
+                if (!validateReturnHeader()) return;
+                const indentDate = $('#indentDate').val();
+                const agentId = $('#agentId').val();
+                $.when(
+                    $.get("{{ route('agent-return.item-info') }}", {
+                        prod_id: prodId,
+                        sale_date: indentDate,
+                        agent_id: agentId
+                    }),
+                    $.get("{{ route('agent-return.product-barcodes') }}", {
+                        prod_id: prodId,
+                        sale_date: indentDate,
+                        agent_id: agentId
+                    })
+                ).done(function(infoRes, barcodeRes) {
+                    pendingBarcodePick = {
+                        item: infoRes[0],
+                        barcodes: barcodeRes[0] || []
+                    };
+                    if ($('#itemPickerModal').hasClass('show')) {
+                        $('#itemPickerModal').modal('hide');
+                        return;
+                    }
+                    const payload = pendingBarcodePick;
+                    pendingBarcodePick = null;
+                    openBarcodePicker(payload);
+                }).fail(function(xhr) {
+                    Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load item details', 'error');
+                });
+            }
+
+            $('#barcodePickerSearchBtn').on('click', filterBarcodePickerRows);
+            $('#barcodePickerClearBtn').on('click', function() {
+                $('#barcodePickerSearch').val('');
+                filterBarcodePickerRows();
+                $('#barcodePickerSearch').trigger('focus');
+            });
+            $('#barcodePickerSearch').on('keydown', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); filterBarcodePickerRows(); }
+            });
+            $('#barcodePickerSearch').on('input', filterBarcodePickerRows);
+
+            $(document).on('click', '#barcodePickerTable tbody tr.barcode-pick-row', function() {
+                const item = $('#barcodePickerModal').data('item');
+                if (!item) return;
+                const code = String($(this).attr('data-barcode') || '').trim();
+                const mrp = parseFloat($(this).attr('data-mrp')) || 0;
+                const qty = parseFloat($(this).attr('data-qty'));
+                $('#barcodePickerModal').modal('hide');
+                applyFormBarcodePick(item, code, mrp, isNaN(qty) ? 0 : qty);
+            });
 
             $('#productBarcode').on('keydown', function(e) {
                 if (e.key === 'Enter') {
@@ -261,7 +378,7 @@
 
             $('#productSearchBtn').on('click', function(e) {
                 e.preventDefault();
-                if (!validateIndentDate()) return;
+                if (!validateReturnHeader()) return;
                 const code = $('#productBarcode').val().trim();
                 if (!code) {
                     openItemPickerModal([], false, '');
@@ -296,15 +413,21 @@
                     itemPickerDT = null;
                 }
                 $('#itemPickerTable tbody').html('');
+                if (!validateReturnHeader()) {
+                    $('#itemPickerLoader').hide();
+                    return;
+                }
                 $.get("{{ route('agent-return.items') }}", {
                     cat_id: catId,
                     sub_cat_id: subCatId,
-                    code: code
+                    code: code,
+                    agent_id: $('#agentId').val(),
+                    sale_date: $('#indentDate').val()
                 }, function(data) {
                     renderItemPickerTable(data);
-                }).fail(function() {
+                }).fail(function(xhr) {
                     $('#itemPickerLoader').hide();
-                    Swal.fire('Error', 'Failed to load items', 'error');
+                    Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load items', 'error');
                 });
             });
 
@@ -323,16 +446,18 @@
                     itemPickerDT = null;
                 }
                 $('#itemPickerTable tbody').html('');
+                if (pendingBarcodePick) {
+                    const payload = pendingBarcodePick;
+                    pendingBarcodePick = null;
+                    openBarcodePicker(payload);
+                }
             });
 
-            $(document).on('click', '#itemPickerTable tbody tr', function() {
+                        $(document).on('click', '#itemPickerTable tbody tr', function() {
                 const prodId = $(this).data('id');
-                const code = $(this).data('code');
                 if (!prodId) return;
-                if (!validateIndentDate()) return;
-                $('#productBarcode').val(code || '');
-                $('#itemPickerModal').modal('hide');
-                fetchProductById(prodId);
+                if (!validateReturnHeader()) return;
+                selectProductForReturn(prodId);
             });
 
             $('#indentDate').on('change', function() {
@@ -379,7 +504,7 @@
         });
 
         function openItemPickerModal(data, isCodeSearch, code) {
-            $('#itemPickerTitle').text('Select Item');
+            $('#itemPickerTitle').text('Select Item (agent stock only)');
             $('#itemPickerLoader').hide();
             $('#itemPickerTableWrap').hide();
             if (itemPickerDT) {
@@ -395,6 +520,9 @@
             if (data.length > 0) {
                 $('#itemPickerLoader').show();
                 renderItemPickerTable(data);
+            } else if (!isCodeSearch || !code) {
+                // Load products this agent can return (has stock).
+                setTimeout(function() { $('#modalSearchBtn').trigger('click'); }, 150);
             }
         }
 
@@ -403,7 +531,7 @@
                 $('#itemPickerLoader').hide();
                 if (!data.length) {
                     $('#itemPickerTable tbody').html(
-                        '<tr><td colspan="5" class="text-center text-muted">No items found</td></tr>');
+                        '<tr><td colspan="5" class="text-center text-muted">No agent stock found for this search</td></tr>');
                     $('#itemPickerTableWrap').show();
                     return;
                 }
@@ -512,7 +640,7 @@
                 <td colspan="5" class="p-0">
                     <table class="table table-sm table-bordered mb-0">
                         <thead class="table-light">
-                            <tr><th>Sl</th><th>Item Name</th><th>Quantity</th></tr>
+                            <tr><th>Sl</th><th>Item Name</th><th>Quantity</th><th class="text-center">Action</th></tr>
                         </thead>
                         <tbody>
                             ${items.map((it, idx) => `
@@ -520,6 +648,14 @@
                                             <td>${idx + 1}</td>
                                             <td>${it.Prod_ShortNm}</td>
                                             <td>${it.Quantity} ${it.Unit_Name || ''}</td>
+                                            <td class="text-center">
+                                                <button class="btn btn-danger btn-sm reject-indent-item"
+                                                    data-indent-id="${indent.Indent_Id}"
+                                                    data-indent-sl="${it.Indent_Sl}"
+                                                    data-prod-name="${it.Prod_ShortNm}">
+                                                    <i class="fas fa-times"></i> Reject
+                                                </button>
+                                            </td>
                                         </tr>`).join('')}
                         </tbody>
                     </table>
@@ -564,6 +700,54 @@
 
                 renderItemsTable();
                 $('#pendingIndentModal').modal('hide');
+            });
+
+            $(document).off('click', '.reject-indent-item').on('click', '.reject-indent-item', function() {
+                const $btn = $(this);
+                const indentId = $btn.data('indent-id');
+                const indentSl = $btn.data('indent-sl');
+                const agentId = $('#agentId').val();
+                const prodName = $btn.data('prod-name');
+
+                Swal.fire({
+                    title: 'Reject Item',
+                    text: `Reject "${prodName}" from this return requisition?`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, Reject',
+                    confirmButtonColor: '#d33',
+                    cancelButtonText: 'No'
+                }).then(function(result) {
+                    if (!result.isConfirmed) return;
+                    $.ajax({
+                        url: "{{ route('agent-return.cancel-item') }}",
+                        method: 'POST',
+                        data: {
+                            indent_sl: indentSl,
+                            indent_id: indentId,
+                            agent_id: agentId,
+                            _token: "{{ csrf_token() }}"
+                        },
+                        success: function(res) {
+                            $btn.closest('tr').remove();
+                            const remaining = $(`#detail-${indentId} tbody tr`).length;
+                            if (remaining === 0) {
+                                $(`#detail-${indentId}`).prev('tr').remove();
+                                $(`#detail-${indentId}`).remove();
+                                delete indentMap[indentId];
+                                if (!$('#pendingIndentBody tr').length) {
+                                    $('#pendingIndentModal').modal('hide');
+                                    Swal.fire('Info', 'All items rejected. No pending requisitions.', 'info');
+                                    return;
+                                }
+                            }
+                            Swal.fire('Rejected', res.message || 'Item rejected', 'success');
+                        },
+                        error: function(xhr) {
+                            Swal.fire('Error', xhr.responseJSON?.message || 'Failed to reject item', 'error');
+                        }
+                    });
+                });
             });
         }
 
@@ -663,71 +847,33 @@
             updateIssueRejectQty();
         }
 
-        function applyProductDetails(product) {
-            if (product.Prod_Code) {
-                $('#productBarcode').val(product.Prod_Code);
-            }
-            $('#productName').val(product.Prod_ShortNm);
-            currentTotalQty = parseFloat(product.Avil_Qnty) || 0;
-            currentMrpOptions = collectMrpOptions(product);
-            if (!currentMrpOptions.length) {
-                currentMrpOptions = [{
-                    mrp: parseMrpValue(product.MRP),
-                    qty: currentTotalQty
-                }];
-            }
-            fillMrpSelect($('#mrp'), currentMrpOptions, product.MRP);
-            applyFormMrpQty();
-            $('#packDate').val(product.Pack_Date);
+        function isNumericBarcode(v) {
+            return /^\d+$/.test(String(v || '').trim());
+        }
+
+        function applyFormBarcodePick(product, barcode, mrp, qty) {
+            $('#productBarcode').val(barcode).data('scanned-barcode', barcode);
+            $('#productName').val(product.Prod_ShortNm || '');
+            $('#mrp').val(mrp > 0 ? mrpKey(mrp) : '');
+            $('#availableQty').val(qty);
+            $('#quantity').attr('max', qty);
+            $('#packDate').val(product.Pack_Date || '');
             $('#productBarcode').data('prod-id', product.Prod_Id);
             $('#productBarcode').data('unit-id', product.Unit_Id);
             $('#productBarcode').data('unit-name', product.Unit_Name || '');
-            const available = parseFloat($('#availableQty').val()) || 0;
-            const anyStock = currentMrpOptions.some(function(o) {
-                const q = o.qty == null ? currentTotalQty : o.qty;
-                return q > 0;
-            });
-            if (available > 0) {
-                $('#quantity').focus();
+            currentTotalQty = qty;
+            currentMrpOptions = [{ mrp: mrp, qty: qty }];
+            if (qty <= 0) {
+                Swal.fire('Warning', 'This barcode has no available stock with the agent!', 'warning');
             } else {
-                $('#mrp').focus();
-                if (!anyStock) {
-                    Swal.fire('Warning', 'This product is out of stock!', 'warning');
-                }
+                $('#quantity').focus();
             }
             $('#productBarcode').addClass('is-valid');
             setTimeout(() => $('#productBarcode').removeClass('is-valid'), 2000);
         }
 
         function fetchProductById(prodId) {
-            if (!validateReturnHeader()) return;
-            const indentDate = $('#indentDate').val();
-            const agentId = $('#agentId').val();
-            $('#productName, #availableQty, #packDate').val('');
-            resetMrpSelect($('#mrp'));
-            currentMrpOptions = [];
-            currentTotalQty = 0;
-
-            $.get("{{ route('agent-return.item-info') }}", {
-                prod_id: prodId,
-                sale_date: indentDate,
-                agent_id: agentId
-            }).done(function(product) {
-                applyProductDetails(product);
-            }).fail(function(xhr) {
-                $('#productName, #availableQty, #packDate').val('');
-                resetMrpSelect($('#mrp'));
-                currentMrpOptions = [];
-                currentTotalQty = 0;
-                $('#productBarcode').addClass('is-invalid');
-                setTimeout(() => $('#productBarcode').removeClass('is-invalid'), 2000);
-                Swal.fire({
-                    title: 'Error',
-                    text: xhr.responseJSON?.error || 'Failed to fetch product details. Please try again.',
-                    icon: 'error',
-                    confirmButtonText: 'OK'
-                });
-            });
+            selectProductForReturn(prodId);
         }
 
         function pickUniqueItem(data, code) {
@@ -740,10 +886,13 @@
         }
 
         function searchCodeOrOpenPicker(code) {
+            if (!validateReturnHeader()) return;
             $.get("{{ route('agent-return.items') }}", {
                 code: code,
                 cat_id: 0,
-                sub_cat_id: 0
+                sub_cat_id: 0,
+                agent_id: $('#agentId').val(),
+                sale_date: $('#indentDate').val()
             }, function(data) {
                 const unique = pickUniqueItem(data, code);
                 if (unique) {
@@ -751,7 +900,8 @@
                     return;
                 }
                 openItemPickerModal(data || [], true, code);
-            }).fail(function() {
+            }).fail(function(xhr) {
+                Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load items', 'error');
                 openItemPickerModal([], true, code);
             });
         }
@@ -761,8 +911,7 @@
             const indentDate = $('#indentDate').val();
             const agentId = $('#agentId').val();
 
-            $('#productName, #availableQty, #packDate').val('');
-            resetMrpSelect($('#mrp'));
+            $('#productName, #availableQty, #packDate, #mrp').val('');
             currentMrpOptions = [];
             currentTotalQty = 0;
 
@@ -777,7 +926,30 @@
                 },
                 success: function(response) {
                     if (response.success && response.data) {
-                        applyProductDetails(response.data);
+                        const product = response.data;
+                        if (isNumericBarcode(barcode)) {
+                            $.get("{{ route('agent-return.product-barcodes') }}", {
+                                prod_id: product.Prod_Id,
+                                sale_date: indentDate,
+                                agent_id: agentId
+                            }).done(function(rows) {
+                                const list = Array.isArray(rows) ? rows : [];
+                                const match = list.find(function(r) {
+                                    return String(r.Barcode) === String(barcode);
+                                });
+                                if (match) {
+                                    applyFormBarcodePick(product, barcode, parseFloat(match.MRP) || parseMrpValue(product.MRP), parseFloat(match.Avil_Qnty) || 0);
+                                } else if (list.length) {
+                                    openBarcodePicker({ item: product, barcodes: list });
+                                } else {
+                                    applyFormBarcodePick(product, barcode, parseMrpValue(product.MRP), parseFloat(product.Avil_Qnty) || 0);
+                                }
+                            }).fail(function() {
+                                applyFormBarcodePick(product, barcode, parseMrpValue(product.MRP), parseFloat(product.Avil_Qnty) || 0);
+                            });
+                        } else {
+                            selectProductForReturn(product.Prod_Id);
+                        }
                     } else {
                         searchCodeOrOpenPicker(barcode);
                     }
@@ -801,8 +973,8 @@
             const unitId = $('#productBarcode').data('unit-id');
             const unitName = $('#productBarcode').data('unit-name') || '';
 
-            if (!barcode) {
-                Swal.fire('Error', 'Product barcode is required', 'error');
+            if (!isNumericBarcode(barcode)) {
+                Swal.fire('Error', 'Select a stock barcode from the list (not product code)', 'error');
                 $('#productBarcode').focus();
                 return;
             }
@@ -817,8 +989,8 @@
                 return;
             }
             if (!mrp) {
-                Swal.fire('Error', 'Please select an MRP', 'error');
-                $('#mrp').focus();
+                Swal.fire('Error', 'Please select a barcode / MRP from the list', 'error');
+                $('#productBarcode').focus();
                 return;
             }
             if (qty > availableQty) {
@@ -921,7 +1093,8 @@
                     prod_id: item.prod_id,
                     unit_id: item.unit_id,
                     quantity: item.quantity,
-                    mrp: parseMrpValue(item.mrp)
+                    mrp: parseMrpValue(item.mrp),
+                    barcode: String(item.barcode || '').trim()
                 })),
                 _token: "{{ csrf_token() }}"
             };

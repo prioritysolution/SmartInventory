@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Concerns\SearchesItemsByCode;
+use App\Http\Controllers\Concerns\SearchesParties;
 use App\Http\Controllers\Concerns\VerifiesStoredPassword;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\Config;
 class MasterSetup extends Controller
 {
     use SearchesItemsByCode;
+    use SearchesParties;
     use VerifiesStoredPassword;
 
     //product master
@@ -434,15 +436,97 @@ public function indexAgent(Request $request)
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         $branchId = session('branch_id');
-        $customers = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [2, $branchId, 0]);
+        // Do NOT load all customers into the view (25k+ rows exhausts memory).
+        $customers = [];
 
-        $pdo = DB::connection('coops')->getPdo();
-        $stmt = $pdo->prepare('CALL USP_GET_AGENT_LIST(?, ?, ?, ?)');
-        $stmt->execute([$branchId, '', 1, 0]);
-        $agents = $stmt->fetchAll(\PDO::FETCH_OBJ);
-        $stmt->closeCursor();
+        $agents = [];
 
         return view('Admin.customer-master', compact('customers', 'agents'))->with('pageTitle', 'Customer Master');
+    }
+
+    /**
+     * DataTables server-side list for Customer Master (USP_SEARCH_PARTY_LIST).
+     */
+    public function listCustomers(Request $request)
+    {
+        try {
+            Config::set('database.connections.coops.database', session('org_schema'));
+            DB::purge('coops');
+
+            $draw = (int) $request->input('draw', 1);
+            $start = max(0, (int) $request->input('start', 0));
+            $length = (int) $request->input('length', 25);
+            if ($length <= 0) {
+                $length = 25;
+            }
+            $length = min(100, $length);
+            $q = trim((string) data_get($request->input('search'), 'value', $request->input('q', '')));
+            $branchId = (int) session('branch_id');
+
+            $rows = DB::connection('coops')->select('CALL USP_SEARCH_PARTY_LIST(?, ?, ?, ?, ?, ?, ?)', [
+                2,
+                $branchId,
+                0,
+                $q,
+                $length,
+                $start,
+                0, // all statuses for master screen
+            ]);
+
+            $total = (int) ($rows[0]->Total_Count ?? 0);
+            $data = [];
+            foreach ($rows as $i => $row) {
+                $data[] = [
+                    'DT_RowIndex' => $start + $i + 1,
+                    'Party_Id' => (int) $row->Party_Id,
+                    'Party_Code' => $row->Party_Code,
+                    'Party_Name' => $row->Party_Name,
+                    'Contact_No' => $row->Contact_No ?? '',
+                    'Address_Line1' => $row->Address_Line1 ?? '',
+                    'Status_Cd' => (int) ($row->Status_Cd ?? 1),
+                ];
+            }
+
+            return response()->json([
+                'draw' => $draw,
+                'recordsTotal' => $total,
+                'recordsFiltered' => $total,
+                'data' => $data,
+            ]);
+        } catch (\Throwable $e) {
+            Log::channel('trading')->error('Customer list error: ' . $e->getMessage());
+            return response()->json([
+                'draw' => (int) $request->input('draw', 1),
+                'recordsTotal' => 0,
+                'recordsFiltered' => 0,
+                'data' => [],
+                'error' => config('app.debug') ? $e->getMessage() : 'Failed to load customers',
+            ], 500);
+        }
+    }
+
+    public function customerDetails($id)
+    {
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+        $row = DB::connection('coops')->selectOne('CALL USP_GET_PARTY_BY_ID(?)', [(int) $id]);
+        if (!$row) {
+            return response()->json(['error' => 'Customer not found'], 404);
+        }
+        $payload = (array) $row;
+        $agentId = (int) ($payload['Cust_Agent_Id'] ?? 0);
+        if ($agentId > 0) {
+            try {
+                $agent = DB::connection('coops')->selectOne('CALL USP_GET_AGENT_MASTER(?)', [$agentId]);
+                if ($agent) {
+                    $payload['Agent_Name'] = $agent->Agent_Name ?? '';
+                    $payload['Agent_Code'] = $agent->Agent_Code ?? '';
+                }
+            } catch (\Throwable $e) {
+                // Agent label is optional for the Select2 display value.
+            }
+        }
+        return response()->json($payload);
     }
 
     public function storeCustomer(Request $request)
@@ -848,13 +932,22 @@ public function indexAgent(Request $request)
             DB::connection('coops')->statement("CREATE TEMPORARY TABLE IF NOT EXISTS tempmenue(Parraint_Id INT, Child_Id INT)");
             DB::connection('coops')->statement("DELETE FROM tempmenue");
 
-            if (!empty($request->menus)) {
-                foreach ($request->menus as $menu) {
-                    DB::connection('coops')->statement(
-                        "INSERT INTO tempmenue(Parraint_Id,Child_Id) VALUES (?,?)",
-                        [$menu['parent'], $menu['child']]
-                    );
+            foreach ((array) $request->input('menus', []) as $menu) {
+                $parent = (int) ($menu['parent'] ?? 0);
+                if ($parent <= 0) {
+                    continue;
                 }
+                $child = $menu['child'] ?? null;
+                if ($child === '' || $child === null) {
+                    $child = null;
+                } else {
+                    $child = (int) $child;
+                    $child = $child > 0 ? $child : null;
+                }
+                DB::connection('coops')->statement(
+                    'INSERT INTO tempmenue(Parraint_Id,Child_Id) VALUES (?,?)',
+                    [$parent, $child]
+                );
             }
             $result = DB::connection('coops')->select(
                 "CALL USP_ADD_USER_GROUP(?,?,?,?,?)",
@@ -1121,7 +1214,9 @@ public function storeProdCategory(Request $request)
         } catch (\Exception $e) {
             DB::connection('coops')->rollBack();
             Log::channel('trading')->error('Address master save error: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to save'], 500);
+            return response()->json([
+                'error' => config('app.debug') ? $e->getMessage() : 'Failed to save',
+            ], 500);
         }
     }
 
@@ -1141,12 +1236,12 @@ public function storeProdCategory(Request $request)
             DB::connection('coops')->beginTransaction();
             $result = DB::connection('coops')->select('CALL USP_ADD_EDIT_ADDRESS_MASTER(?, ?, ?, ?, ?)', [
                 $type,
-                $id,
+                (int) $id,
                 $request->input('name'),
                 2,
                 $request->input('pin_code', ''),
             ]);
-            if (!empty($result) && $result[0]->Error_No < 0) {
+            if (!empty($result) && (int) ($result[0]->Error_No ?? 0) < 0) {
                 DB::connection('coops')->rollBack();
                 return response()->json(['error' => $result[0]->Message], 422);
             }
@@ -1155,7 +1250,9 @@ public function storeProdCategory(Request $request)
         } catch (\Exception $e) {
             DB::connection('coops')->rollBack();
             Log::channel('trading')->error('Address master update error: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to update'], 500);
+            return response()->json([
+                'error' => config('app.debug') ? $e->getMessage() : 'Failed to update',
+            ], 500);
         }
     }
 

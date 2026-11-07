@@ -318,10 +318,6 @@
                             <div id="customerDiv">
                                 <select class="form-select" id="partyId">
                                     <option value="">-- Select Customer --</option>
-                                    @foreach ($customers as $customer)
-                                        <option value="{{ $customer->Party_Id }}">
-                                            {{ $customer->Party_Name }}-{{ $customer->Party_Code }}</option>
-                                    @endforeach
                                 </select>
                             </div>
                             <div id="cashDiv" style="display:none;">
@@ -1338,10 +1334,20 @@ body { width: 46mm; }
 
         $(document).ready(function() {
 
-            $('#partyId').select2({
-                placeholder: '-- Select Customer --',
-                allowClear: true
-            });
+            if (typeof siAjaxSelect2 === 'function') {
+                siAjaxSelect2('#partyId', {
+                    url: "{{ route('agent.parties.search') }}",
+                    placeholder: '-- Select Customer --',
+                    partyType: 2,
+                    minLength: 0
+                });
+            } else {
+                $('#partyId').select2({
+                    placeholder: '-- Select Customer --',
+                    allowClear: true,
+                    width: '100%'
+                });
+            }
 
             $('input[name="saleType"]').on('change', function() {
                 if ($(this).val() === 'outside') {

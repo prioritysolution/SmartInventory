@@ -222,14 +222,12 @@
                         return;
                     }
                     $.each(data, function(i, item) {
-                        $('#itemPickerTable tbody').append(
-                            `<tr data-id="${item.Prod_Id}">
-                                <td>${i + 1}</td>
-                                <td>${item.Prod_Code || ''}</td>
-                                <td>${item.Prod_ShortNm || item.Item_Name || ''}</td>
-                                <td>${item.Unit_Name || ''}</td>
-                            </tr>`
-                        );
+                        const row = $('<tr>').attr('data-id', item.Prod_Id);
+                        row.append($('<td>').text(i + 1));
+                        row.append($('<td>').text(item.Prod_Code || ''));
+                        row.append($('<td>').text(item.Prod_ShortNm || item.Item_Name || ''));
+                        row.append($('<td>').text(item.Unit_Name || ''));
+                        $('#itemPickerTable tbody').append(row);
                     });
                     if (itemPickerDT) {
                         itemPickerDT.destroy();
@@ -270,10 +268,10 @@
                 const catId = parseInt($(this).val()) || 0;
                 $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
                 if (!catId) return;
-                $.get(`/product-master/subcategories/${catId}`, function(subs) {
+                $.get("{{ url('product-master/subcategories') }}/" + catId, function(subs) {
                     (subs || []).forEach(s => {
                         $('#modalSubCateId').append(
-                            `<option value="${s.Prd_SubCateId}">${s.Prd_SubCateNm}</option>`
+                            $('<option>').val(s.Prd_SubCateId).text(s.Prd_SubCateNm)
                         );
                     });
                 });
@@ -328,7 +326,7 @@
 
             function loadItemDetails(itemId) {
                 $.ajax({
-                    url: `/product-master/details/${itemId}`,
+                    url: "{{ url('product-master/details') }}/" + itemId,
                     type: 'GET',
                     success: function(data) {
                         if (data) {
@@ -342,12 +340,12 @@
                             $('#reorder_qnty').val(data.ReOrder_Qty);
                             $('#prod_life').val(data.Prod_Life);
                             $('#category').val(data.Cate_Id).trigger('change');
-                            $.get(`/product-master/subcategories/${data.Cate_Id}`, function(subs) {
+                            $.get("{{ url('product-master/subcategories') }}/" + data.Cate_Id, function(subs) {
                                 $('#sub_category').html(
                                     '<option value="">Select Sub Category</option>');
                                 (subs || []).forEach(s => {
                                     $('#sub_category').append(
-                                        `<option value="${s.Prd_SubCateId}">${s.Prd_SubCateNm}</option>`
+                                        $('<option>').val(s.Prd_SubCateId).text(s.Prd_SubCateNm)
                                     );
                                 });
                                 $('#sub_category').val(data.SubCate_Id).trigger('change');
@@ -377,7 +375,7 @@
                 $(this).prop('disabled', true).text(isUpdate ? 'Updating...' : 'Saving...');
 
                 $.ajax({
-                    url: '/product-master/save',
+                    url: "{{ route('product-master.store') }}",
                     type: 'POST',
                     data: {
                         product_id: $('#product_id').val(),
@@ -426,11 +424,11 @@
                 $('#sub_category').html('<option value="">Select Sub Category</option>').trigger(
                     'change.select2');
                 if (!categoryId) return;
-                $.get(`/product-master/subcategories/${categoryId}`, function(data) {
+                $.get("{{ url('product-master/subcategories') }}/" + categoryId, function(data) {
                     $('#sub_category').html('<option value="">Select Sub Category</option>');
                     (data || []).forEach(item => {
                         $('#sub_category').append(
-                            `<option value="${item.Prd_SubCateId}">${item.Prd_SubCateNm}</option>`
+                            $('<option>').val(item.Prd_SubCateId).text(item.Prd_SubCateNm)
                         );
                     });
                     $('#sub_category').trigger('change.select2');

@@ -186,7 +186,7 @@
 
 
 @push('scripts')
-    <script src="{{ asset('template/assets/js/address-master-form.js') }}?v=3"></script>
+    <script src="{{ asset('template/assets/js/address-master-form.js') }}?v=5"></script>
     <script>
         $(document).ready(function() {
             $('#eyeIcon').on('click', function() {
@@ -224,7 +224,9 @@
                 if (!validateForm()) return;
                 $(this).prop('disabled', true).text('Saving...');
                 let agentId = $('#agentId').val();
-                let url = agentId ? `/agent-profile/${agentId}` : "{{ route('agent-profile.store') }}";
+                let url = agentId
+                    ? ("{{ url('agent-profile') }}/" + agentId)
+                    : "{{ route('agent-profile.store') }}";
                 let data = Object.assign({
                     _token: "{{ csrf_token() }}",
                     agent_name: $('#agentName').val(),

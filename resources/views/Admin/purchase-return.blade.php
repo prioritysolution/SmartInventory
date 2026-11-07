@@ -102,12 +102,12 @@
                             <div>
                                 <div class="form-check form-check-inline mb-0">
                                     <input class="form-check-input" type="radio" name="gstMode" id="withGst"
-                                        value="1" checked>
+                                        value="1">
                                     <label class="form-check-label" for="withGst">With GST</label>
                                 </div>
                                 <div class="form-check form-check-inline mb-0">
                                     <input class="form-check-input" type="radio" name="gstMode" id="withoutGst"
-                                        value="0">
+                                        value="0" checked>
                                     <label class="form-check-label" for="withoutGst">Without GST</label>
                                 </div>
                             </div>
@@ -427,32 +427,7 @@
         </div>
     </div>
 
-    <div class="modal fade" id="barcodePickerModal" tabindex="-1" data-bs-backdrop="static">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="barcodePickerTitle">Select Barcode</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="table-responsive barcode-picker-scroll">
-                        <table class="table table-bordered table-hover table-sm mb-0" id="barcodePickerTable">
-                            <thead class="thead-light">
-                                <tr>
-                                    <th>Sl</th>
-                                    <th>Barcode</th>
-                                    <th>Item Name</th>
-                                    <th class="text-end">MRP</th>
-                                    <th class="text-end">Returnable Qty</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    @include('Admin.partials.barcode-picker-modal', ['qtyColumnLabel' => 'Returnable Qty'])
 
     {{-- Purchase Search Modal --}}
     <div class="modal fade" id="purchaseSearchModal" tabindex="-1" data-bs-backdrop="static">
@@ -464,12 +439,12 @@
                 </div>
                 <div class="modal-body">
                     <div class="row mb-3">
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label class="form-label">From Date</label>
                             <input type="date" class="form-control" id="searchFromDate"
                                 max="{{ session('year_end') }}">
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label class="form-label">To Date</label>
                             <input type="date" class="form-control" id="searchToDate"
                                 max="{{ session('year_end') }}">
@@ -483,6 +458,10 @@
                                 @endforeach
                             </select>
                         </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Bill No / Ref Bill No</label>
+                            <input type="text" class="form-control" id="searchBillNo" maxlength="120">
+                        </div>
                         <div class="col-md-2 d-flex align-items-end">
                             <button type="button" class="btn btn-primary w-100" id="searchPurchaseGo">Search</button>
                         </div>
@@ -494,6 +473,7 @@
                                     <th>Sl</th>
                                     <th>Invoice No</th>
                                     <th>Ref No</th>
+                                    <th>Party Name</th>
                                     <th>Invoice Date</th>
                                     <th>Net Amount</th>
                                     <th>Action</th>
@@ -501,7 +481,7 @@
                             </thead>
                             <tbody id="purchaseSearchBody">
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted">Use filters above to search</td>
+                                    <td colspan="7" class="text-center text-muted">Use filters above to search</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -511,34 +491,38 @@
         </div>
     </div>
 
-    {{-- Find Purchase (by supplier / date) --}}
+    {{-- Find Purchase --}}
     <div class="modal fade" id="findPurchaseModal" tabindex="-1" data-bs-backdrop="static">
         <div class="modal-dialog modal-lg modal-xl-custom">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Find Purchase</h5>
+                    <h5 class="modal-title">Search Purchase</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row mb-3">
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label class="form-label">From Date</label>
                             <input type="date" class="form-control" id="findFromDate"
                                 min="{{ session('year_start') }}" max="{{ session('year_end') }}">
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label class="form-label">To Date</label>
                             <input type="date" class="form-control" id="findToDate"
                                 min="{{ session('year_start') }}" max="{{ session('year_end') }}">
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Select Supplier</label>
+                        <div class="col-md-3">
+                            <label class="form-label">Select Party</label>
                             <select class="form-select" id="findPartyId">
-                                <option value="0">-- Select Supplier --</option>
+                                <option value="0">-- All Parties --</option>
                                 @foreach ($suppliers as $supplier)
                                     <option value="{{ $supplier->Party_Id }}">{{ $supplier->Party_Name }}</option>
                                 @endforeach
                             </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Bill No / Ref Bill No</label>
+                            <input type="text" class="form-control" id="findBillNo" maxlength="120">
                         </div>
                         <div class="col-md-2 d-flex align-items-end">
                             <button type="button" class="btn btn-primary w-100" id="findPurchaseGo">Search</button>
@@ -551,6 +535,7 @@
                                     <th>Sl</th>
                                     <th>Invoice No</th>
                                     <th>Ref No</th>
+                                    <th>Party Name</th>
                                     <th>Invoice Date</th>
                                     <th>Net Amount</th>
                                     <th>Action</th>
@@ -558,7 +543,7 @@
                             </thead>
                             <tbody id="findPurchaseBody">
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted">Use filters above to search</td>
+                                    <td colspan="7" class="text-center text-muted">Use filters above to search</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -616,7 +601,7 @@
         let allItemsData = [];
         let currentPurchaseId = 0;
         let currentVouchId = 0;
-        let findPurchaseDT = null;
+        let purchaseSourceSearchLazy = null;
         let purchaseItemsDT = null;
         let skipFindPurchaseReset = false;
         let reopenFindPurchase = true;
@@ -747,7 +732,7 @@
                 dropdownParent: $('#purchaseSearchModal')
             });
             $('#findPartyId').select2({
-                placeholder: '-- Select Supplier --',
+                placeholder: '-- All Parties --',
                 allowClear: true,
                 dropdownParent: $('#findPurchaseModal')
             });
@@ -784,31 +769,69 @@
             let pendingBarcodePick = null;
             let pendingPurchaseLine = null;
 
+            function filterBarcodePickerRows() {
+                const needle = String($('#barcodePickerSearch').val() || '').trim().toLowerCase();
+                const $rows = $('#barcodePickerTable tbody tr.barcode-pick-row');
+                let visible = 0;
+                $rows.each(function() {
+                    const hay = String($(this).attr('data-search') || '').toLowerCase();
+                    const show = !needle || hay.indexOf(needle) !== -1;
+                    $(this).toggle(show);
+                    if (show) visible++;
+                });
+                $('#barcodePickerEmpty').toggleClass('d-none', !$rows.length || visible > 0);
+            }
+
+            function barcodePickerRows(data) {
+                if (Array.isArray(data)) return data;
+                if (data && Array.isArray(data.results)) return data.results;
+                return [];
+            }
+
             function openBarcodePicker(rows, title) {
                 const $body = $('#barcodePickerTable tbody').empty();
                 $('#barcodePickerTitle').text(title || 'Select Barcode');
+                $('#barcodePickerSearch').val('');
+                $('#barcodePickerEmpty').addClass('d-none');
                 if (!rows.length) {
                     $body.append(
                         '<tr><td colspan="5" class="text-center text-muted">No barcode purchased from this party</td></tr>'
                     );
                 } else {
                     rows.forEach(function(row, i) {
+                        const barcode = String(row.Barcode || '');
+                        const name = row.Prod_ShortNm || '';
+                        const mrp = parseFloat(row.MRP) || 0;
                         const remaining = parseFloat(row.Remaining_Qty) || 0;
+                        const searchText = [i + 1, barcode, name, mrp.toFixed(2), remaining].join(' ');
                         const $tr = $('<tr class="barcode-pick-row"></tr>');
-                        $tr.attr('data-barcode', row.Barcode);
+                        $tr.attr('data-barcode', barcode);
                         $tr.attr('data-mrp', row.MRP);
                         $tr.attr('data-qty', remaining);
+                        $tr.attr('data-search', searchText);
                         $tr.data('row', row);
                         $tr.append($('<td></td>').text(i + 1));
-                        $tr.append($('<td></td>').text(row.Barcode));
-                        $tr.append($('<td></td>').text(row.Prod_ShortNm || ''));
-                        $tr.append($('<td class="text-end"></td>').text((parseFloat(row.MRP) || 0).toFixed(2)));
+                        $tr.append($('<td></td>').text(barcode));
+                        $tr.append($('<td></td>').text(name));
+                        $tr.append($('<td class="text-end"></td>').text(mrp.toFixed(2)));
                         $tr.append($('<td class="text-end"></td>').text(remaining));
                         $body.append($tr);
                     });
                 }
                 $('#barcodePickerModal').modal('show');
+                setTimeout(function() { $('#barcodePickerSearch').trigger('focus'); }, 250);
             }
+
+            $('#barcodePickerSearchBtn').on('click', filterBarcodePickerRows);
+            $('#barcodePickerClearBtn').on('click', function() {
+                $('#barcodePickerSearch').val('');
+                filterBarcodePickerRows();
+                $('#barcodePickerSearch').trigger('focus');
+            });
+            $('#barcodePickerSearch').on('keydown', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); filterBarcodePickerRows(); }
+            });
+            $('#barcodePickerSearch').on('input', filterBarcodePickerRows);
 
             function selectProductForReturn(prodId, title) {
                 if (!requireReturnParty()) return;
@@ -821,8 +844,11 @@
                     prod_id: prodId,
                     return_date: $('#purchaseDate').val(),
                     exclude_id: currentPurchaseId || 0
-                }, function(rows) {
-                    pendingBarcodePick = { rows: rows || [], title: title || 'Select Barcode' };
+                }, function(data) {
+                    pendingBarcodePick = {
+                        rows: barcodePickerRows(data),
+                        title: title || 'Select Barcode'
+                    };
                     if ($('#itemPickerModal').hasClass('show') || $('#findPurchaseModal').hasClass('show')) {
                         if ($('#itemPickerModal').hasClass('show')) $('#itemPickerModal').modal('hide');
                         if ($('#findPurchaseModal').hasClass('show')) $('#findPurchaseModal').modal('hide');
@@ -915,7 +941,8 @@
                         return_date: $('#purchaseDate').val(),
                         exclude_id: currentPurchaseId || 0,
                         barcode: code
-                    }, function(rows) {
+                    }, function(data) {
+                        const rows = barcodePickerRows(data);
                         if (rows && rows.length === 1) {
                             applyReturnBarcode(rows[0]);
                             return;
@@ -1309,65 +1336,59 @@
                 const fromDate = $('#searchFromDate').val();
                 const toDate = $('#searchToDate').val();
                 const partyId = $('#searchPartyId').val() || 0;
-                if (!fromDate || !toDate) {
-                    Swal.fire('Error', 'Please select From Date and To Date', 'error');
-                    return;
-                }
+                const billNo = $('#searchBillNo').val().trim();
                 if (!partyId || partyId == '0') {
                     Swal.fire('Error', 'Please select a Party', 'error');
+                    return;
+                }
+                if ((!fromDate || !toDate) && !billNo) {
+                    Swal.fire('Error', 'Enter Bill No or Ref Bill No, or select From Date and To Date', 'error');
+                    return;
+                }
+                if ((fromDate && !toDate) || (!fromDate && toDate)) {
+                    Swal.fire('Error', 'Please select both From Date and To Date', 'error');
                     return;
                 }
                 if (purchaseSearchDT) {
                     purchaseSearchDT.destroy();
                     purchaseSearchDT = null;
                 }
-                $('#purchaseSearchBody').html(
-                    '<tr><td colspan="6" class="text-center">Loading...</td></tr>');
-                $.get("{{ url('purchase-return/search') }}", {
-                        from_date: fromDate,
-                        to_date: toDate,
-                        party_id: partyId
-                    },
-                    function(data) {
-                        let html = '';
-                        if (!data.length) {
-                            $('#purchaseSearchBody').html(
-                                '<tr><td colspan="6" class="text-center text-muted">No records found</td></tr>'
-                            );
-                            return;
-                        }
-                        data.forEach((row, i) => {
-                            html += `<tr>
+                if (!window._purchaseReturnSearchLazy) {
+                    const $wrap = $('#purchaseSearchTable').closest('.table-responsive, .modal-body');
+                    if (!$wrap.hasClass('si-lazy-scroll-box')) {
+                        $wrap.addClass('si-lazy-scroll-box').css({ maxHeight: '360px', overflowY: 'auto' });
+                    }
+                    window._purchaseReturnSearchLazy = SiLazyScroll.create({
+                        scrollEl: $wrap,
+                        tbody: '#purchaseSearchBody',
+                        url: "{{ url('purchase-return/search') }}",
+                        pageSize: 30,
+                        colSpan: 7,
+                        params: function () {
+                            return {
+                                from_date: $('#searchFromDate').val(),
+                                to_date: $('#searchToDate').val(),
+                                party_id: $('#searchPartyId').val() || 0,
+                                bill_no: $('#searchBillNo').val().trim()
+                            };
+                        },
+                        renderRow: function (row, i) {
+                            return `<tr>
                                 <td>${i + 1}</td>
-                                <td>${row.Invoice_No}</td>
+                                <td>${row.Invoice_No ?? ''}</td>
                                 <td>${row.Ref_No ?? ''}</td>
+                                <td>${row.Party_Name ?? ''}</td>
                                 <td>${siDate.toDisplay(row.Invoice_Date)}</td>
-                                <td>${row.Net_Amt}</td>
+                                <td>${row.Net_Amt ?? ''}</td>
                                 <td><button class="btn btn-sm btn-primary viewPurchase" data-id="${row.Pur_Id}">Edit</button></td>
                             </tr>`;
-                        });
-                        $('#purchaseSearchBody').html(html);
-                        purchaseSearchDT = $('#purchaseSearchTable').DataTable({
-                            pageLength: 10,
-                            ordering: true,
-                            sDom: 'fBtlpi',
-                            language: {
-                                search: '',
-                                searchPlaceholder: 'Search...',
-                                sLengthMenu: 'Row Per Page _MENU_ Entries',
-                                info: '_START_ - _END_ of _TOTAL_ items',
-                                paginate: {
-                                    next: '<i class="isax isax-arrow-right-1"></i>',
-                                    previous: '<i class="isax isax-arrow-left"></i>'
-                                }
-                            }
-                        });
-                    }).fail(function() {
-                    Swal.fire('Error', 'Failed to load data', 'error');
-                    $('#purchaseSearchBody').html(
-                        '<tr><td colspan="6" class="text-center text-danger">Failed to load</td></tr>'
-                    );
-                });
+                        },
+                        onError: function () {
+                            Swal.fire('Error', 'Failed to load data', 'error');
+                        }
+                    });
+                }
+                window._purchaseReturnSearchLazy.resetAndLoad();
             });
 
             $('#purchaseSearchModal').on('hidden.bs.modal', function() {
@@ -1376,9 +1397,10 @@
                     purchaseSearchDT = null;
                 }
                 $('#purchaseSearchBody').html(
-                    '<tr><td colspan="6" class="text-center text-muted">Use filters above to search</td></tr>'
+                    '<tr><td colspan="7" class="text-center text-muted">Use filters above to search</td></tr>'
                 );
                 $('#searchFromDate, #searchToDate').val('');
+                $('#searchBillNo').val('');
                 $('#searchPartyId').val('0').trigger('change');
             });
 
@@ -1394,64 +1416,57 @@
                 const fromDate = $('#findFromDate').val();
                 const toDate = $('#findToDate').val();
                 const partyId = $('#findPartyId').val() || 0;
-                if (!fromDate || !toDate) {
-                    Swal.fire('Error', 'Please select From Date and To Date', 'error');
+                const billNo = $('#findBillNo').val().trim();
+
+                if (billNo && (!partyId || partyId === '0')) {
+                    Swal.fire('Error', 'Please select a Party when searching by Bill No or Ref Bill No', 'error');
                     return;
                 }
-                if (!partyId || partyId == '0') {
-                    Swal.fire('Error', 'Please select a Supplier', 'error');
+                if ((!fromDate || !toDate) && !billNo) {
+                    Swal.fire('Error', 'Enter Bill No or Ref Bill No, or select From Date and To Date', 'error');
                     return;
                 }
-                if (findPurchaseDT) {
-                    findPurchaseDT.destroy();
-                    findPurchaseDT = null;
+                if ((fromDate && !toDate) || (!fromDate && toDate)) {
+                    Swal.fire('Error', 'Please select both From Date and To Date', 'error');
+                    return;
                 }
-                $('#findPurchaseBody').html(
-                    '<tr><td colspan="6" class="text-center">Loading...</td></tr>');
-                $.get("{{ url('purchase-return/find-purchase') }}", {
-                    from_date: fromDate,
-                    to_date: toDate,
-                    party_id: partyId
-                }, function(data) {
-                    let html = '';
-                    if (!data.length) {
-                        $('#findPurchaseBody').html(
-                            '<tr><td colspan="6" class="text-center text-muted">No records found</td></tr>'
-                        );
-                        return;
+
+                if (!purchaseSourceSearchLazy) {
+                    const $wrap = $('#findPurchaseTable').closest('.table-responsive');
+                    if (!$wrap.hasClass('si-lazy-scroll-box')) {
+                        $wrap.addClass('si-lazy-scroll-box').css({ maxHeight: '360px', overflowY: 'auto' });
                     }
-                    data.forEach((row, i) => {
-                        html += `<tr>
-                            <td>${i + 1}</td>
-                            <td>${row.Invoice_No ?? ''}</td>
-                            <td>${row.Ref_No ?? ''}</td>
-                            <td>${siDate.toDisplay(row.Invoice_Date)}</td>
-                            <td>${row.Net_Amt ?? ''}</td>
-                            <td><button type="button" class="btn btn-sm btn-primary viewPurchaseItems" data-id="${row.Pur_Id}">Details</button></td>
-                        </tr>`;
-                    });
-                    $('#findPurchaseBody').html(html);
-                    findPurchaseDT = $('#findPurchaseTable').DataTable({
-                        pageLength: 10,
-                        ordering: true,
-                        sDom: 'fBtlpi',
-                        language: {
-                            search: '',
-                            searchPlaceholder: 'Search...',
-                            sLengthMenu: 'Row Per Page _MENU_ Entries',
-                            info: '_START_ - _END_ of _TOTAL_ items',
-                            paginate: {
-                                next: '<i class="isax isax-arrow-right-1"></i>',
-                                previous: '<i class="isax isax-arrow-left"></i>'
-                            }
+                    purchaseSourceSearchLazy = SiLazyScroll.create({
+                        scrollEl: $wrap,
+                        tbody: '#findPurchaseBody',
+                        url: "{{ url('purchase-return/find-purchase') }}",
+                        pageSize: 30,
+                        colSpan: 7,
+                        params: function() {
+                            return {
+                                from_date: $('#findFromDate').val(),
+                                to_date: $('#findToDate').val(),
+                                party_id: $('#findPartyId').val() || 0,
+                                bill_no: $('#findBillNo').val().trim()
+                            };
+                        },
+                        renderRow: function(row, i) {
+                            return `<tr>
+                                <td>${i + 1}</td>
+                                <td>${row.Invoice_No ?? ''}</td>
+                                <td>${row.Ref_No ?? ''}</td>
+                                <td>${row.Party_Name ?? ''}</td>
+                                <td>${siDate.toDisplay(row.Invoice_Date)}</td>
+                                <td>${row.Net_Amt ?? ''}</td>
+                                <td><button type="button" class="btn btn-sm btn-primary viewPurchaseItems" data-id="${row.Pur_Id}">Details</button></td>
+                            </tr>`;
+                        },
+                        onError: function() {
+                            Swal.fire('Error', 'Failed to load purchases', 'error');
                         }
                     });
-                }).fail(function() {
-                    Swal.fire('Error', 'Failed to load purchases', 'error');
-                    $('#findPurchaseBody').html(
-                        '<tr><td colspan="6" class="text-center text-danger">Failed to load</td></tr>'
-                    );
-                });
+                }
+                purchaseSourceSearchLazy.resetAndLoad();
             });
 
             $(document).on('click', '.viewPurchaseItems', function() {
@@ -1519,14 +1534,15 @@
                     skipFindPurchaseReset = false;
                     return;
                 }
-                if (findPurchaseDT) {
-                    findPurchaseDT.destroy();
-                    findPurchaseDT = null;
+                if (purchaseSourceSearchLazy) {
+                    purchaseSourceSearchLazy.destroy();
+                    purchaseSourceSearchLazy = null;
                 }
                 $('#findPurchaseBody').html(
-                    '<tr><td colspan="6" class="text-center text-muted">Use filters above to search</td></tr>'
+                    '<tr><td colspan="7" class="text-center text-muted">Use filters above to search</td></tr>'
                 );
                 $('#findFromDate, #findToDate').val('');
+                $('#findBillNo').val('');
                 $('#findPartyId').val('0').trigger('change');
             });
 
@@ -1865,8 +1881,8 @@
             $('#addItemBtn').text('+ Add Item').data('editing', false);
             $('#itemPurchaseDateDiv').hide();
             $('#itemPurchaseDate').val('');
-            $('#withGst').prop('checked', true);
-            $('.gst-col').show();
+            $('#withoutGst').prop('checked', true);
+            $('.gst-col').hide();
             clearItemSelection();
         }
     </script>

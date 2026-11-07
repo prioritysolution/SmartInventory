@@ -64,21 +64,22 @@
                         <div class="col-md-3">
                             <label class="form-label">From Date<span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="frmDate"
-                                min="{{ $year_start }}" max="{{ $year_end }}"
                                 value="{{ $year_start }}">
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">To Date<span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="toDate"
-                                min="{{ $year_start }}" max="{{ $year_end }}"
                                 value="{{ min($year_end, date('Y-m-d')) }}">
                         </div>
-                        <div class="col-md-3 d-flex align-items-end gap-2">
+                        <div class="col-md-3 d-flex align-items-end gap-2 flex-wrap">
                             <button type="button" class="btn btn-primary" id="searchBtn">
                                 <i class="fas fa-search me-1"></i> Search
                             </button>
                             <button type="button" class="btn btn-outline-secondary" id="printBtn" disabled>
                                 <i class="fas fa-print me-1"></i> Print
+                            </button>
+                            <button type="button" class="btn btn-outline-success" id="downloadBtn" disabled>
+                                <i class="fas fa-download me-1"></i> Download
                             </button>
                         </div>
                     </div>
@@ -194,6 +195,7 @@
         function resetTable(message, isError) {
             printData = null;
             $('#printBtn').prop('disabled', true);
+            $('#downloadBtn').prop('disabled', true);
             $('#registerHeading').hide();
             $('#closingWords').text('');
             const cls = isError ? 'text-danger' : 'text-muted';
@@ -283,14 +285,88 @@
             $('#closingWords').text(closingWords(closing));
         }
 
-        function printReport() {
-            if (!printData) {
-                Swal.fire('Error', 'Search the report first', 'error');
-                return;
-            }
+        function buildCashAccountCsv(data) {
             const frm = fmtDate($('#frmDate').val());
             const to = fmtDate($('#toDate').val());
-            const ledgers = printData.ledgers || [];
+            const ledgers = data.ledgers || [];
+            const receipts = ledgers.filter(function (row) { return sideAmount(row, 'receipt') > 0.0001; });
+            const payments = ledgers.filter(function (row) { return sideAmount(row, 'payment') > 0.0001; });
+            const count = Math.max(receipts.length, payments.length);
+
+            const meta = [
+                ['Organization', orgName || 'Smart Inventory'],
+                ['Branch', branchName || ''],
+                ['Report', 'Statement of Cash Account'],
+                ['Period', (frm && to ? `From ${frm} To ${to}` : '')],
+                ['Generated At', (window.siDate && siDate.toDisplay ? siDate.toDisplay(new Date()) : new Date().toLocaleString())]
+            ];
+
+            const headers = [
+                'Receipt Code', 'Receipt Ledger', 'Receipt Cash', 'Receipt Transfer', 'Receipt Total',
+                'Payment Code', 'Payment Ledger', 'Payment Cash', 'Payment Transfer', 'Payment Total'
+            ];
+
+            const rows = [];
+            for (let i = 0; i < count; i++) {
+                const r = receipts[i];
+                const p = payments[i];
+                const rCash = r ? (parseFloat(r.receipt_cash) || 0) : 0;
+                const rXfer = r ? (parseFloat(r.receipt_transfer) || 0) : 0;
+                const pCash = p ? (parseFloat(p.payment_cash) || 0) : 0;
+                const pXfer = p ? (parseFloat(p.payment_transfer) || 0) : 0;
+                rows.push([
+                    r ? (r.Code || '') : '',
+                    r ? (r.Ledger || '') : '',
+                    rCash ? fmtAmt(rCash) : '',
+                    rXfer ? fmtAmt(rXfer) : '',
+                    (rCash || rXfer) ? fmtAmt(rCash + rXfer) : '',
+                    p ? (p.Code || '') : '',
+                    p ? (p.Ledger || '') : '',
+                    pCash ? fmtAmt(pCash) : '',
+                    pXfer ? fmtAmt(pXfer) : '',
+                    (pCash || pXfer) ? fmtAmt(pCash + pXfer) : ''
+                ]);
+            }
+
+            const recCash = parseFloat(data.receipt_cash) || 0;
+            const recXfer = parseFloat(data.receipt_transfer) || 0;
+            const payCash = parseFloat(data.payment_cash) || 0;
+            const payXfer = parseFloat(data.payment_transfer) || 0;
+            const recTotal = recCash + recXfer;
+            const payTotal = payCash + payXfer;
+            const opening = parseFloat(data.opening) || 0;
+            const closing = parseFloat(data.closing) || 0;
+
+            const subTotal = [
+                'Sub Total', '', fmtAmt(recCash), fmtAmt(recXfer), fmtAmt(recTotal),
+                'Sub Total', '', fmtAmt(payCash), fmtAmt(payXfer), fmtAmt(payTotal)
+            ];
+
+            const balanceRow = [
+                'Opening Balance', '', '', '', fmtAmt(opening),
+                'Closing Balance', '', '', '', fmtAmt(closing)
+            ];
+
+            const grandRow = [
+                'Grand Total', '', '', '', fmtAmt(recTotal + opening),
+                'Grand Total', '', '', '', fmtAmt(payTotal + closing)
+            ];
+
+            const csv1 = siBuildCsv({
+                meta: meta,
+                headers: headers,
+                rows: rows,
+                totals: subTotal
+            });
+
+            return csv1 + '\r\n' + balanceRow.map(function(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(',')
+                 + '\r\n' + grandRow.map(function(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(',');
+        }
+
+        function buildCashAccountHtml(data) {
+            const frm = fmtDate($('#frmDate').val());
+            const to = fmtDate($('#toDate').val());
+            const ledgers = data.ledgers || [];
             const receipts = ledgers.filter(function (row) {
                 return sideAmount(row, 'receipt') > 0.0001;
             });
@@ -314,26 +390,27 @@
             for (let i = 0; i < count; i++) {
                 body += `<tr>${printSide(receipts[i], 'receipt')}${printSide(payments[i], 'payment')}</tr>`;
             }
-            const recCash = parseFloat(printData.receipt_cash) || 0;
-            const recXfer = parseFloat(printData.receipt_transfer) || 0;
-            const payCash = parseFloat(printData.payment_cash) || 0;
-            const payXfer = parseFloat(printData.payment_transfer) || 0;
+            const recCash = parseFloat(data.receipt_cash) || 0;
+            const recXfer = parseFloat(data.receipt_transfer) || 0;
+            const payCash = parseFloat(data.payment_cash) || 0;
+            const payXfer = parseFloat(data.payment_transfer) || 0;
             const recTotal = recCash + recXfer;
             const payTotal = payCash + payXfer;
-            const opening = parseFloat(printData.opening) || 0;
-            const closing = parseFloat(printData.closing) || 0;
+            const opening = parseFloat(data.opening) || 0;
+            const closing = parseFloat(data.closing) || 0;
             const balanceHtml = `<tr>
                     <td colspan="4" style="text-align:right;font-weight:bold;">Opening Balance</td>
                     <td style="text-align:right;font-weight:bold;">${fmtTotal(opening)}</td>
                     <td colspan="4" style="text-align:right;font-weight:bold;">Closing Balance</td>
                     <td style="text-align:right;font-weight:bold;">${fmtTotal(closing)}</td>
                 </tr>`;
-            siPrint(`<!DOCTYPE html><html><head><title>Cash Account</title>
+            return `<!DOCTYPE html><html><head><title>Cash Account</title>
                 <style>
                     body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
                     h3, h4, p { margin: 0 0 4px 0; text-align: center; }
                     table { width: 100%; border-collapse: collapse; margin-top: 10px; }
                     th, td { border: 1px solid #000; padding: 4px 6px; }
+                    th { background: #f0f0f0; }
                 </style></head><body>
                 <h3>${esc(orgName || 'Smart Inventory')}</h3>
                 ${branchName ? `<p>${esc(branchName)}</p>` : ''}
@@ -371,10 +448,64 @@
                     </tbody>
                 </table>
                 <p style="text-align:right; font-weight:bold; margin-top:16px;">${esc(closingWords(closing))}</p>
-                </body></html>`);
+                </body></html>`;
+        }
+
+        function downloadCashAccountZip() {
+            if (!printData) {
+                Swal.fire('Error', 'Search the report first', 'error');
+                return;
+            }
+            if (window.Swal) {
+                Swal.fire({
+                    title: 'Generating ZIP...',
+                    text: 'Packaging records',
+                    allowOutsideClick: false,
+                    didOpen: function() { Swal.showLoading(); }
+                });
+            }
+            setTimeout(function() {
+                try {
+                    const csvContent = buildCashAccountCsv(printData);
+                    const htmlContent = buildCashAccountHtml(printData);
+                    const safeName = 'Statement_Of_Cash_Account_' + siDateStamp();
+                    const zipName = safeName + '.zip';
+                    const files = [
+                        { name: safeName + '.csv', content: csvContent },
+                        { name: safeName + '.html', content: htmlContent }
+                    ];
+                    siDownloadZip(zipName, files);
+                    if (window.Swal) Swal.close();
+                } catch (e) {
+                    if (window.Swal) {
+                        Swal.close();
+                        Swal.fire('Error', 'Failed to generate ZIP: ' + (e.message || e), 'error');
+                    }
+                }
+            }, 50);
+        }
+
+        function printReport() {
+            if (!printData) {
+                Swal.fire('Error', 'Search the report first', 'error');
+                return;
+            }
+            const ledgers = printData.ledgers || [];
+            const receipts = ledgers.filter(function (row) { return sideAmount(row, 'receipt') > 0.0001; });
+            const payments = ledgers.filter(function (row) { return sideAmount(row, 'payment') > 0.0001; });
+            const count = Math.max(receipts.length, payments.length);
+            if (count > 1000) {
+                siWarnPrintLimit(count, downloadCashAccountZip);
+                return;
+            }
+            const html = buildCashAccountHtml(printData);
+            siPrint(html);
         }
 
         $('#printBtn').on('click', printReport);
+        $(document).on('click', '#downloadBtn', function() {
+            downloadCashAccountZip();
+        });
 
         $('#searchBtn').on('click', function () {
             const frm = $('#frmDate').val();
@@ -395,6 +526,7 @@
                 $('#registerHeading').show();
                 renderReport(data);
                 $('#printBtn').prop('disabled', false);
+                $('#downloadBtn').prop('disabled', false);
             }).fail(function (xhr) {
                 const msg = xhr.responseJSON?.message || 'Failed to load cash account';
                 Swal.fire('Error', msg, 'error');

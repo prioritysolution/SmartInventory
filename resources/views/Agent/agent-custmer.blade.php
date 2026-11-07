@@ -8,6 +8,18 @@
     }
     #itemPickerTable tbody tr { cursor: pointer; }
     #itemPickerTable tbody tr:hover { background-color: #e8f4ff; }
+    #barcodeScanBtn { min-width: 42px; }
+    #barcodeScanner {
+        min-height: 240px;
+        background: #111;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    #barcodeScanner video,
+    #barcodeScanner canvas {
+        width: 100% !important;
+        border-radius: 8px;
+    }
 
     .bill-container {
         font-family: Arial, Helvetica, sans-serif;
@@ -134,9 +146,6 @@
                     <label class="form-label">Customer <span class="text-danger">*</span></label>
                     <select id="partyId" class="form-select">
                         <option value="">-- Select Customer --</option>
-                        @foreach ($customers as $c)
-                            <option value="{{ $c->Party_Id }}">{{ $c->Party_Name }} - {{ $c->Party_Code }}</option>
-                        @endforeach
                     </select>
                 </div>
                 <div class="col-md-5">
@@ -144,6 +153,9 @@
                     <div class="input-group">
                         <input type="text" id="barcodeInput" class="form-control"
                             placeholder="Scan barcode or search item" autocomplete="off">
+                        <button class="btn btn-outline-primary" type="button" id="barcodeScanBtn" title="Scan barcode">
+                            <i class="fas fa-barcode"></i>
+                        </button>
                         <button class="btn btn-primary" type="button" id="itemSearchBtn">
                             <i class="fas fa-search"></i>
                         </button>
@@ -277,6 +289,21 @@
     </div>
 </div>
 
+<div class="modal fade" id="barcodeScanModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Scan Barcode</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="barcodeScanner"></div>
+                <p class="text-muted small text-center mt-2 mb-0">Point the camera at the barcode</p>
+            </div>
+        </div>
+    </div>
+</div>
+
 {{-- Item Picker Modal --}}
 <div class="modal fade" id="itemPickerModal" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-xl modal-xl-custom">
@@ -340,6 +367,7 @@
 @push('scripts')
 <script src="{{ asset('agenttemplate/assets/plugins/select2/js/select2.min.js') }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
     const baseUrl   = "{{ url('/') }}";
     const csrfToken = "{{ csrf_token() }}";
@@ -356,6 +384,8 @@
     let currentSaleId = 0;
     let itemPickerDT  = null;
     let returnableReady = false;
+    let barcodeScanner = null;
+    let barcodeScannerRunning = false;
 
     function ensureCustomer() {
         if (!$('#partyId').val()) {
@@ -430,6 +460,22 @@
     }
 
     $(document).ready(function () {
+
+        $('#barcodeScanBtn').on('click', function (e) {
+            e.preventDefault();
+            if (!$('#saleDate').val()) {
+                Swal.fire('Error', 'Please select date first', 'error');
+                return;
+            }
+            if (!ensureCustomer()) return;
+            $('#barcodeScanModal').modal('show');
+        });
+        $('#barcodeScanModal').on('shown.bs.modal', function () {
+            startBarcodeScanner();
+        });
+        $('#barcodeScanModal').on('hidden.bs.modal', function () {
+            stopBarcodeScanner();
+        });
 
         $('#barcodeInput').on('keydown', function (e) {
             if (e.key === 'Enter') {
@@ -626,7 +672,16 @@
             });
         });
 
-        $('#partyId').select2({ placeholder: '-- Select Customer --', allowClear: true });
+        if (typeof siAjaxSelect2 === 'function') {
+            siAjaxSelect2('#partyId', {
+                url: "{{ route('agent.parties.search') }}",
+                placeholder: '-- Select Customer --',
+                partyType: 2,
+                minLength: 0
+            });
+        } else {
+            $('#partyId').select2({ placeholder: '-- Select Customer --', allowClear: true, width: '100%' });
+        }
         $('#cancelBtn').on('click', resetForm);
     });
 
@@ -660,6 +715,88 @@
             return;
         }
         openReturnItemPicker(data || [], code);
+    }
+
+    function getBarcodeScanFormats() {
+        if (typeof Html5QrcodeSupportedFormats === 'undefined') {
+            return undefined;
+        }
+        return [
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.QR_CODE
+        ];
+    }
+
+    function stopBarcodeScanner() {
+        if (!barcodeScanner || !barcodeScannerRunning) {
+            if (barcodeScanner) {
+                try { barcodeScanner.clear(); } catch (e) {}
+                barcodeScanner = null;
+            }
+            $('#barcodeScanner').empty();
+            return;
+        }
+        barcodeScannerRunning = false;
+        barcodeScanner.stop().then(function () {
+            try { barcodeScanner.clear(); } catch (e) {}
+            barcodeScanner = null;
+            $('#barcodeScanner').empty();
+        }).catch(function () {
+            barcodeScanner = null;
+            $('#barcodeScanner').empty();
+        });
+    }
+
+    function startBarcodeScanner() {
+        if (typeof Html5Qrcode === 'undefined') {
+            $('#barcodeScanModal').modal('hide');
+            Swal.fire('Error', 'Barcode scanner could not load. Check your internet connection.', 'error');
+            return;
+        }
+        if (barcodeScannerRunning) {
+            return;
+        }
+
+        $('#barcodeScanner').empty();
+        barcodeScanner = new Html5Qrcode('barcodeScanner');
+        const config = {
+            fps: 12,
+            qrbox: function (viewfinderWidth, viewfinderHeight) {
+                return {
+                    width: Math.floor(Math.min(viewfinderWidth * 0.9, 280)),
+                    height: Math.floor(Math.min(viewfinderHeight * 0.35, 120))
+                };
+            }
+        };
+        const formats = getBarcodeScanFormats();
+        if (formats) {
+            config.formatsToSupport = formats;
+        }
+
+        let scanHandled = false;
+        barcodeScanner.start(
+            { facingMode: 'environment' },
+            config,
+            function (decodedText) {
+                if (scanHandled || !decodedText) return;
+                scanHandled = true;
+                $('#barcodeInput').val(decodedText.trim());
+                $('#barcodeScanModal').modal('hide');
+                lookupBarcode();
+            }
+        ).then(function () {
+            barcodeScannerRunning = true;
+        }).catch(function () {
+            barcodeScannerRunning = false;
+            barcodeScanner = null;
+            $('#barcodeScanModal').modal('hide');
+            Swal.fire('Camera Error', 'Unable to open the camera. Allow camera access and try again.', 'error');
+        });
     }
 
     function lookupBarcode() {

@@ -11,28 +11,22 @@
                         <div class="col-md-3 filter-from-to">
                             <label class="form-label">From Date<span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="frmDate"
-                                min="{{ $year_start }}" max="{{ $year_end }}"
                                 value="{{ $year_start }}">
                         </div>
                         <div class="col-md-3 filter-from-to">
                             <label class="form-label">To Date<span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="toDate"
-                                min="{{ $year_start }}" max="{{ $year_end }}"
                                 value="{{ min($year_end, date('Y-m-d')) }}">
                         </div>
                         <div class="col-md-3 filter-as-on">
                             <label class="form-label">As on Date<span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="asOnDate"
-                                min="{{ $year_start }}" max="{{ $year_end }}"
                                 value="{{ min($year_end, date('Y-m-d')) }}">
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">Agent</label>
-                            <select class="form-select" id="agentId">
+                            <select class="form-select" id="agentId" data-si-ajax="agents">
                                 <option value="0">All Agents</option>
-                                @foreach ($agents as $agent)
-                                    <option value="{{ $agent->Agent_Id }}">{{ $agent->Agent_Name }} ({{ $agent->Agent_Code }})</option>
-                                @endforeach
                             </select>
                         </div>
                         <div class="col-md-3">
@@ -48,6 +42,9 @@
                             </button>
                             <button type="button" class="btn btn-outline-secondary" id="printBtn" disabled>
                                 <i class="fas fa-print me-1"></i> Print
+                            </button>
+                            <button type="button" class="btn btn-outline-success" id="downloadBtn" disabled>
+                                <i class="fas fa-download me-1"></i> Download
                             </button>
                         </div>
                     </div>
@@ -126,9 +123,10 @@
         const generatedBy = @json(session('user_name', 'User'));
 
         function fmtPrintQty(n) {
-            const v = parseFloat(n);
-            if (isNaN(v)) return '0';
-            return Number.isInteger(v) ? String(v) : v.toFixed(2);
+            return (window.siFmtQty || function (v) {
+                const n = parseFloat(v);
+                return isNaN(n) ? '0' : String(Math.round(n));
+            })(n);
         }
 
         function reprintIndentBill(indentId) {
@@ -272,6 +270,19 @@
             const indentId = $(this).data('indent-id');
             if (!indentId) {
                 Swal.fire('Error', 'Indent not found', 'error');
+                return;
+            }
+            const loaded = (printRows || []).filter(function(r) {
+                return String(r.Indent_Id) === String(indentId);
+            });
+            if (loaded.length && lastSearchPayload && searchUrl) {
+                $.get(searchUrl, $.extend({}, lastSearchPayload, { limit: 0, mode: 1 }), function(data) {
+                    const all = window.SiLazyScroll && SiLazyScroll.unwrap ? SiLazyScroll.unwrap(data) : (Array.isArray(data) ? data : []);
+                    printRows = all.length ? all : printRows;
+                    reprintIndentBill(indentId);
+                }).fail(function() {
+                    reprintIndentBill(indentId);
+                });
                 return;
             }
             reprintIndentBill(indentId);

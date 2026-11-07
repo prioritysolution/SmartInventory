@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\PaginatesReportRows;
 use App\Http\Controllers\Concerns\SearchesItemsByCode;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Log;
 class Wastage extends Controller
 {
     use SearchesItemsByCode;
+    use PaginatesReportRows;
 
     public function index()
     {
@@ -93,7 +95,7 @@ class Wastage extends Controller
         }
 
         $code = DB::connection('coops')->selectOne(
-            'SELECT Prod_Code FROM mst_product WHERE Prod_Id = ?',
+            'CALL USP_GET_PRODUCT_CODE(?)',
             [(int) $item->Prod_Id]
         );
         $rates = $this->purchaseRatesForBarcodes([$barcode]);
@@ -130,7 +132,7 @@ class Wastage extends Controller
             $row->Barcode = (string) $row->Barcode;
         }
 
-        return response()->json($rows);
+        return $this->pagedReport($request, $rows);
     }
 
     public function store(Request $request)
@@ -236,7 +238,7 @@ class Wastage extends Controller
             $to,
             (int) (session('branch_id') ?: 0),
         ]);
-        return response()->json($rows);
+        return $this->pagedReport($request, $rows);
     }
 
     public function details($id)
@@ -262,66 +264,10 @@ class Wastage extends Controller
             return [];
         }
 
-        $signed = "
-            CASE
-                WHEN s.Stock_Type = 9 AND ? > 0 AND IFNULL(s.Type_Id, 0) = ? THEN 0
-                WHEN s.Stock_Type IN (1, 2, 6) THEN s.Quantity
-                WHEN s.Stock_Type = 8 AND NOT EXISTS (
-                    SELECT 1 FROM trans_agent_stock a WHERE a.TrnsStock_Id = s.Stock_Id
-                ) THEN s.Quantity
-                WHEN s.Stock_Type IN (3, 4, 7, 9) THEN -s.Quantity
-                ELSE 0
-            END
-        ";
-
-        $rows = DB::connection('coops')->select("
-            SELECT
-                b.Barcode,
-                b.MRP,
-                (b.Avil_Qnty + CASE WHEN c.Barcode_Count = 1 THEN IFNULL(u.Unbar_Qnty, 0) ELSE 0 END) AS Avil_Qnty
-            FROM (
-                SELECT
-                    s.Barcode AS Barcode,
-                    CAST(IFNULL(MAX(CASE WHEN s.Stock_Type IN (1, 2) THEN s.MRP END), MAX(s.MRP)) AS DECIMAL(10,2)) AS MRP,
-                    IFNULL(SUM($signed), 0) AS Avil_Qnty,
-                    MAX(CASE WHEN s.Stock_Type = 2 THEN s.Stock_Id END) AS Purchase_Id,
-                    MAX(s.Stock_Id) AS Last_Id
-                FROM trns_stockinout s
-                WHERE s.Prod_Id = ?
-                  AND s.InOut_Date <= ?
-                  AND IFNULL(s.Barcode, 0) <> 0
-                GROUP BY s.Barcode
-            ) b
-            LEFT JOIN (
-                SELECT MRP, COUNT(*) AS Barcode_Count
-                FROM (
-                    SELECT
-                        s.Barcode,
-                        CAST(IFNULL(MAX(CASE WHEN s.Stock_Type IN (1, 2) THEN s.MRP END), MAX(s.MRP)) AS DECIMAL(10,2)) AS MRP
-                    FROM trns_stockinout s
-                    WHERE s.Prod_Id = ?
-                      AND s.InOut_Date <= ?
-                      AND IFNULL(s.Barcode, 0) <> 0
-                    GROUP BY s.Barcode
-                ) m
-                GROUP BY MRP
-            ) c ON c.MRP = b.MRP
-            LEFT JOIN (
-                SELECT
-                    CAST(IFNULL(s.MRP, 0) AS DECIMAL(10,2)) AS MRP,
-                    IFNULL(SUM($signed), 0) AS Unbar_Qnty
-                FROM trns_stockinout s
-                WHERE s.Prod_Id = ?
-                  AND s.InOut_Date <= ?
-                  AND IFNULL(s.Barcode, 0) = 0
-                GROUP BY CAST(IFNULL(s.MRP, 0) AS DECIMAL(10,2))
-            ) u ON u.MRP = b.MRP
-            ORDER BY b.Purchase_Id DESC, b.Last_Id DESC
-        ", [
-            $excludeDamageId, $excludeDamageId, $prodId, $date,
-            $prodId, $date,
-            $excludeDamageId, $excludeDamageId, $prodId, $date,
-        ]);
+        $rows = DB::connection('coops')->select(
+            'CALL USP_GET_OFFICE_BARCODE_STOCK(?, ?, ?, ?)',
+            [$prodId, $date, $excludeDamageId, 9]
+        );
 
         $this->applyUnbarcodedPurchaseReturns($rows, $prodId, $date);
 
@@ -340,17 +286,10 @@ class Wastage extends Controller
             return;
         }
 
-        $returns = DB::connection('coops')->select("
-            SELECT
-                CAST(IFNULL(s.MRP, 0) AS DECIMAL(10,2)) AS MRP,
-                IFNULL(SUM(s.Quantity), 0) AS Qty
-            FROM trns_stockinout s
-            WHERE s.Prod_Id = ?
-              AND s.InOut_Date <= ?
-              AND s.Stock_Type = 7
-              AND IFNULL(s.Barcode, 0) = 0
-            GROUP BY CAST(IFNULL(s.MRP, 0) AS DECIMAL(10,2))
-        ", [$prodId, $date]);
+        $returns = DB::connection('coops')->select(
+            'CALL USP_GET_OFFICE_UNBARCODED_PURCHASE_RETURNS(?, ?)',
+            [$prodId, $date]
+        );
 
         $countByMrp = [];
         foreach ($rows as $row) {
@@ -393,14 +332,10 @@ class Wastage extends Controller
             return [];
         }
 
-        $placeholders = implode(',', array_fill(0, count($barcodes), '?'));
-        $rows = DB::connection('coops')->select("
-            SELECT Barcode, Rate
-            FROM trns_stockinout
-            WHERE Stock_Type IN (1, 2)
-              AND Barcode IN ($placeholders)
-            ORDER BY Stock_Type DESC, Stock_Id DESC
-        ", $barcodes);
+        $rows = DB::connection('coops')->select(
+            'CALL USP_GET_PURCHASE_RATES_BY_BARCODES(?)',
+            [implode(',', $barcodes)]
+        );
 
         $map = [];
         foreach ($rows as $row) {
@@ -451,13 +386,7 @@ class Wastage extends Controller
     {
         if ($damageId <= 0) {
             $row = $conn->selectOne(
-                'SELECT Trading_Id
-                   FROM trans_trading
-                  WHERE Tranding_Type = 6
-                    AND Invoice_Date = ?
-                    AND Created_By = ?
-                  ORDER BY Trading_Id DESC
-                  LIMIT 1',
+                'CALL USP_GET_DAMAGE_LATEST_TRADING_ID(?, ?)',
                 [$date, (int) session('user_id')]
             );
             $damageId = (int) ($row->Trading_Id ?? 0);
@@ -474,36 +403,21 @@ class Wastage extends Controller
             }
             $mrp = round((float) ($item['mrp'] ?? 0), 2);
             if ($mrp <= 0) {
-                $inward = $conn->selectOne(
-                    'SELECT IFNULL(MAX(MRP), 0) AS MRP
-                       FROM trns_stockinout
-                      WHERE Barcode = ?
-                        AND Stock_Type IN (1, 2)',
-                    [$barcode]
-                );
+                $inward = $conn->selectOne('CALL USP_GET_BARCODE_MAX_MRP(?)', [$barcode]);
                 $mrp = round((float) ($inward->MRP ?? 0), 2);
             }
-            $updated = $conn->update("
-                UPDATE trns_stockinout
-                   SET Barcode = ?,
-                       MRP = CASE WHEN IFNULL(MRP, 0) = 0 THEN ? ELSE MRP END
-                 WHERE Stock_Type = 9
-                   AND Type_Id = ?
-                   AND Prod_Id = ?
-                   AND Quantity = ?
-                   AND ROUND(IFNULL(Rate, 0), 2) = ?
-                   AND IFNULL(Barcode, 0) = 0
-                 ORDER BY Stock_Id ASC
-                 LIMIT 1
-            ", [
-                $barcode,
-                $mrp,
-                $damageId,
-                $prodId,
-                (int) $item['quantity'],
-                round((float) $item['rate'], 2),
-            ]);
-            if ($updated !== 1) {
+            $updated = $conn->selectOne(
+                'CALL USP_ASSIGN_DAMAGE_BARCODE(?, ?, ?, ?, ?, ?)',
+                [
+                    $barcode,
+                    $mrp,
+                    $damageId,
+                    $prodId,
+                    (int) $item['quantity'],
+                    round((float) $item['rate'], 2),
+                ]
+            );
+            if ((int) ($updated->Affected ?? 0) !== 1) {
                 throw new \RuntimeException('Could not store the barcode on the damage stock row');
             }
         }
@@ -515,13 +429,10 @@ class Wastage extends Controller
             return;
         }
 
-        $stocks = DB::connection('coops')->select("
-            SELECT Prod_Id, Barcode, Quantity, Rate, MRP
-              FROM trns_stockinout
-             WHERE Stock_Type = 9
-               AND Type_Id = ?
-             ORDER BY Stock_Id
-        ", [$damageId]);
+        $stocks = DB::connection('coops')->select(
+            'CALL USP_GET_DAMAGE_STOCK_BY_TRADING(?)',
+            [$damageId]
+        );
 
         foreach ($items as &$item) {
             $item['Barcode'] = '';

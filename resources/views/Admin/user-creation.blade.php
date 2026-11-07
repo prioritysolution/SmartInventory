@@ -191,7 +191,9 @@
             $(this).prop('disabled', true).text('Saving...');
 
             let userId = $('#userId').val();
-            let url = userId ? `/user-creation/${userId}` : "{{ route('user-creation.store') }}";
+            let url = userId
+                ? (typeof siApiUrl === 'function' ? siApiUrl('user-creation/' + userId) : ("{{ url('user-creation') }}/" + userId))
+                : "{{ route('user-creation.store') }}";
 
             let data = {
                 _token:    "{{ csrf_token() }}",

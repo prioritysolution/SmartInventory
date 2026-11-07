@@ -255,7 +255,7 @@
         if (id) {
             payload._method = 'PUT';
             $.ajax({
-                url: `/address-master/${type}/${id}`,
+                url: (typeof siApiUrl === 'function' ? siApiUrl('address-master/' + type + '/' + id) : ("{{ url('address-master') }}/" + type + '/' + id)),
                 type: 'POST',
                 data: payload,
                 success: function(res) {
@@ -265,7 +265,8 @@
                 },
                 error: function(xhr) {
                     $('#saveBtn').prop('disabled', false).text('Update');
-                    Swal.fire('Error', xhr.responseJSON?.error || 'Failed to update', 'error');
+                    const msg = xhr.responseJSON?.error || xhr.responseJSON?.message || 'Failed to update';
+                    Swal.fire('Error', msg, 'error');
                 }
             });
         } else {
@@ -281,7 +282,8 @@
                 },
                 error: function(xhr) {
                     $('#saveBtn').prop('disabled', false).text('Save');
-                    Swal.fire('Error', xhr.responseJSON?.error || 'Failed to save', 'error');
+                    const msg = xhr.responseJSON?.error || xhr.responseJSON?.message || 'Failed to save';
+                    Swal.fire('Error', msg, 'error');
                 }
             });
         }

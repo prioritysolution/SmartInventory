@@ -17,6 +17,26 @@
         #itemPickerTable tbody tr:hover {
             background-color: #e8f4ff;
         }
+
+        #barcodePickerTable tbody tr.barcode-pick-row {
+            cursor: pointer;
+        }
+
+        #barcodePickerTable tbody tr.barcode-pick-row:hover {
+            background-color: #e8f4ff;
+        }
+
+        .barcode-picker-scroll {
+            max-height: 320px;
+            overflow-y: auto;
+        }
+
+        .barcode-picker-scroll thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #f6f6f6;
+        }
     </style>
 @endpush
 
@@ -37,15 +57,8 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Select Agent<span class="text-danger">*</span></label>
-                            <select class="form-select select2-agent" id="agentId">
+                            <select class="form-select select2-agent" id="agentId" data-si-ajax="agents">
                                 <option value="">Select Agent</option>
-                                @foreach ($agents as $agent)
-                                    <option value="{{ $agent->Agent_Id }}"
-                                        data-name="{{ $agent->Agent_Name }}"
-                                        data-code="{{ $agent->Agent_Code }}">
-                                        {{ $agent->Agent_Name }} ({{ $agent->Agent_Code }})
-                                    </option>
-                                @endforeach
                             </select>
 
                         </div>
@@ -87,9 +100,7 @@
                             </div>
                             <div class="col-md-2">
                                 <label class="form-label">MRP<span class="text-danger">*</span></label>
-                                <select class="form-select" id="mrp" disabled>
-                                    <option value="">-- Select MRP --</option>
-                                </select>
+                                <input type="text" class="form-control" id="mrp" readonly placeholder="Select barcode">
                             </div>
                             <div class="col-md-2">
                                 <label class="form-label">Available Qty</label>
@@ -229,6 +240,8 @@
         </div>
     </div>
 
+    @include('Admin.partials.barcode-picker-modal')
+
     <!-- Issue Indent Item Modal -->
     <div class="modal fade" id="issueItemModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog">
@@ -264,9 +277,12 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">MRP<span class="text-danger">*</span></label>
-                        <select class="form-select" id="issueMrp" disabled>
-                            <option value="">-- Select MRP --</option>
-                        </select>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="issueMrp" readonly placeholder="Select / scan barcode">
+                            <button type="button" class="btn btn-outline-primary" id="issuePickBarcodeBtn" title="Select barcode">
+                                <i class="fas fa-list"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Issue Qty<span class="text-danger">*</span></label>
@@ -287,7 +303,6 @@
 @endsection
 
 @push('scripts')
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
         let indentItems = [];
         let dataTable;
@@ -297,17 +312,20 @@
         let currentTotalQty = 0;
         let issueMrpOptions = [];
         let issueTotalQty = 0;
+        let pendingBarcodePick = null;
+        let barcodePickerMode = 'form'; // form | issue
         const orgName = @json(session('org_name'));
         const branchName = @json(session('branch_name'));
         const generatedBy = @json(session('user_name', 'User'));
 
-        $(document).ready(function() {
+        function indentAjax(opts) {
+            return $.ajax($.extend({
+                global: false,
+                timeout: 20000
+            }, opts));
+        }
 
-            $('.select2-agent').select2({
-                placeholder: 'Search agent...',
-                allowClear: true,
-                width: '100%'
-            });
+        $(document).ready(function() {
 
             dataTable = $('#itemsTable').DataTable({
                 bFilter: true,
@@ -323,6 +341,140 @@
                         previous: '<i class="isax isax-arrow-left"></i>'
                     }
                 }
+            });
+
+            function filterBarcodePickerRows() {
+                const needle = String($('#barcodePickerSearch').val() || '').trim().toLowerCase();
+                const $rows = $('#barcodePickerTable tbody tr.barcode-pick-row');
+                let visible = 0;
+                $rows.each(function() {
+                    const hay = String($(this).attr('data-search') || '').toLowerCase();
+                    const show = !needle || hay.indexOf(needle) !== -1;
+                    $(this).toggle(show);
+                    if (show) visible++;
+                });
+                $('#barcodePickerEmpty').toggleClass('d-none', !$rows.length || visible > 0);
+            }
+
+            function openBarcodePicker(payload) {
+                const item = payload.item || {};
+                const name = item.Prod_ShortNm || item.product_name || '';
+                const rows = payload.barcodes || [];
+                barcodePickerMode = payload.mode || 'form';
+                $('#barcodePickerTitle').text(name ? ('Select Barcode — ' + name) : 'Select Barcode');
+                $('#barcodePickerSearch').val('');
+                $('#barcodePickerEmpty').addClass('d-none');
+                const $body = $('#barcodePickerTable tbody').empty();
+                if (!rows.length) {
+                    $body.append('<tr><td colspan="5" class="text-center text-muted">No barcode stock found for this product</td></tr>');
+                } else {
+                    rows.forEach(function(row, i) {
+                        const barcode = String(row.Barcode || '');
+                        const mrp = parseFloat(row.MRP) || 0;
+                        const qty = parseFloat(row.Avil_Qnty);
+                        const qtyText = isNaN(qty) ? '' : String(qty);
+                        const searchText = [i + 1, barcode, name, mrp.toFixed(2), qtyText].join(' ');
+                        const $tr = $('<tr class="barcode-pick-row"></tr>');
+                        $tr.attr('data-barcode', barcode);
+                        $tr.attr('data-mrp', mrp);
+                        $tr.attr('data-qty', qtyText);
+                        $tr.attr('data-search', searchText);
+                        $tr.append($('<td></td>').text(i + 1));
+                        $tr.append($('<td></td>').text(barcode));
+                        $tr.append($('<td></td>').text(name));
+                        $tr.append($('<td class="text-end"></td>').text(mrp.toFixed(2)));
+                        $tr.append($('<td class="text-end"></td>').text(qtyText));
+                        $body.append($tr);
+                    });
+                }
+                $('#barcodePickerModal').data('item', item);
+                $('#barcodePickerModal').modal('show');
+                setTimeout(function() { $('#barcodePickerSearch').trigger('focus'); }, 250);
+            }
+
+            window.selectProductForIndent = function(prodId) {
+                if (!prodId) return;
+                if (!validateIndentDate()) return;
+                const indentDate = $('#indentDate').val();
+                $.when(
+                    indentAjax({
+                        url: "{{ route('agent-indent.item-info') }}",
+                        data: { prod_id: prodId, sale_date: indentDate }
+                    }),
+                    indentAjax({
+                        url: "{{ route('agent-indent.product-barcodes') }}",
+                        data: { prod_id: prodId, sale_date: indentDate }
+                    })
+                ).done(function(infoRes, barcodeRes) {
+                    pendingBarcodePick = {
+                        item: infoRes[0],
+                        barcodes: barcodeRes[0] || [],
+                        mode: 'form'
+                    };
+                    if ($('#itemPickerModal').hasClass('show')) {
+                        $('#itemPickerModal').modal('hide');
+                        return;
+                    }
+                    const payload = pendingBarcodePick;
+                    pendingBarcodePick = null;
+                    openBarcodePicker(payload);
+                }).fail(function(xhr) {
+                    Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load item details', 'error');
+                });
+            }
+
+            $('#barcodePickerSearchBtn').on('click', filterBarcodePickerRows);
+            $('#barcodePickerClearBtn').on('click', function() {
+                $('#barcodePickerSearch').val('');
+                filterBarcodePickerRows();
+                $('#barcodePickerSearch').trigger('focus');
+            });
+            $('#barcodePickerSearch').on('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    filterBarcodePickerRows();
+                }
+            });
+            $('#barcodePickerSearch').on('input', filterBarcodePickerRows);
+
+            $(document).on('click', '#barcodePickerTable tbody tr.barcode-pick-row', function() {
+                const item = $('#barcodePickerModal').data('item');
+                if (!item) return;
+                const code = String($(this).attr('data-barcode') || '').trim();
+                const mrp = parseFloat($(this).attr('data-mrp')) || 0;
+                const qty = parseFloat($(this).attr('data-qty'));
+                $('#barcodePickerModal').modal('hide');
+                if (barcodePickerMode === 'issue') {
+                    applyIssueBarcodePick(item, code, mrp, isNaN(qty) ? 0 : qty);
+                } else {
+                    applyFormBarcodePick(item, code, mrp, isNaN(qty) ? 0 : qty);
+                }
+            });
+
+            $('#issuePickBarcodeBtn').on('click', function() {
+                const index = parseInt($('#issueRowIndex').val(), 10);
+                const row = indentItems[index];
+                if (!row) return;
+                if (!validateIndentDate()) return;
+                const indentDate = $('#indentDate').val();
+                $.when(
+                    indentAjax({
+                        url: "{{ route('agent-indent.item-info') }}",
+                        data: { prod_id: row.prod_id, sale_date: indentDate }
+                    }),
+                    indentAjax({
+                        url: "{{ route('agent-indent.product-barcodes') }}",
+                        data: { prod_id: row.prod_id, sale_date: indentDate }
+                    })
+                ).done(function(infoRes, barcodeRes) {
+                    openBarcodePicker({
+                        item: $.extend({}, infoRes[0], { product_name: row.product_name }),
+                        barcodes: barcodeRes[0] || [],
+                        mode: 'issue'
+                    });
+                }).fail(function(xhr) {
+                    Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load barcodes', 'error');
+                });
             });
 
             $('#productBarcode').on('keydown', function(e) {
@@ -352,9 +504,10 @@
                 const catId = parseInt($(this).val()) || 0;
                 $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
                 if (!catId) return;
-                $.get("{{ route('agent-indent.subcats') }}", {
-                    cat_id: catId
-                }, function(subs) {
+                indentAjax({
+                    url: "{{ route('agent-indent.subcats') }}",
+                    data: { cat_id: catId }
+                }).done(function(subs) {
                     subs.forEach(s => {
                         $('#modalSubCateId').append(
                             `<option value="${s.Prd_SubCateId}">${s.Prd_SubCateNm}</option>`
@@ -374,11 +527,10 @@
                     itemPickerDT = null;
                 }
                 $('#itemPickerTable tbody').html('');
-                $.get("{{ route('agent-indent.items') }}", {
-                    cat_id: catId,
-                    sub_cat_id: subCatId,
-                    code: code
-                }, function(data) {
+                indentAjax({
+                    url: "{{ route('agent-indent.items') }}",
+                    data: { cat_id: catId, sub_cat_id: subCatId, code: code }
+                }).done(function(data) {
                     renderItemPickerTable(data);
                 }).fail(function() {
                     $('#itemPickerLoader').hide();
@@ -401,16 +553,18 @@
                     itemPickerDT = null;
                 }
                 $('#itemPickerTable tbody').html('');
+                if (pendingBarcodePick) {
+                    const payload = pendingBarcodePick;
+                    pendingBarcodePick = null;
+                    openBarcodePicker(payload);
+                }
             });
 
             $(document).on('click', '#itemPickerTable tbody tr', function() {
                 const prodId = $(this).data('id');
-                const code = $(this).data('code');
                 if (!prodId) return;
                 if (!validateIndentDate()) return;
-                $('#productBarcode').val(code || '');
-                $('#itemPickerModal').modal('hide');
-                fetchProductById(prodId);
+                window.selectProductForIndent(prodId);
             });
 
             $('#indentDate').on('change', function() {
@@ -476,7 +630,7 @@
             $('#issueItemModal').on('hidden.bs.modal', function() {
                 $('#issueRowIndex').val('');
                 $('#issueBarcode, #issueScannedName, #issueAvailableQty, #issueQty, #issueRejectQty').val('');
-                resetMrpSelect($('#issueMrp'));
+                $('#issueMrp').val('');
                 issueScanProduct = null;
                 issueMrpOptions = [];
                 issueTotalQty = 0;
@@ -554,15 +708,23 @@
         }
 
         function loadPendingIndents(agentId) {
-            $.ajax({
+            $('#pendingIndentBody').html(
+                '<tr><td colspan="5" class="text-center py-4 text-muted">Loading requisitions...</td></tr>'
+            );
+            $('#pendingIndentModal').modal({
+                backdrop: 'static',
+                keyboard: false
+            });
+            $('#pendingIndentModal').modal('show');
+            indentAjax({
                 url: "{{ route('agent-indent.pending-indents') }}",
                 method: 'POST',
                 data: {
                     agent_id: agentId,
                     indent_type_id: 1,
                     _token: "{{ csrf_token() }}"
-                },
-                success: function(response) {
+                }
+            }).done(function(response) {
                     const rows = (response.success && Array.isArray(response.data)) ? response.data : [];
                     const usable = rows.filter(function(indent) {
                         let items = indent.Item_Data || [];
@@ -573,6 +735,7 @@
                     });
 
                     if (!usable.length) {
+                        $('#pendingIndentModal').modal('hide');
                         Swal.fire('Info', 'No pending indents found for this agent', 'info');
                         $('#radioNew').prop('checked', true);
                         $('#productSection').show();
@@ -580,17 +743,11 @@
                     }
 
                     renderPendingIndents(usable);
-                    $('#pendingIndentModal').modal({
-                        backdrop: 'static',
-                        keyboard: false
-                    });
-                    $('#pendingIndentModal').modal('show');
-                },
-                error: function() {
+            }).fail(function() {
+                    $('#pendingIndentModal').modal('hide');
                     Swal.fire('Error', 'Failed to load pending indents', 'error');
                     $('#radioNew').prop('checked', true);
                     $('#productSection').show();
-                }
             });
         }
 
@@ -781,69 +938,48 @@
             updateIssueRejectQty();
         }
 
-        function applyProductDetails(product) {
-            if (product.Prod_Code) {
-                $('#productBarcode').val(product.Prod_Code);
-            }
-            $('#productName').val(product.Prod_ShortNm);
-            currentTotalQty = parseFloat(product.Avil_Qnty) || 0;
-            currentMrpOptions = collectMrpOptions(product);
-            if (!currentMrpOptions.length) {
-                currentMrpOptions = [{
-                    mrp: parseMrpValue(product.MRP),
-                    qty: currentTotalQty
-                }];
-            }
-            fillMrpSelect($('#mrp'), currentMrpOptions, product.MRP);
-            applyFormMrpQty();
-            $('#packDate').val(product.Pack_Date);
+        function isNumericBarcode(v) {
+            return /^\d+$/.test(String(v || '').trim());
+        }
+
+        function applyFormBarcodePick(product, barcode, mrp, qty) {
+            $('#productBarcode').val(barcode).data('scanned-barcode', barcode);
+            $('#productName').val(product.Prod_ShortNm || '');
+            $('#mrp').val(mrp > 0 ? mrpKey(mrp) : '');
+            $('#availableQty').val(qty);
+            $('#quantity').attr('max', qty);
+            $('#packDate').val(product.Pack_Date || '');
             $('#productBarcode').data('prod-id', product.Prod_Id);
             $('#productBarcode').data('unit-id', product.Unit_Id);
             $('#productBarcode').data('unit-name', product.Unit_Name || '');
-            const available = parseFloat($('#availableQty').val()) || 0;
-            const anyStock = currentMrpOptions.some(function(o) {
-                const q = o.qty == null ? currentTotalQty : o.qty;
-                return q > 0;
-            });
-            if (available > 0) {
-                $('#quantity').focus();
+            currentTotalQty = qty;
+            currentMrpOptions = [{ mrp: mrp, qty: qty }];
+            if (qty <= 0) {
+                Swal.fire('Warning', 'This barcode has no available stock!', 'warning');
             } else {
-                $('#mrp').focus();
-                if (!anyStock) {
-                    Swal.fire('Warning', 'This product is out of stock!', 'warning');
-                }
+                $('#quantity').focus();
             }
             $('#productBarcode').addClass('is-valid');
             setTimeout(() => $('#productBarcode').removeClass('is-valid'), 2000);
         }
 
-        function fetchProductById(prodId) {
-            if (!validateIndentDate()) return;
-            const indentDate = $('#indentDate').val();
-            $('#productName, #availableQty, #packDate').val('');
-            resetMrpSelect($('#mrp'));
-            currentMrpOptions = [];
-            currentTotalQty = 0;
+        function applyIssueBarcodePick(product, barcode, mrp, qty) {
+            $('#issueBarcode').val(barcode);
+            $('#issueScannedName').val(product.Prod_ShortNm || '');
+            $('#issueMrp').val(mrp > 0 ? mrpKey(mrp) : '');
+            $('#issueAvailableQty').val(qty);
+            issueScanProduct = product;
+            issueTotalQty = qty;
+            issueMrpOptions = [{ mrp: mrp, qty: qty }];
+            const requested = parseFloat($('#issueRequestedQty').val()) || 0;
+            const defaultQty = Math.min(requested, qty);
+            $('#issueQty').val(defaultQty > 0 ? defaultQty : '');
+            updateIssueRejectQty();
+            $('#issueQty').trigger('focus');
+        }
 
-            $.get("{{ route('agent-indent.item-info') }}", {
-                prod_id: prodId,
-                sale_date: indentDate
-            }).done(function(product) {
-                applyProductDetails(product);
-            }).fail(function(xhr) {
-                $('#productName, #availableQty, #packDate').val('');
-                resetMrpSelect($('#mrp'));
-                currentMrpOptions = [];
-                currentTotalQty = 0;
-                $('#productBarcode').addClass('is-invalid');
-                setTimeout(() => $('#productBarcode').removeClass('is-invalid'), 2000);
-                Swal.fire({
-                    title: 'Error',
-                    text: xhr.responseJSON?.error || 'Failed to fetch product details. Please try again.',
-                    icon: 'error',
-                    confirmButtonText: 'OK'
-                });
-            });
+        function fetchProductById(prodId) {
+            window.selectProductForIndent(prodId);
         }
 
         function pickUniqueItem(data, code) {
@@ -856,11 +992,10 @@
         }
 
         function searchCodeOrOpenPicker(code) {
-            $.get("{{ route('agent-indent.items') }}", {
-                code: code,
-                cat_id: 0,
-                sub_cat_id: 0
-            }, function(data) {
+            indentAjax({
+                url: "{{ route('agent-indent.items') }}",
+                data: { code: code, cat_id: 0, sub_cat_id: 0 }
+            }).done(function(data) {
                 const unique = pickUniqueItem(data, code);
                 if (unique) {
                     fetchProductById(unique.Prod_Id);
@@ -881,29 +1016,50 @@
                 return;
             }
 
-            $('#productName, #availableQty, #packDate').val('');
-            resetMrpSelect($('#mrp'));
+            $('#productName, #availableQty, #packDate, #mrp').val('');
             currentMrpOptions = [];
             currentTotalQty = 0;
 
-            $.ajax({
+            indentAjax({
                 url: "{{ route('agent-indent.get-product-info') }}",
                 method: 'POST',
                 data: {
                     barcode: barcode,
                     date: indentDate,
                     _token: "{{ csrf_token() }}"
-                },
-                success: function(response) {
+                }
+            }).done(function(response) {
                     if (response.success && response.data) {
-                        applyProductDetails(response.data);
+                        const product = response.data;
+                        if (isNumericBarcode(barcode)) {
+                            applyFormBarcodePick(
+                                product,
+                                barcode,
+                                parseMrpValue(product.MRP),
+                                parseFloat(product.Avil_Qnty) || 0
+                            );
+                            indentAjax({
+                                url: "{{ route('agent-indent.product-barcodes') }}",
+                                data: { prod_id: product.Prod_Id, sale_date: indentDate }
+                            }).done(function(rows) {
+                                const list = Array.isArray(rows) ? rows : [];
+                                const match = list.find(function(r) {
+                                    return String(r.Barcode) === String(barcode);
+                                });
+                                if (match) {
+                                    applyFormBarcodePick(product, barcode, parseFloat(match.MRP) || parseMrpValue(product.MRP), parseFloat(match.Avil_Qnty) || 0);
+                                } else if (list.length) {
+                                    openBarcodePicker({ item: product, barcodes: list, mode: 'form' });
+                                }
+                            });
+                        } else {
+                            window.selectProductForIndent(product.Prod_Id);
+                        }
                     } else {
                         searchCodeOrOpenPicker(barcode);
                     }
-                },
-                error: function() {
+            }).fail(function() {
                     searchCodeOrOpenPicker(barcode);
-                }
             });
         }
 
@@ -920,8 +1076,8 @@
             const unitId = $('#productBarcode').data('unit-id');
             const unitName = $('#productBarcode').data('unit-name') || '';
 
-            if (!barcode) {
-                Swal.fire('Error', 'Product barcode is required', 'error');
+            if (!isNumericBarcode(barcode)) {
+                Swal.fire('Error', 'Select a stock barcode from the list (not product code)', 'error');
                 $('#productBarcode').focus();
                 return;
             }
@@ -936,8 +1092,8 @@
                 return;
             }
             if (!mrp) {
-                Swal.fire('Error', 'Please select an MRP', 'error');
-                $('#mrp').focus();
+                Swal.fire('Error', 'Please select a barcode / MRP from the list', 'error');
+                $('#productBarcode').focus();
                 return;
             }
             if (qty > availableQty) {
@@ -1079,7 +1235,7 @@
             $('#issueRequestedQty').val(item.requested_qty || item.quantity);
             $('#issueAvailableQty').val(item.available_qty || '');
             $('#issueScannedName').val('');
-            resetMrpSelect($('#issueMrp'));
+            $('#issueMrp').val('');
             issueMrpOptions = [];
             issueTotalQty = 0;
             $('#issueBarcode').val(item.issued ? (item.barcode || '') : '');
@@ -1087,19 +1243,6 @@
             updateIssueRejectQty();
             issueScanProduct = null;
             $('#issueItemModal').modal('show');
-        }
-
-        function applyIssueProductRates(product, preferredMrp) {
-            issueTotalQty = parseFloat(product.Avil_Qnty) || 0;
-            issueMrpOptions = collectMrpOptions(product);
-            if (!issueMrpOptions.length) {
-                issueMrpOptions = [{
-                    mrp: parseMrpValue(product.MRP),
-                    qty: issueTotalQty
-                }];
-            }
-            fillMrpSelect($('#issueMrp'), issueMrpOptions, preferredMrp || product.MRP);
-            applyIssueMrpQty();
         }
 
         function scanIssueBarcode() {
@@ -1114,17 +1257,18 @@
             const row = indentItems[index];
             if (!row) return;
 
-            $('#issueScannedName, #issueAvailableQty').val('');
-            resetMrpSelect($('#issueMrp'));
-            $.ajax({
+            $('#issueScannedName, #issueAvailableQty, #issueMrp').val('');
+            issueMrpOptions = [];
+            issueTotalQty = 0;
+            indentAjax({
                 url: "{{ route('agent-indent.get-product-info') }}",
                 method: 'POST',
                 data: {
                     barcode: barcode,
                     date: indentDate,
                     _token: "{{ csrf_token() }}"
-                },
-                success: function(response) {
+                }
+            }).done(function(response) {
                     if (!response.success || !response.data) {
                         Swal.fire('Product Not Found', response.message || 'Invalid barcode', 'warning');
                         return;
@@ -1136,23 +1280,46 @@
                             'warning');
                         return;
                     }
-                    $('#issueScannedName').val(product.Prod_ShortNm);
-                    issueScanProduct = product;
-                    applyIssueProductRates(product, row.mrp || product.MRP);
-                    const available = parseFloat($('#issueAvailableQty').val()) || 0;
-                    const anyStock = issueMrpOptions.some(function(o) {
-                        const q = o.qty == null ? issueTotalQty : o.qty;
-                        return q > 0;
-                    });
-                    if (available <= 0 && !anyStock) {
-                        Swal.fire('Warning', 'This product is out of stock!', 'warning');
-                        return;
+                    applyIssueBarcodePick(
+                        product,
+                        barcode,
+                        parseMrpValue(row.mrp || product.MRP),
+                        parseFloat(product.Avil_Qnty) || 0
+                    );
+
+                    const applyFromList = function(list) {
+                        const rows = Array.isArray(list) ? list : [];
+                        const match = rows.find(function(r) {
+                            return String(r.Barcode) === String(barcode);
+                        });
+                        if (match) {
+                            applyIssueBarcodePick(
+                                product,
+                                barcode,
+                                parseFloat(match.MRP) || parseMrpValue(product.MRP),
+                                parseFloat(match.Avil_Qnty) || 0
+                            );
+                            return;
+                        }
+                        if (rows.length) {
+                            openBarcodePicker({
+                                item: $.extend({}, product, { product_name: row.product_name }),
+                                barcodes: rows,
+                                mode: 'issue'
+                            });
+                        }
+                    };
+
+                    if (isNumericBarcode(barcode)) {
+                        indentAjax({
+                            url: "{{ route('agent-indent.product-barcodes') }}",
+                            data: { prod_id: product.Prod_Id, sale_date: indentDate }
+                        }).done(applyFromList);
+                    } else {
+                        $('#issuePickBarcodeBtn').trigger('click');
                     }
-                    $('#issueMrp').trigger('focus');
-                },
-                error: function() {
+            }).fail(function() {
                     Swal.fire('Error', 'Failed to fetch product details', 'error');
-                }
             });
         }
 
@@ -1209,11 +1376,10 @@
         }
 
         function clearProductFields() {
-            $('#productBarcode, #productName, #availableQty, #packDate, #quantity').val('');
-            resetMrpSelect($('#mrp'));
+            $('#productBarcode, #productName, #availableQty, #packDate, #quantity, #mrp').val('');
             currentMrpOptions = [];
             currentTotalQty = 0;
-            $('#productBarcode').removeClass('is-valid is-invalid').removeData('prod-id unit-id unit-name');
+            $('#productBarcode').removeClass('is-valid is-invalid').removeData('prod-id unit-id unit-name scanned-barcode');
             $('#quantity').removeAttr('max');
         }
 

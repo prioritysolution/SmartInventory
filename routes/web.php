@@ -60,8 +60,14 @@ Route::middleware('check.session')->group(function () {
 
   //customer master
   Route::get('/customer-master', [MasterSetup::class, 'indexCustomer'])->name('customer-master');
+  Route::get('/customer-master/list', [MasterSetup::class, 'listCustomers'])->name('customer-master.list');
+  Route::get('/customer-master/details/{id}', [MasterSetup::class, 'customerDetails'])->name('customer-master.details');
   Route::post('/customer-master/save', [MasterSetup::class, 'storeCustomer'])->name('customer-master.store');
   Route::put('/customer-master/{id}', [MasterSetup::class, 'updateCustomer'])->name('customer-master.update');
+
+  // Shared Select2 AJAX lookups (customers / suppliers / agents)
+  Route::get('/parties/search', [MasterSetup::class, 'searchParties'])->name('parties.search');
+  Route::get('/agents/search', [MasterSetup::class, 'searchAgents'])->name('agents.search');
 
   //user roles
   Route::get('/user-roles', [MasterSetup::class, 'indexUserGroup'])->name('user-roles');
@@ -160,6 +166,7 @@ Route::get('/good-received/subcats', [Purchase::class, 'getSubCats'])->name('goo
   Route::get('/agent-indent/items', [Sales::class, 'getSaleItems'])->name('agent-indent.items');
   Route::get('/agent-indent/subcats', [Sales::class, 'getSaleSubCats'])->name('agent-indent.subcats');
   Route::get('/agent-indent/item-info', [Sales::class, 'getSaleItemByProd'])->name('agent-indent.item-info');
+  Route::get('/agent-indent/product-barcodes', [Sales::class, 'getProductBarcodes'])->name('agent-indent.product-barcodes');
   Route::post('/agent-indent/save', [Sales::class, 'storeAgentIndent'])->name('agent-indent.store');
   Route::post('/agent-indent/pending-indents', [Sales::class, 'getPendingIndents'])->name('agent-indent.pending-indents');
   Route::post('/agent-indent/cancel-item', [Sales::class, 'cancelAgentIndentItem'])->name('agent-indent.cancel-item');
@@ -169,11 +176,13 @@ Route::get('/good-received/subcats', [Purchase::class, 'getSubCats'])->name('goo
   //agent return
   Route::get('/agent-return', [Sales::class, 'indexAgentReturn'])->name('agent-return');
   Route::post('/agent-return/get-product-info', [Sales::class, 'AgentReturngetProductInfo'])->name('agent-return.get-product-info');
-  Route::get('/agent-return/items', [Sales::class, 'getSaleItems'])->name('agent-return.items');
+  Route::get('/agent-return/items', [Sales::class, 'getAgentReturnItems'])->name('agent-return.items');
   Route::get('/agent-return/subcats', [Sales::class, 'getSaleSubCats'])->name('agent-return.subcats');
   Route::get('/agent-return/item-info', [Sales::class, 'getAgentReturnItemByProd'])->name('agent-return.item-info');
+  Route::get('/agent-return/product-barcodes', [Sales::class, 'getAgentReturnBarcodes'])->name('agent-return.product-barcodes');
   Route::post('/agent-return/pending-indents', [Sales::class, 'getPendingIndents'])->name('agent-return.pending-indents');
   Route::post('/agent-return/save', [Sales::class, 'storeAgentReturn'])->name('agent-return.store');
+  Route::post('/agent-return/cancel-item', [Sales::class, 'cancelAgentIndentItem'])->name('agent-return.cancel-item');
 
   Route::get('/agent-settlement', [Sales::class, 'indexAgentSettlement'])->name('agent-settlement');
   Route::get('/agent-settlement/search', [Sales::class, 'agentSettlementSearch'])->name('agent-settlement.search');
@@ -184,7 +193,8 @@ Route::get('/good-received/subcats', [Purchase::class, 'getSubCats'])->name('goo
   //barcode level
   Route::get('/barcode-label', [BarcodePrint::class, 'indexBarcode'])->name('barcode-label');
   Route::get('/barcode-label/pending/{mode}', [BarcodePrint::class, 'getPendingBarcodeList'])->name('barcode-label.pending');
-  Route::post('/barcode-label/generate', [BarcodePrint::class, 'generateBarcode'])->name('barcode-label.generate');
+  Route::post('/barcode-label/generate-all', [BarcodePrint::class, 'generateBarcodeAll'])->name('barcode-label.generate-all');
+  Route::post('/barcode-label/generate-one', [BarcodePrint::class, 'generateBarcodeOne'])->name('barcode-label.generate-one');
 
   //print barcode
   Route::get('/print-barcode', [BarcodePrint::class, 'index'])->name('print-barcode');
@@ -268,6 +278,12 @@ Route::get('/good-received/subcats', [Purchase::class, 'getSubCats'])->name('goo
   Route::get('/reorder-report/search', [InventoryReports::class, 'reorderReportSearch'])->name('reorder-report.search');
   Route::get('/movement-report', [InventoryReports::class, 'movementReport'])->name('movement-report');
   Route::get('/movement-report/search', [InventoryReports::class, 'movementReportSearch'])->name('movement-report.search');
+  Route::get('/agent-office-return-report', [InventoryReports::class, 'agentOfficeReturnReport'])->name('agent-office-return-report');
+  Route::get('/agent-office-return-report/search', [InventoryReports::class, 'agentOfficeReturnReportSearch'])->name('agent-office-return-report.search');
+  Route::get('/agent-commission', [InventoryReports::class, 'agentCommission'])->name('agent-commission');
+  Route::get('/agent-commission/search', [InventoryReports::class, 'agentCommissionSearch'])->name('agent-commission.search');
+  Route::get('/agent-commission/details', [InventoryReports::class, 'agentCommissionDetails'])->name('agent-commission.details');
+  Route::post('/agent-commission/generate', [InventoryReports::class, 'agentCommissionGenerate'])->name('agent-commission.generate');
 
   // Accounts Reports
   Route::get('/account-user-scroll', [AccountsReports::class, 'userScroll'])->name('account-user-scroll');
@@ -323,6 +339,7 @@ Route::prefix('agent')->group(function () {
     Route::get('/sale/product-barcodes', [AgentSale::class, 'productBarcodes'])->name('agent.sale.product-barcodes');
     Route::get('/sale/sale-rates', [AgentSale::class, 'getSaleRates'])->name('agent.sale.sale-rates');
     Route::post('/sale/save', [AgentSale::class, 'store'])->name('agent.sale.store');
+    Route::get('/parties/search', [AgentSale::class, 'searchMyParties'])->name('agent.parties.search');
 
     //customer payment / collection
     Route::get('/customer-payment', [AgentCustomerPayment::class, 'index'])->name('agent.customer.payment');

@@ -42,7 +42,6 @@
                         <div class="col-md-3">
                             <label class="form-label">Date<span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="asOnDate"
-                                min="{{ $year_start }}" max="{{ $year_end }}"
                                 value="{{ min($year_end, date('Y-m-d')) }}">
                         </div>
                         <div class="col-md-3">
@@ -57,12 +56,15 @@
                                 @endforeach
                             </select>
                         </div>
-                        <div class="col-md-3 d-flex align-items-end gap-2">
+                        <div class="col-md-3 d-flex align-items-end gap-2 flex-wrap">
                             <button type="button" class="btn btn-primary" id="searchBtn">
                                 <i class="fas fa-search me-1"></i> Search
                             </button>
                             <button type="button" class="btn btn-outline-secondary" id="printBtn" disabled>
                                 <i class="fas fa-print me-1"></i> Print
+                            </button>
+                            <button type="button" class="btn btn-outline-success" id="downloadBtn" disabled>
+                                <i class="fas fa-download me-1"></i> Download
                             </button>
                         </div>
                     </div>
@@ -71,14 +73,6 @@
 
             <div class="card">
                 <div class="card-body">
-                    @if (!empty($showCashBalance))
-                    <div class="d-flex justify-content-end mb-2">
-                        <div class="text-end">
-                            <div class="text-muted small">Opening Balance</div>
-                            <div class="fw-bold fs-5" id="openingBalance">0.00</div>
-                        </div>
-                    </div>
-                    @endif
                     <div class="table-responsive report-scroll">
                         <table id="scrollTable" class="table table-bordered mb-0">
                             <colgroup>
@@ -115,15 +109,6 @@
                         </table>
                     </div>
                     <div class="mt-3" id="scrollSummary" style="display:none;"></div>
-                    @if (!empty($showCashBalance))
-                    <div class="d-flex justify-content-end mt-3">
-                        <div class="text-end">
-                            <div class="text-muted small">Closing Balance</div>
-                            <div class="fw-bold fs-5" id="closingBalance">0.00</div>
-                            <div class="small" id="closingBalanceWords"></div>
-                        </div>
-                    </div>
-                    @endif
                 </div>
             </div>
         </div>
@@ -136,10 +121,7 @@
         const branchName = @json($branch_name);
         const searchUrl = @json($searchUrl ?? route('account-user-scroll.search'));
         const reportTitle = @json($pageTitle ?? 'User Scroll');
-        const showCashBalance = @json(!empty($showCashBalance));
         let printRows = [];
-        let printOpening = 0;
-        let printClosing = 0;
 
         function fmtAmt(n) {
             const v = parseFloat(n) || 0;
@@ -150,50 +132,12 @@
             return (parseFloat(n) || 0).toFixed(2);
         }
 
-        function numberToWords(amount) {
-            var num = Math.round((parseFloat(amount) || 0) * 100) / 100;
-            var negative = num < 0;
-            num = Math.abs(num);
-            var rupees = Math.floor(num);
-            var paise = Math.round((num - rupees) * 100);
-            var ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
-                'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-            var tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-
-            function twoDigits(n) {
-                if (n < 20) return ones[n];
-                return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
-            }
-            function threeDigits(n) {
-                if (n < 100) return twoDigits(n);
-                var rest = n % 100;
-                return ones[Math.floor(n / 100)] + ' Hundred' + (rest ? ' and ' + twoDigits(rest) : '');
-            }
-            function toWords(n) {
-                if (n === 0) return 'Zero';
-                var crore = Math.floor(n / 10000000);
-                var lakh = Math.floor((n % 10000000) / 100000);
-                var thousand = Math.floor((n % 100000) / 1000);
-                var rest = n % 1000;
-                var parts = [];
-                if (crore) parts.push(twoDigits(crore) + ' Crore');
-                if (lakh) parts.push(twoDigits(lakh) + ' Lakh');
-                if (thousand) parts.push(twoDigits(thousand) + ' Thousand');
-                if (rest) parts.push(threeDigits(rest));
-                return parts.join(' ');
-            }
-
-            var text = (negative ? 'Minus ' : '') + (rupees === 0 && paise > 0 ? '' : toWords(rupees));
-            if (paise > 0) {
-                text += (text.trim() ? ' and ' : '') + twoDigits(paise) + ' Paise';
-            }
-            return 'Closing Cash Balance in Word : ' + text.trim() + ' Only';
-        }
-
         function fmtQty(n) {
-            const v = parseFloat(n);
-            if (isNaN(v)) return '';
-            return Number.isInteger(v) ? String(v) : v.toFixed(2);
+            if (n === null || n === undefined || n === '') return '';
+            return (window.siFmtQty || function (v) {
+                const n = parseFloat(v);
+                return isNaN(n) ? '0' : String(Math.round(n));
+            })(n);
         }
 
         function esc(value) {
@@ -328,31 +272,62 @@
         function resetTable(message, isError) {
             $('#scrollBody').html(emptyRow(message, isError));
             $('#scrollSummary').hide().empty();
-            if (showCashBalance) {
-                $('#openingBalance').text('0.00');
-                $('#closingBalance').text('0.00');
-                $('#closingBalanceWords').text('');
-            }
             $('#printBtn').prop('disabled', true);
+            $('#downloadBtn').prop('disabled', true);
             printRows = [];
-            printOpening = 0;
-            printClosing = 0;
         }
 
-        function printScroll() {
-            if (!printRows.length && !(showCashBalance && (printOpening || printClosing))) {
-                Swal.fire('Error', 'Search the report first', 'error');
-                return;
-            }
+        function buildUserScrollCsv(rows) {
+            const asOn = (window.siDate && siDate.toDisplay) ? siDate.toDisplay($('#asOnDate').val()) : $('#asOnDate').val();
+            const userText = $('#userId option:selected').text();
+
+            const meta = [
+                ['Organization', orgName || 'Smart Inventory'],
+                ['Branch', branchName || ''],
+                ['Report', reportTitle || 'User Scroll'],
+                ['Date', asOn],
+                ['User', userText],
+                ['Generated At', (window.siDate && siDate.toDisplay ? siDate.toDisplay(new Date()) : new Date().toLocaleString())]
+            ];
+
+            const headers = [
+                'Sl', 'Particulars', 'Invoice / Voucher No',
+                'Receipt Cash', 'Receipt Bank',
+                'Payment Cash', 'Payment Bank',
+                'Credit'
+            ];
+
+            const dataRows = [];
+            rows.forEach(function(row, idx) {
+                dataRows.push([
+                    String(idx + 1),
+                    row.Particulars || '',
+                    row.Doc_No || '',
+                    parseFloat(row.Receipt_Cash || 0) ? fmtAmt(row.Receipt_Cash) : '',
+                    parseFloat(row.Receipt_Bank || 0) ? fmtAmt(row.Receipt_Bank) : '',
+                    parseFloat(row.Payment_Cash || 0) ? fmtAmt(row.Payment_Cash) : '',
+                    parseFloat(row.Payment_Bank || 0) ? fmtAmt(row.Payment_Bank) : '',
+                    parseFloat(row.Credit || 0) ? fmtAmt(row.Credit) : ''
+                ]);
+            });
+
+            return siBuildCsv({
+                meta: meta,
+                headers: headers,
+                rows: dataRows
+            });
+        }
+
+        function buildUserScrollHtml(rows) {
             const asOn = (window.siDate && siDate.toDisplay)
                 ? siDate.toDisplay($('#asOnDate').val())
                 : $('#asOnDate').val();
             const userText = $('#userId option:selected').text();
             let body = '';
-            printRows.forEach(function(row, idx) {
+            rows.forEach(function(row, idx) {
                 body += billRow(row, idx, 'print');
             });
-            siPrint(`<!DOCTYPE html><html><head><title>${reportTitle}</title>
+            return `<!DOCTYPE html><html><head><title>${reportTitle}</title>
                 <style>
                     @page { size: landscape; }
                     body { font-family: Arial, sans-serif; font-size: 11px; color: #000; }
@@ -364,7 +339,7 @@
                     table.scroll-main > tbody > tr > td,
                     table.scroll-summary th,
                     table.scroll-summary td { border: 1px solid #000; padding: 3px 5px; vertical-align: top; }
-                    table.scroll-main th { text-align: center; }
+                    table.scroll-main th { text-align: center; background: #f0f0f0; }
                     table.item-lines { width: 100%; margin-top: 4px; border-collapse: collapse; }
                     table.item-lines th, table.item-lines td { border: 1px solid #000; padding: 2px 5px; font-size: 10px; }
                     table.item-lines .num { text-align: right; white-space: nowrap; }
@@ -372,7 +347,6 @@
                 <h3>${esc(orgName || 'Smart Inventory')}</h3>
                 <h4>${esc(reportTitle)}</h4>
                 <p>${branchName ? esc(branchName) + ' &nbsp;|&nbsp; ' : ''}Date: ${esc(asOn)} &nbsp;|&nbsp; ${esc(userText)}</p>
-                ${showCashBalance ? `<p style="text-align:right; font-weight:bold;">Opening Balance: ${fmtTot(printOpening)}</p>` : ''}
                 <table class="scroll-main">
                     <colgroup>
                         <col class="col-sl"><col class="col-part"><col class="col-doc">
@@ -393,12 +367,61 @@
                     </thead>
                     <tbody>${body}</tbody>
                 </table>
-                ${summaryBox(printRows)}
-                ${showCashBalance ? `<p style="text-align:right; font-weight:bold; margin-bottom:0;">Closing Balance: ${fmtTot(printClosing)}</p><p style="text-align:right;">${esc(numberToWords(printClosing))}</p>` : ''}
-                </body></html>`);
+                ${summaryBox(rows)}
+                </body></html>`;
+        }
+
+        function downloadUserScrollZip() {
+            if (!printRows.length) {
+                Swal.fire('Error', 'Search the report first', 'error');
+                return;
+            }
+            if (window.Swal) {
+                Swal.fire({
+                    title: 'Generating ZIP...',
+                    text: 'Packaging records',
+                    allowOutsideClick: false,
+                    didOpen: function() { Swal.showLoading(); }
+                });
+            }
+            setTimeout(function() {
+                try {
+                    const csvContent = buildUserScrollCsv(printRows);
+                    const htmlContent = buildUserScrollHtml(printRows);
+                    const safeName = siSanitizeFilename(reportTitle || 'User_Scroll') + '_' + siDateStamp();
+                    const zipName = safeName + '.zip';
+                    const files = [
+                        { name: safeName + '.csv', content: csvContent },
+                        { name: safeName + '.html', content: htmlContent }
+                    ];
+                    siDownloadZip(zipName, files);
+                    if (window.Swal) Swal.close();
+                } catch (e) {
+                    if (window.Swal) {
+                        Swal.close();
+                        Swal.fire('Error', 'Failed to generate ZIP: ' + (e.message || e), 'error');
+                    }
+                }
+            }, 50);
+        }
+
+        function printScroll() {
+            if (!printRows.length) {
+                Swal.fire('Error', 'Search the report first', 'error');
+                return;
+            }
+            if (printRows.length > 1000) {
+                siWarnPrintLimit(printRows.length, downloadUserScrollZip);
+                return;
+            }
+            const html = buildUserScrollHtml(printRows);
+            siPrint(html);
         }
 
         $('#printBtn').on('click', printScroll);
+        $(document).on('click', '#downloadBtn', function() {
+            downloadUserScrollZip();
+        });
 
         $('#searchBtn').on('click', function() {
             const asOnDate = $('#asOnDate').val();
@@ -408,18 +431,11 @@
             }
             resetTable('Loading...', false);
             $.get(searchUrl, { as_on_date: asOnDate, user_id: $('#userId').val() || 0 }, function(data) {
-                const isObject = data && !Array.isArray(data);
-                printRows = isObject ? (data.rows || []) : (data || []);
-                printOpening = isObject ? (parseFloat(data.opening) || 0) : 0;
-                printClosing = isObject ? (parseFloat(data.closing) || 0) : 0;
+                printRows = data && Array.isArray(data.rows) ? data.rows : [];
                 $('#scrollBody').html(buildBody(printRows));
                 $('#scrollSummary').html(summaryBox(printRows)).show();
-                if (showCashBalance) {
-                    $('#openingBalance').text(fmtTot(printOpening));
-                    $('#closingBalance').text(fmtTot(printClosing));
-                    $('#closingBalanceWords').text(numberToWords(printClosing));
-                }
-                $('#printBtn').prop('disabled', !printRows.length && !(showCashBalance));
+                $('#printBtn').prop('disabled', !printRows.length);
+                $('#downloadBtn').prop('disabled', !printRows.length);
             }).fail(function(xhr) {
                 const msg = xhr.responseJSON?.message || 'Failed to load user scroll';
                 Swal.fire('Error', msg, 'error');

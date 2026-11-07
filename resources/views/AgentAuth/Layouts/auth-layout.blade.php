@@ -48,8 +48,10 @@
 
 <script src="{{asset('agenttemplate/assets/js/script.js')}}"></script>
 <script src="{{asset('template/assets/js/global-loader.js')}}?v=2"></script>
+<script src="{{asset('template/assets/js/disable-autocomplete.js')}}?v=1"></script>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{asset('template/assets/js/required-field-feedback.js')}}?v=1"></script>
 
 @stack('scripts')
 </body>

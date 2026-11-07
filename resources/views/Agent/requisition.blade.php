@@ -25,6 +25,19 @@
             left: 0;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
         }
+
+        #barcodeScanBtn { min-width: 42px; }
+        #barcodeScanner {
+            min-height: 240px;
+            background: #111;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #barcodeScanner video,
+        #barcodeScanner canvas {
+            width: 100% !important;
+            border-radius: 8px;
+        }
     </style>
 @endpush
 
@@ -58,7 +71,10 @@
                     <label class="form-label">Select Item <span class="text-danger">*</span></label>
                     <div class="position-relative">
                         <div class="input-group">
-                            <input type="text" id="itemSearch" class="form-control" placeholder="Product code or name" autocomplete="off">
+                            <input type="text" id="itemSearch" class="form-control" placeholder="Scan barcode, product code or name" autocomplete="off">
+                            <button class="btn btn-outline-primary" type="button" id="barcodeScanBtn" title="Scan barcode">
+                                <i class="fas fa-barcode"></i>
+                            </button>
                             <button class="btn btn-primary" type="button" id="itemSearchBtn">
                                 <i class="fas fa-search"></i>
                             </button>
@@ -219,10 +235,26 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="barcodeScanModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Scan Barcode</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="barcodeScanner"></div>
+                <p class="text-muted small text-center mt-2 mb-0">Point the camera at the barcode</p>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
     const baseUrl   = "{{ url('/') }}";
     const csrfToken = "{{ csrf_token() }}";
@@ -235,8 +267,25 @@
     let reqSearchDT = null;
     let selectedRow = null;
     let itemPickerDT = null;
+    let barcodeScanner = null;
+    let barcodeScannerRunning = false;
 
     $(document).ready(function () {
+
+        $('#barcodeScanBtn').on('click', function (e) {
+            e.preventDefault();
+            if (!$('#indentDate').val()) {
+                Swal.fire('Error', 'Please select date first', 'error');
+                return;
+            }
+            $('#barcodeScanModal').modal('show');
+        });
+        $('#barcodeScanModal').on('shown.bs.modal', function () {
+            startBarcodeScanner();
+        });
+        $('#barcodeScanModal').on('hidden.bs.modal', function () {
+            stopBarcodeScanner();
+        });
 
         $('#itemSearchBtn').on('click', function (e) {
             e.preventDefault();
@@ -366,7 +415,7 @@
         });
 
         $(document).on('click', function (e) {
-            if (!$(e.target).closest('#itemSearch, #itemDropdown, #itemSearchBtn').length) {
+            if (!$(e.target).closest('#itemSearch, #itemDropdown, #itemSearchBtn, #barcodeScanBtn').length) {
                 $('#itemDropdown').hide();
             }
         });
@@ -453,6 +502,88 @@ $('#reqSearchModal').on('hidden.bs.modal', function () {
         $('#selectedUnitId').val(item.Unit_Id || '');
         $('#selectedUnitName').val(item.Unit_Name || '');
         $('#itemQty').focus();
+    }
+
+    function getBarcodeScanFormats() {
+        if (typeof Html5QrcodeSupportedFormats === 'undefined') {
+            return undefined;
+        }
+        return [
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.QR_CODE
+        ];
+    }
+
+    function stopBarcodeScanner() {
+        if (!barcodeScanner || !barcodeScannerRunning) {
+            if (barcodeScanner) {
+                try { barcodeScanner.clear(); } catch (e) {}
+                barcodeScanner = null;
+            }
+            $('#barcodeScanner').empty();
+            return;
+        }
+        barcodeScannerRunning = false;
+        barcodeScanner.stop().then(function () {
+            try { barcodeScanner.clear(); } catch (e) {}
+            barcodeScanner = null;
+            $('#barcodeScanner').empty();
+        }).catch(function () {
+            barcodeScanner = null;
+            $('#barcodeScanner').empty();
+        });
+    }
+
+    function startBarcodeScanner() {
+        if (typeof Html5Qrcode === 'undefined') {
+            $('#barcodeScanModal').modal('hide');
+            Swal.fire('Error', 'Barcode scanner could not load. Check your internet connection.', 'error');
+            return;
+        }
+        if (barcodeScannerRunning) {
+            return;
+        }
+
+        $('#barcodeScanner').empty();
+        barcodeScanner = new Html5Qrcode('barcodeScanner');
+        const config = {
+            fps: 12,
+            qrbox: function (viewfinderWidth, viewfinderHeight) {
+                return {
+                    width: Math.floor(Math.min(viewfinderWidth * 0.9, 280)),
+                    height: Math.floor(Math.min(viewfinderHeight * 0.35, 120))
+                };
+            }
+        };
+        const formats = getBarcodeScanFormats();
+        if (formats) {
+            config.formatsToSupport = formats;
+        }
+
+        let scanHandled = false;
+        barcodeScanner.start(
+            { facingMode: 'environment' },
+            config,
+            function (decodedText) {
+                if (scanHandled || !decodedText) return;
+                scanHandled = true;
+                $('#itemSearch').val(decodedText.trim());
+                $('#barcodeScanModal').modal('hide');
+                $('#itemSearchBtn').trigger('click');
+            }
+        ).then(function () {
+            barcodeScannerRunning = true;
+        }).catch(function () {
+            barcodeScannerRunning = false;
+            barcodeScanner = null;
+            $('#barcodeScanModal').modal('hide');
+            Swal.fire('Camera Error', 'Unable to open the camera. Allow camera access and try again.', 'error');
+        });
     }
 
     function openItemPickerModal(data, code) {

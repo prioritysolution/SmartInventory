@@ -7,6 +7,33 @@
 <meta name="keywords" content="admin, estimates, bootstrap, business, corporate, creative, management, minimal, modern,  html5, responsive">
 <meta name="author" content="Dreamguys - Bootstrap Admin Template">
 <meta name="robots" content="noindex, nofollow">
+<meta name="app-base" content="{{ rtrim(request()->root(), '/') }}">
+<script>
+window.APP_BASE = @json(rtrim(request()->root(), '/'));
+window.siApiUrl = function (path) {
+    var base = String(window.APP_BASE || '').replace(/\/$/, '');
+    try {
+        if (base) {
+            var u = new URL(base, window.location.href);
+            if (u.origin !== window.location.origin) {
+                var pathOnly = (u.pathname || '').replace(/\/$/, '');
+                base = window.location.origin + (pathOnly && pathOnly !== '/' ? pathOnly : '');
+            } else {
+                base = (u.origin + u.pathname).replace(/\/$/, '');
+            }
+        }
+    } catch (e) {}
+    if (!base) {
+        var segs = window.location.pathname.split('/').filter(Boolean);
+        if (segs.length && /smartinventory/i.test(segs[0])) {
+            base = window.location.origin + '/' + segs[0];
+        } else {
+            base = window.location.origin;
+        }
+    }
+    return base + '/' + String(path || '').replace(/^\//, '');
+};
+</script>
 <title>Agent Dashboard | Smart Inventory</title>
 
 <link rel="shortcut icon" type="image/png" href="{{asset('agenttemplate/assets/img/favicon.png')}}?v=2">
@@ -24,6 +51,8 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
 <link rel="stylesheet" href="{{asset('template/assets/css/bootstrap-datetimepicker.min.css')}}">
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="{{ asset('template/assets/css/select2-custom.css') }}?v=2" rel="stylesheet" />
 
 <link rel="stylesheet" href="{{asset('agenttemplate/assets/css/style.css')}}">
 <link rel="stylesheet" href="{{ asset('template/assets/css/global-loader.css') }}">

@@ -19,18 +19,12 @@
                 <div class="col-md-3">
                     <label class="form-label">As on Date</label>
                     <input type="date" class="form-control" id="asOnDate"
-                        min="{{ $year_start }}" max="{{ $year_end }}"
                         value="{{ min($year_end, date('Y-m-d')) }}">
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label">Select Customer</label>
                     <select class="form-select" id="partyId">
                         <option value="">-- Select Customer --</option>
-                        @foreach ($customers as $party)
-                            <option value="{{ $party->Party_Id }}">
-                                {{ $party->Party_Code }} - {{ $party->Party_Name }}
-                            </option>
-                        @endforeach
                     </select>
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
@@ -41,6 +35,11 @@
                 <div class="col-md-2 d-flex align-items-end">
                     <button type="button" class="btn btn-outline-secondary w-100" id="printBtn" disabled>
                         <i class="fas fa-print me-1"></i> Print
+                    </button>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="button" class="btn btn-outline-success w-100" id="downloadBtn" disabled>
+                        <i class="fas fa-download me-1"></i> Download
                     </button>
                 </div>
             </div>
@@ -122,7 +121,14 @@
     const agentName = @json($agent_name);
     let printRows = [];
 
-    $('#partyId').select2({
+    if (typeof siAjaxSelect2 === 'function') {
+        siAjaxSelect2('#partyId', {
+            url: "{{ route('agent.parties.search') }}",
+            placeholder: '-- Select Customer --',
+            partyType: 2,
+            minLength: 0
+        });
+    } else $('#partyId').select2({
         placeholder: '-- Select Customer --',
         allowClear: true,
         width: '100%'
@@ -161,6 +167,7 @@
             printRows = [];
             $('#dueBody').html('<tr><td colspan="8" class="text-center text-muted">No customers found</td></tr>');
             $('#printBtn').prop('disabled', true);
+            $('#downloadBtn').prop('disabled', true);
             updateTotals([]);
             return;
         }
@@ -186,6 +193,7 @@
         $('#dueBody').html(html);
         updateTotals(data);
         $('#printBtn').prop('disabled', false);
+        $('#downloadBtn').prop('disabled', false);
     }
 
     function loadHistory(partyId, code, name) {
@@ -229,6 +237,10 @@
     function printReport() {
         if (!printRows.length) {
             Swal.fire('Error', 'Search the report first', 'error');
+            return;
+        }
+        if (printRows.length > 1000) {
+            siWarnPrintLimit(printRows.length, downloadCustomerDueZip);
             return;
         }
         const asOn = siDate.toDisplay($('#asOnDate').val());
@@ -276,6 +288,99 @@
             </body></html>`);
     }
 
+    function buildCustomerDueCsv() {
+        const asOn = siDate.toDisplay($('#asOnDate').val());
+        const headers = ['Sl', 'Code', 'Customer Name', 'Due Amount', 'Paid Amount', 'Remaining', 'Due Since'];
+        let due = 0, paid = 0, rem = 0;
+        const rows = printRows.map((row, idx) => {
+            due += parseFloat(row.Due_Amt) || 0;
+            paid += parseFloat(row.Paid_Amt) || 0;
+            rem += parseFloat(row.Remaining_Amt) || 0;
+            return [
+                idx + 1,
+                row.Party_Code || '',
+                row.Party_Name || '',
+                fmtAmt(row.Due_Amt),
+                fmtAmt(row.Paid_Amt),
+                fmtAmt(row.Remaining_Amt),
+                row.Due_Date ? siDate.toDisplay(row.Due_Date) : ''
+            ];
+        });
+        const totals = ['Total', '', '', fmtAmt(due), fmtAmt(paid), fmtAmt(rem), ''];
+        const meta = [
+            ['Customer Due Report'],
+            ['Organization', orgName || 'Smart Inventory'],
+            ['Agent', agentName || ''],
+            ['As on Date', asOn],
+            ['Generated At', new Date().toLocaleString()],
+            ['Total Records', printRows.length]
+        ];
+        return siBuildCsv({ meta, headers, rows, totals });
+    }
+
+    function buildCustomerDueHtml() {
+        const asOn = siDate.toDisplay($('#asOnDate').val());
+        let due = 0, paid = 0, rem = 0;
+        let body = '';
+        printRows.forEach((row, idx) => {
+            due += parseFloat(row.Due_Amt) || 0;
+            paid += parseFloat(row.Paid_Amt) || 0;
+            rem += parseFloat(row.Remaining_Amt) || 0;
+            body += `<tr>
+                <td>${idx + 1}</td>
+                <td>${row.Party_Code ?? ''}</td>
+                <td>${row.Party_Name ?? ''}</td>
+                <td style="text-align:right;">${fmtAmt(row.Due_Amt)}</td>
+                <td style="text-align:right;">${fmtAmt(row.Paid_Amt)}</td>
+                <td style="text-align:right;">${fmtAmt(row.Remaining_Amt)}</td>
+                <td>${row.Due_Date ? siDate.toDisplay(row.Due_Date) : '-'}</td>
+            </tr>`;
+        });
+        body += `<tr>
+            <td colspan="3" style="text-align:right;font-weight:bold;">Total</td>
+            <td style="text-align:right;font-weight:bold;">${fmtAmt(due)}</td>
+            <td style="text-align:right;font-weight:bold;">${fmtAmt(paid)}</td>
+            <td style="text-align:right;font-weight:bold;">${fmtAmt(rem)}</td>
+            <td></td>
+        </tr>`;
+        return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Customer Due Report</title>
+            <style>
+                body { font-family: Arial, sans-serif; font-size: 12px; color: #000; padding: 12px; }
+                h3, h4, p { margin: 0 0 6px 0; text-align: center; }
+                table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+                th, td { border: 1px solid #000; padding: 4px 6px; }
+                th { background: #f0f0f0; }
+            </style></head><body>
+            <h3>${orgName || 'Smart Inventory'}</h3>
+            <h4>Customer Due Report</h4>
+            <p>Agent: ${agentName || ''} &nbsp;|&nbsp; As on: ${asOn}</p>
+            <table>
+                <thead><tr>
+                    <th>Sl</th><th>Code</th><th>Customer Name</th>
+                    <th>Due Amount</th><th>Paid Amount</th><th>Remaining</th><th>Due Since</th>
+                </tr></thead>
+                <tbody>${body}</tbody>
+            </table>
+            </body></html>`;
+    }
+
+    function downloadCustomerDueZip() {
+        if (!printRows.length) {
+            Swal.fire('Error', 'No data to download', 'warning');
+            return;
+        }
+        const base = 'customer_due_report_' + siDateStamp();
+        const csv = buildCustomerDueCsv();
+        const html = buildCustomerDueHtml();
+        siDownloadZip({
+            filename: base + '.zip',
+            files: [
+                { name: base + '.csv', content: csv, mime: 'text/csv;charset=utf-8;' },
+                { name: base + '.html', content: html, mime: 'text/html;charset=utf-8;' }
+            ]
+        });
+    }
+
     function runSearch() {
         const partyId = $('#partyId').val();
         if (!partyId) {
@@ -283,6 +388,7 @@
             $('#historyCard').addClass('d-none');
             $('#dueBody').html('<tr><td colspan="8" class="text-center text-muted">Select a customer and click Search</td></tr>');
             $('#printBtn').prop('disabled', true);
+            $('#downloadBtn').prop('disabled', true);
             updateTotals([]);
             return;
         }
@@ -290,6 +396,7 @@
         $('#historyCard').addClass('d-none');
         $('#dueBody').html('<tr><td colspan="8" class="text-center">Loading...</td></tr>');
         $('#printBtn').prop('disabled', true);
+        $('#downloadBtn').prop('disabled', true);
         $.get(searchUrl, {
             as_on: $('#asOnDate').val(),
             party_id: partyId
@@ -299,6 +406,7 @@
             Swal.fire('Error', xhr.responseJSON?.message || 'Failed to load report', 'error');
             $('#dueBody').html('<tr><td colspan="8" class="text-center text-danger">Failed to load</td></tr>');
             updateTotals([]);
+            $('#downloadBtn').prop('disabled', true);
         });
     }
 
@@ -317,6 +425,7 @@
             $('#historyCard').addClass('d-none');
             $('#dueBody').html('<tr><td colspan="8" class="text-center text-muted">Select a customer and click Search</td></tr>');
             $('#printBtn').prop('disabled', true);
+            $('#downloadBtn').prop('disabled', true);
             updateTotals([]);
         }
     });
@@ -332,5 +441,6 @@
     });
 
     $('#printBtn').on('click', printReport);
+    $(document).on('click', '#downloadBtn', downloadCustomerDueZip);
 </script>
 @endpush

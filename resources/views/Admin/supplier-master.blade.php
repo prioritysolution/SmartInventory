@@ -189,7 +189,7 @@
 @endsection
 
 @push('scripts')
-<script src="{{ asset('template/assets/js/address-master-form.js') }}?v=3"></script>
+<script src="{{ asset('template/assets/js/address-master-form.js') }}?v=5"></script>
 <script>
 $(document).ready(function () {
 
@@ -235,7 +235,7 @@ $(document).ready(function () {
         }).then(result => {
             if (!result.isConfirmed) return;
             $.ajax({
-                url: `/supplier-master/${id}`,
+                url: (typeof siApiUrl === 'function' ? siApiUrl('supplier-master/' + id) : ("{{ url('supplier-master') }}/" + id)),
                 type: 'POST',
                 data: { _token: "{{ csrf_token() }}", _method: 'DELETE' },
                 success: res => Swal.fire('Deleted', res.message, 'success').then(() => location.reload()),
@@ -250,7 +250,9 @@ $(document).ready(function () {
         $(this).prop('disabled', true).text('Saving...');
 
         let partyId = $('#partyId').val();
-        let url = partyId ? `/supplier-master/${partyId}` : "{{ route('supplier-master.store') }}";
+        let url = partyId
+            ? (typeof siApiUrl === 'function' ? siApiUrl('supplier-master/' + partyId) : ("{{ url('supplier-master') }}/" + partyId))
+            : "{{ route('supplier-master.store') }}";
 
         let data = Object.assign({
             _token: "{{ csrf_token() }}",

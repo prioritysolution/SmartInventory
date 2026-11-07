@@ -46,11 +46,6 @@
                                 <label class="form-label">{{ $partyLabel }}<span class="text-danger">*</span></label>
                                 <select class="form-select" id="partyId">
                                     <option value="">-- {{ $partyLabel }} --</option>
-                                    @foreach ($parties as $party)
-                                        <option value="{{ $party->Party_Id }}">
-                                            {{ $party->Party_Code }} - {{ $party->Party_Name }}
-                                        </option>
-                                    @endforeach
                                 </select>
                                 @if (in_array($routePrefix, ['supplier-payment', 'customer-collection'], true))
                                     <div class="d-flex justify-content-between align-items-center mt-1">
@@ -218,13 +213,24 @@
         let partyPayable = 0;
         let editOriginalAmount = 0;
         $(document).ready(function() {
-            $('#partyId').select2({
-                placeholder: '-- {{ $partyLabel }} --',
-                allowClear: true
-            });
+            if (typeof siAjaxSelect2 === 'function') {
+                siAjaxSelect2('#partyId', {
+                    url: "{{ route('parties.search') }}",
+                    placeholder: '-- {{ $partyLabel }} --',
+                    partyType: {{ (int) ($partyType ?? 2) }},
+                    minLength: 0
+                });
+            } else {
+                $('#partyId').select2({
+                    placeholder: '-- {{ $partyLabel }} --',
+                    allowClear: true,
+                    width: '100%'
+                });
+            }
             $('#bankAccountId').select2({
                 placeholder: '-- Select Bank --',
-                allowClear: true
+                allowClear: true,
+                width: '100%'
             });
 
             $('input[name="transMode"]').on('change', toggleBank);
@@ -323,7 +329,12 @@
                     $('#vouNoDiv').show();
                     $('#voucherDate').val(d.Vou_Date);
                     skipSupplierLedger = true;
-                    $('#partyId').val(d.Party_Id).trigger('change');
+                    if (typeof siSetAjaxSelect2Value === 'function') {
+                        const label = ((d.Party_Name || '') + '-' + (d.Party_Code || '')).replace(/^-|-$/g, '') || String(d.Party_Id);
+                        siSetAjaxSelect2Value('#partyId', d.Party_Id, label);
+                    } else {
+                        $('#partyId').val(d.Party_Id).trigger('change');
+                    }
                     skipSupplierLedger = false;
                     editOriginalAmount = parseFloat(d.Amount) || 0;
                     $('#amount').val(d.Amount);

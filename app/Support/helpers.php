@@ -9,6 +9,25 @@ if (!function_exists('dmy')) {
     }
 }
 
+if (!function_exists('routeExists')) {
+    function routeExists(?string $name): bool
+    {
+        $name = trim((string) $name);
+        return $name !== '' && \Illuminate\Support\Facades\Route::has($name);
+    }
+}
+
+if (!function_exists('safeRoute')) {
+    function safeRoute(?string $name, array $params = [], string $fallback = 'javascript:void(0);'): string
+    {
+        if (!routeExists($name)) {
+            return $fallback;
+        }
+
+        return route($name, $params);
+    }
+}
+
 if (!function_exists('flattenMenuLinks')) {
     function flattenMenuLinks(array $menu): array
     {
@@ -17,7 +36,7 @@ if (!function_exists('flattenMenuLinks')) {
         foreach ($menu as $parent) {
             if (count($parent->children) > 0) {
                 foreach ($parent->children as $child) {
-                    if (!empty($child->route)) {
+                    if (!empty($child->route) && routeExists($child->route)) {
                         $links[] = (object) [
                             'name' => $child->name,
                             'route' => $child->route,
@@ -26,7 +45,7 @@ if (!function_exists('flattenMenuLinks')) {
                         ];
                     }
                 }
-            } elseif (!empty($parent->route)) {
+            } elseif (!empty($parent->route) && routeExists($parent->route)) {
                 $links[] = (object) [
                     'name' => $parent->name,
                     'route' => $parent->route,
@@ -43,6 +62,10 @@ if (!function_exists('flattenMenuLinks')) {
 if (!function_exists('menuLinkRoute')) {
     function menuLinkRoute(array $links, string $route, array $params = []): ?string
     {
+        if (!routeExists($route)) {
+            return null;
+        }
+
         foreach ($links as $link) {
             if (($link->route ?? '') === $route) {
                 return route($route, $params);
@@ -98,6 +121,9 @@ if (!function_exists('buildAdminSidebarMenu')) {
             $isParent = $item->Child_Id === null || $item->Child_Id === '';
             if ($isParent && $item->Parraint_Name) {
                 $route = data_get($item, 'Parraint_Route') ?: null;
+                if ($route && !routeExists($route)) {
+                    $route = null;
+                }
                 $menu[(string) $item->Parraint_Id] = (object) [
                     'name' => $item->Parraint_Name,
                     'icon' => sidebarMenuIcon(data_get($item, 'Parraint_Icon'), $route, $item->Parraint_Name),
@@ -110,17 +136,35 @@ if (!function_exists('buildAdminSidebarMenu')) {
         foreach ($menuData as $item) {
             $isParent = $item->Child_Id === null || $item->Child_Id === '';
             if (!$isParent && isset($menu[(string) $item->Parraint_Id]) && $item->Child_Name) {
+                $childRoute = $item->Child_Route ?: null;
+                if ($childRoute && !routeExists($childRoute)) {
+                    continue;
+                }
                 $menu[(string) $item->Parraint_Id]->children[] = (object) [
                     'id' => $item->Child_Id,
                     'name' => $item->Child_Name,
-                    'route' => $item->Child_Route ?: null,
+                    'route' => $childRoute,
                 ];
             }
         }
 
+        $sorted = [];
+        foreach ($menu as $id => $item) {
+            $name = strtolower(trim((string) ($item->name ?? '')));
+            $route = (string) ($item->route ?? '');
+            if ($name === 'dashboard' || $route === 'user-dashboard') {
+                $sorted[$id] = $item;
+            }
+        }
+        foreach ($menu as $id => $item) {
+            if (!isset($sorted[$id])) {
+                $sorted[$id] = $item;
+            }
+        }
+
         return [
-            'menu' => $menu,
-            'menuLinks' => flattenMenuLinks($menu),
+            'menu' => $sorted,
+            'menuLinks' => flattenMenuLinks($sorted),
         ];
     }
 }
@@ -151,13 +195,17 @@ if (!function_exists('buildAgentSidebarMenu')) {
 
             if ($item->SubMenu_Id) {
                 if ($item->SubMenu_Name) {
+                    $childRoute = $item->Route ?: null;
+                    if ($childRoute && !routeExists($childRoute)) {
+                        continue;
+                    }
                     $menu[$menuId]->children[] = (object) [
                         'name' => $item->SubMenu_Name,
-                        'route' => $item->Route,
+                        'route' => $childRoute,
                     ];
                 }
             } elseif ($item->Route) {
-                $menu[$menuId]->route = $item->Route;
+                $menu[$menuId]->route = routeExists($item->Route) ? $item->Route : null;
             }
         }
 

@@ -13,13 +13,11 @@
             <div class="row g-3">
                 <div class="col-md-3">
                     <label class="form-label">From Date <span class="text-danger">*</span></label>
-                    <input type="date" class="form-control" id="frmDate"
-                        min="{{ $year_start }}" max="{{ $year_end }}" value="{{ $year_start }}">
+                    <input type="date" class="form-control" id="frmDate" value="{{ $year_start }}">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">To Date <span class="text-danger">*</span></label>
                     <input type="date" class="form-control" id="toDate"
-                        min="{{ $year_start }}" max="{{ $year_end }}"
                         value="{{ min($year_end, date('Y-m-d')) }}">
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
@@ -30,6 +28,11 @@
                 <div class="col-md-2 d-flex align-items-end">
                     <button type="button" class="btn btn-outline-secondary w-100" id="printBtn" disabled>
                         <i class="fas fa-print me-1"></i> Print
+                    </button>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="button" class="btn btn-outline-success w-100" id="downloadBtn" disabled>
+                        <i class="fas fa-download me-1"></i> Download
                     </button>
                 </div>
             </div>
@@ -45,6 +48,7 @@
                             <th>Sl</th>
                             <th>Invoice No</th>
                             <th>Date</th>
+                            <th>Customer</th>
                             <th>Item Code</th>
                             <th>Item Name</th>
                             <th class="text-end">Qty</th>
@@ -54,16 +58,16 @@
                         </tr>
                     </thead>
                     <tbody id="reportBody">
-                        <tr><td colspan="9" class="text-center text-muted">Select dates and click Search</td></tr>
+                        <tr><td colspan="10" class="text-center text-muted">Select dates and click Search</td></tr>
                     </tbody>
                     <tfoot id="reportFoot" class="d-none">
                         <tr class="fw-bold">
-                            <td colspan="7" class="text-end">Total (incl. round-off)</td>
+                            <td colspan="8" class="text-end">Total (incl. round-off)</td>
                             <td class="text-end" id="netTotalCell">0.00</td>
                             <td></td>
                         </tr>
                         <tr id="roundOffRow" class="d-none">
-                            <td colspan="7" class="text-end text-muted">Round Off</td>
+                            <td colspan="8" class="text-end text-muted">Round Off</td>
                             <td class="text-end text-muted" id="roundOffCell">0.00</td>
                             <td></td>
                         </tr>
@@ -182,7 +186,7 @@
     function renderRows(data, summary) {
         if (!data.length) {
             printRows = [];
-            $('#reportBody').html('<tr><td colspan="9" class="text-center text-muted">No records found</td></tr>');
+            $('#reportBody').html('<tr><td colspan="10" class="text-center text-muted">No records found</td></tr>');
             $('#printBtn').prop('disabled', true);
             updateSummary(summary || emptySummary());
             return;
@@ -194,9 +198,10 @@
                 <td>${idx + 1}</td>
                 <td>${row.Doc_No ?? ''}</td>
                 <td>${siDate.toDisplay(row.Doc_Date)}</td>
+                <td>${row.Cust_Name ?? ''}</td>
                 <td>${row.Prod_Code ?? ''}</td>
                 <td>${row.Prod_ShortNm ?? ''}</td>
-                <td class="text-end">${row.Quantity ?? 0}</td>
+                <td class="text-end">${siFmtQty(row.Quantity)}</td>
                 <td>${row.Unit_Name ?? ''}</td>
                 <td class="text-end">${fmtAmt(row.Amount)}</td>
                 <td>${row.Trans_Mode ?? '-'}</td>
@@ -207,41 +212,97 @@
         $('#printBtn').prop('disabled', false);
     }
 
-    function printReport() {
-        if (!printRows.length) {
-            Swal.fire('Error', 'Search the report first', 'error');
-            return;
-        }
+    function buildSaleCsv(rows) {
+        const frm = siDate.toDisplay($('#frmDate').val());
+        const to = siDate.toDisplay($('#toDate').val());
+        const totals = printSummary;
+
+        const meta = [
+            ['Organization', orgName || 'Smart Inventory'],
+            ['Report', 'Sale Report'],
+            ['Agent', agentName || ''],
+            ['Period', (frm && to ? `From ${frm} To ${to}` : '')],
+            ['Generated At', (window.siDate && siDate.toDisplay ? siDate.toDisplay(new Date()) : new Date().toLocaleString())]
+        ];
+
+        const headers = ['Sl', 'Invoice No', 'Date', 'Customer', 'Item Code', 'Item Name', 'Qty', 'Unit', 'Amount', 'Trans Mode'];
+
+        let totQty = 0;
+        let totAmt = 0;
+        const dataRows = (rows || []).map(function(row, idx) {
+            const q = parseFloat(row.Quantity) || 0;
+            const a = parseFloat(row.Amount) || 0;
+            totQty += q;
+            totAmt += a;
+            return [
+                String(idx + 1),
+                row.Doc_No || '',
+                siDate.toDisplay(row.Doc_Date),
+                row.Cust_Name || '',
+                row.Prod_Code || '',
+                row.Prod_ShortNm || '',
+                siFmtQty(q),
+                row.Unit_Name || '',
+                fmtAmt(a),
+                row.Trans_Mode || '-'
+            ];
+        });
+
+        const totalsRow = ['Total (incl. round-off)', '', '', '', '', '', siFmtQty(totQty), '', fmtAmt(totals.net || totAmt), ''];
+
+        const summaryRows = [
+            ['Summary by Payment Mode'],
+            ['Cash Total', fmtAmt(totals.cash || 0)],
+            ['Bank Total', fmtAmt(totals.bank || 0)],
+            ['Credit Total', fmtAmt(totals.credit || 0)],
+            ['Credit Paid (Customer)', fmtAmt(totals.credit_settled || 0)],
+            ['Credit Outstanding', fmtAmt(totals.credit_unsettled || 0)]
+        ];
+
+        const csv1 = siBuildCsv({
+            meta: meta,
+            headers: headers,
+            rows: dataRows,
+            totals: totalsRow
+        });
+
+        return csv1 + '\r\n\r\n' + summaryRows.map(function(r) {
+            return r.map(function(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(',');
+        }).join('\r\n');
+    }
+
+    function buildSaleHtml(rows) {
         const frm = siDate.toDisplay($('#frmDate').val());
         const to = siDate.toDisplay($('#toDate').val());
         const totals = printSummary;
         let body = '';
-        printRows.forEach((row, idx) => {
+        (rows || []).forEach((row, idx) => {
             body += `<tr>
                 <td>${idx + 1}</td>
                 <td>${row.Doc_No ?? ''}</td>
                 <td>${siDate.toDisplay(row.Doc_Date)}</td>
+                <td>${row.Cust_Name ?? ''}</td>
                 <td>${row.Prod_Code ?? ''}</td>
                 <td>${row.Prod_ShortNm ?? ''}</td>
-                <td style="text-align:right;">${row.Quantity ?? 0}</td>
+                <td style="text-align:right;">${siFmtQty(row.Quantity)}</td>
                 <td>${row.Unit_Name ?? ''}</td>
                 <td style="text-align:right;">${fmtAmt(row.Amount)}</td>
                 <td>${row.Trans_Mode ?? '-'}</td>
             </tr>`;
         });
         body += `<tr>
-            <td colspan="7" style="text-align:right;font-weight:bold;">Total (incl. round-off)</td>
+            <td colspan="8" style="text-align:right;font-weight:bold;">Total (incl. round-off)</td>
             <td style="text-align:right;font-weight:bold;">${fmtAmt(totals.net)}</td>
             <td></td>
         </tr>`;
         if (Math.abs(parseFloat(totals.round_off) || 0) > 0.0001) {
             body += `<tr>
-                <td colspan="7" style="text-align:right;">Round Off</td>
+                <td colspan="8" style="text-align:right;">Round Off</td>
                 <td style="text-align:right;">${fmtAmt(totals.round_off)}</td>
                 <td></td>
             </tr>`;
         }
-        siPrint(`<!DOCTYPE html><html><head><title>Sale Report</title>
+        return `<!DOCTYPE html><html><head><title>Sale Report</title>
             <style>
                 body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
                 h3, h4, p { margin: 0 0 6px 0; text-align: center; }
@@ -258,7 +319,7 @@
             <p>Agent: ${agentName || ''} &nbsp;|&nbsp; From: ${frm} &nbsp; To: ${to}</p>
             <table>
                 <thead><tr>
-                    <th>Sl</th><th>Invoice No</th><th>Date</th>
+                    <th>Sl</th><th>Invoice No</th><th>Date</th><th>Customer</th>
                     <th>Item Code</th><th>Item Name</th><th>Qty</th><th>Unit</th><th>Amount</th>
                     <th>Trans Mode</th>
                 </tr></thead>
@@ -275,10 +336,60 @@
                     <td colspan="2"><div class="lbl">Credit Outstanding</div><div class="amt">₹ ${fmtAmt(totals.credit_unsettled)}</div></td>
                 </tr>
             </table>
-            </body></html>`);
+            </body></html>`;
+    }
+
+    function downloadSaleZip() {
+        if (!printRows.length) {
+            Swal.fire('Error', 'Search the report first', 'error');
+            return;
+        }
+        if (window.Swal) {
+            Swal.fire({
+                title: 'Generating ZIP...',
+                text: 'Packaging records',
+                allowOutsideClick: false,
+                didOpen: function() { Swal.showLoading(); }
+            });
+        }
+        setTimeout(function() {
+            try {
+                const csvContent = buildSaleCsv(printRows);
+                const htmlContent = buildSaleHtml(printRows);
+                const safeName = 'Sale_Report_' + siDateStamp();
+                const zipName = safeName + '.zip';
+                const files = [
+                    { name: safeName + '.csv', content: csvContent },
+                    { name: safeName + '.html', content: htmlContent }
+                ];
+                siDownloadZip(zipName, files);
+                if (window.Swal) Swal.close();
+            } catch (e) {
+                if (window.Swal) {
+                    Swal.close();
+                    Swal.fire('Error', 'Failed to generate ZIP: ' + (e.message || e), 'error');
+                }
+            }
+        }, 50);
+    }
+
+    function printReport() {
+        if (!printRows.length) {
+            Swal.fire('Error', 'Search the report first', 'error');
+            return;
+        }
+        if (printRows.length > 1000) {
+            siWarnPrintLimit(printRows.length, downloadSaleZip);
+            return;
+        }
+        const html = buildSaleHtml(printRows);
+        siPrint(html);
     }
 
     $('#printBtn').on('click', printReport);
+    $(document).on('click', '#downloadBtn', function() {
+        downloadSaleZip();
+    });
 
     $('#searchBtn').on('click', function () {
         const frmDate = $('#frmDate').val();
@@ -294,20 +405,50 @@
 
         printRows = [];
         $('#printBtn').prop('disabled', true);
-        $('#reportBody').html('<tr><td colspan="9" class="text-center">Loading...</td></tr>');
+        $('#downloadBtn').prop('disabled', true);
         updateSummary(emptySummary());
-
-        $.get(searchUrl, { frm_date: frmDate, to_date: toDate }, function (res) {
-            const data = Array.isArray(res) ? res : (res.rows || []);
-            const summary = Array.isArray(res) ? null : (res.summary || emptySummary());
-            renderRows(data, summary);
-        }).fail(function (xhr) {
-            Swal.fire('Error', xhr.responseJSON?.message || 'Failed to load report', 'error');
-            printRows = [];
-            $('#reportBody').html('<tr><td colspan="9" class="text-center text-danger">Failed to load</td></tr>');
-            updateSummary(emptySummary());
-            $('#printBtn').prop('disabled', true);
+        if (window._saleLazy) window._saleLazy.destroy();
+        window._saleLazy = SiLazyScroll.create({
+            scrollEl: $('#reportBody').closest('.report-scroll'),
+            tbody: '#reportBody',
+            url: searchUrl,
+            pageSize: 40,
+            showEndRow: false,
+            colSpan: 10,
+            params: function () { return { frm_date: frmDate, to_date: toDate }; },
+            emptyHtml: '<tr><td colspan="10" class="text-center text-muted">No records found</td></tr>',
+            renderRow: function (row, idx) {
+                return `<tr>
+                    <td>${idx + 1}</td>
+                    <td>${row.Doc_No ?? ''}</td>
+                    <td>${siDate.toDisplay(row.Doc_Date)}</td>
+                    <td>${row.Cust_Name ?? ''}</td>
+                    <td>${row.Prod_Code ?? ''}</td>
+                    <td>${row.Prod_ShortNm ?? ''}</td>
+                    <td class="text-end">${siFmtQty(row.Quantity)}</td>
+                    <td>${row.Unit_Name ?? ''}</td>
+                    <td class="text-end">${fmtAmt(row.Amount)}</td>
+                    <td>${row.Trans_Mode ?? '-'}</td>
+                </tr>`;
+            },
+            onChunk: function (rows, payload, reset) {
+                if (reset) printRows = [];
+                printRows = printRows.concat(rows);
+                if (payload && payload.summary) {
+                    updateSummary(payload.summary);
+                }
+                if (printRows.length) {
+                    $('#reportFoot').removeClass('d-none');
+                }
+                $('#printBtn').prop('disabled', printRows.length === 0);
+                $('#downloadBtn').prop('disabled', printRows.length === 0);
+            },
+            onError: function (xhr) {
+                Swal.fire('Error', xhr.responseJSON?.message || 'Failed to load report', 'error');
+                updateSummary(emptySummary());
+            }
         });
+        window._saleLazy.resetAndLoad();
     });
 
     if (new URLSearchParams(window.location.search).get('today') === '1') {

@@ -97,13 +97,11 @@
                         <div class="col-md-3">
                             <label class="form-label">From Date<span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="frmDate"
-                                min="{{ $year_start }}" max="{{ $year_end }}"
                                 value="{{ $year_start }}">
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">To Date<span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="toDate"
-                                min="{{ $year_start }}" max="{{ $year_end }}"
                                 value="{{ min($year_end, date('Y-m-d')) }}">
                         </div>
                         <div class="col-md-3">
@@ -121,12 +119,15 @@
                                 <option value="0">All Sub Categories</option>
                             </select>
                         </div>
-                        <div class="col-md-3 d-flex align-items-end gap-2">
+                        <div class="col-md-3 d-flex align-items-end gap-2 flex-wrap">
                             <button type="button" class="btn btn-primary" id="searchBtn">
                                 <i class="fas fa-search me-1"></i> Search
                             </button>
                             <button type="button" class="btn btn-outline-secondary" id="printBtn" disabled>
                                 <i class="fas fa-print me-1"></i> Print
+                            </button>
+                            <button type="button" class="btn btn-outline-success" id="downloadBtn" disabled>
+                                <i class="fas fa-download me-1"></i> Download
                             </button>
                         </div>
                     </div>
@@ -241,11 +242,15 @@
         const orgName = @json($org_name);
         const branchName = @json($branch_name);
         let printRows = [];
+        let lastSearchPayload = null;
+        let statementLazy = null;
+        let savedTotals = null;
 
         function fmtQty(n) {
-            const v = parseFloat(n);
-            if (isNaN(v)) return '0';
-            return Number.isInteger(v) ? String(v) : v.toFixed(2);
+            return (window.siFmtQty || function (v) {
+                const n = parseFloat(v);
+                return isNaN(n) ? '0' : String(Math.round(n));
+            })(n);
         }
 
         function fmtAmt(n) {
@@ -351,16 +356,113 @@
             });
         }
 
-        function printStock() {
-            if (!printRows.length) {
-                Swal.fire('Error', 'Search the report first', 'error');
-                return;
-            }
+        function paintStatementTotals(totals) {
+            savedTotals = totals;
+            $('#totalOpening').text(fmtQty(totals.opening));
+            $('#totalPurchase').text(fmtQty(totals.purchase));
+            $('#totalPurchaseValue').text(fmtAmt(totals.purchaseValue));
+            $('#totalPurchaseReturn').text(fmtQty(totals.purchaseReturn));
+            $('#totalPurchaseReturnValue').text(fmtAmt(totals.purchaseReturnValue));
+            $('#totalSold').text(fmtQty(totals.sold));
+            $('#totalSoldValue').text(fmtAmt(totals.soldValue));
+            $('#totalSoldReturn').text(fmtQty(totals.soldReturn));
+            $('#totalSoldReturnValue').text(fmtAmt(totals.soldReturnValue));
+            $('#totalDamage').text(fmtQty(totals.damage));
+            $('#totalDamageValue').text(fmtAmt(totals.damageValue));
+            $('#totalAgent').text(fmtQty(totals.agent));
+            $('#totalAgentValue').text(fmtAmt(totals.agentValue));
+            $('#totalAvailable').text(fmtQty(totals.available));
+            $('#totalValue').text(fmtAmt(totals.value));
+        }
+
+        function totalsFromApi(t) {
+            return {
+                opening: parseFloat(t.Opening_Qty) || 0,
+                purchase: parseFloat(t.Purchase_Qty) || 0,
+                purchaseValue: parseFloat(t.Purchase_Value) || 0,
+                purchaseReturn: parseFloat(t.Purchase_Return_Qty) || 0,
+                purchaseReturnValue: parseFloat(t.Purchase_Return_Value) || 0,
+                sold: parseFloat(t.Sold_Qty) || 0,
+                soldValue: parseFloat(t.Sold_Value) || 0,
+                soldReturn: parseFloat(t.Sold_Return_Qty) || 0,
+                soldReturnValue: parseFloat(t.Sold_Return_Value) || 0,
+                damage: parseFloat(t.Damage_Qty) || 0,
+                damageValue: parseFloat(t.Damage_Value) || 0,
+                agent: parseFloat(t.Agent_Qty) || 0,
+                agentValue: parseFloat(t.Agent_Value) || 0,
+                available: parseFloat(t.Available) || 0,
+                value: parseFloat(t.Value) || 0
+            };
+        }
+
+        let totalRecordsCount = null;
+
+        function buildStockStatementCsv(rows) {
+            const frm = (window.siDate && siDate.toDisplay) ? siDate.toDisplay($('#frmDate').val()) : $('#frmDate').val();
+            const to = (window.siDate && siDate.toDisplay) ? siDate.toDisplay($('#toDate').val()) : $('#toDate').val();
+            const meta = [
+                ['Organization', orgName || 'Smart Inventory'],
+                ['Branch', branchName || ''],
+                ['Report', 'Item Stock Register'],
+                ['Period', (frm && to ? `From ${frm} To ${to}` : '')],
+                ['Generated At', (window.siDate && siDate.toDisplay ? siDate.toDisplay(new Date()) : new Date().toLocaleString())]
+            ];
+
+            const headers = [
+                'Item Name',
+                'Opening Qty',
+                'Purchase Qty', 'Purchase Value',
+                'Purchase Return Qty', 'Purchase Return Value',
+                'Sold Qty', 'Sold Value',
+                'Sold Return Qty', 'Sold Return Value',
+                'Damage Qty', 'Damage Value',
+                'In Hand Agent Qty', 'In Hand Agent Value',
+                'Closing Qty', 'Closing Value'
+            ];
+
+            const totals = blankTotals();
+            const dataRows = (rows || []).map(function(row) {
+                const cells = statementCells(row);
+                addTotals(totals, cells);
+                return [
+                    row.Prod_ShortNm || '',
+                    fmtQty(cells.opening),
+                    fmtQty(cells.purchase), fmtAmt(cells.purchaseValue),
+                    fmtQty(cells.purchaseReturn), fmtAmt(cells.purchaseReturnValue),
+                    fmtQty(cells.sold), fmtAmt(cells.soldValue),
+                    fmtQty(cells.soldReturn), fmtAmt(cells.soldReturnValue),
+                    fmtQty(cells.damage), fmtAmt(cells.damageValue),
+                    fmtQty(cells.agent), fmtAmt(cells.agentValue),
+                    fmtQty(cells.available), fmtAmt(cells.value)
+                ];
+            });
+
+            const totalLine = [
+                'Total :',
+                fmtQty(totals.opening),
+                fmtQty(totals.purchase), fmtAmt(totals.purchaseValue),
+                fmtQty(totals.purchaseReturn), fmtAmt(totals.purchaseReturnValue),
+                fmtQty(totals.sold), fmtAmt(totals.soldValue),
+                fmtQty(totals.soldReturn), fmtAmt(totals.soldReturnValue),
+                fmtQty(totals.damage), fmtAmt(totals.damageValue),
+                fmtQty(totals.agent), fmtAmt(totals.agentValue),
+                fmtQty(totals.available), fmtAmt(totals.value)
+            ];
+
+            return siBuildCsv({
+                meta: meta,
+                headers: headers,
+                rows: dataRows,
+                totals: totalLine
+            });
+        }
+
+        function buildStockStatementHtml(rows) {
             const frm = (window.siDate && siDate.toDisplay) ? siDate.toDisplay($('#frmDate').val()) : $('#frmDate').val();
             const to = (window.siDate && siDate.toDisplay) ? siDate.toDisplay($('#toDate').val()) : $('#toDate').val();
             let body = '';
             const totals = blankTotals();
-            printRows.forEach(function(row) {
+            (rows || []).forEach(function(row) {
                 const cells = statementCells(row);
                 addTotals(totals, cells);
                 body += `<tr>
@@ -368,7 +470,7 @@
                     ${statementRowHtml(cells)}
                 </tr>`;
             });
-            body += `<tr>
+            const totalRow = `<tr>
                 <th style="text-align:right;">Total :</th>
                 <th style="text-align:right;">${fmtQty(totals.opening)}</th>
                 <th style="text-align:right;">${fmtQty(totals.purchase)}</th>
@@ -386,14 +488,15 @@
                 <th style="text-align:right;">${fmtQty(totals.available)}</th>
                 <th style="text-align:right;">${fmtAmt(totals.value)}</th>
             </tr>`;
-            siPrint(`<!DOCTYPE html><html><head><title>Item Stock Register</title>
+
+            return `<!DOCTYPE html><html><head><title>Item Stock Register</title>
                 <style>
                     @page { size: landscape; }
                     body { font-family: Arial, sans-serif; font-size: 10px; color: #000; }
                     h3, h4, p { margin: 0 0 4px 0; text-align: center; }
                     table { width: 100%; border-collapse: collapse; margin-top: 10px; }
                     th, td { border: 1px solid #000; padding: 3px 4px; }
-                    th { font-weight: 700; text-align: center; }
+                    th { font-weight: 700; text-align: center; background: #f0f0f0; }
                 </style></head><body>
                 <h3>${orgName || 'Smart Inventory'}</h3>
                 ${branchName ? `<p>${branchName}</p>` : ''}
@@ -421,9 +524,135 @@
                             <th>Available</th><th>Value</th>
                         </tr>
                     </thead>
-                    <tbody>${body}</tbody>
+                    <tbody>${body}${totalRow}</tbody>
                 </table>
-                </body></html>`);
+                </body></html>`;
+        }
+
+        function downloadStockZip(prefetchedRows) {
+            function runDownload(rows) {
+                if (!rows || !rows.length) {
+                    Swal.fire('Error', 'No records to download', 'error');
+                    return;
+                }
+                if (window.Swal) {
+                    Swal.fire({
+                        title: 'Generating ZIP...',
+                        text: 'Packaging ' + rows.length + ' records',
+                        allowOutsideClick: false,
+                        didOpen: function() { Swal.showLoading(); }
+                    });
+                }
+                setTimeout(function() {
+                    try {
+                        const csvContent = buildStockStatementCsv(rows);
+                        const htmlContent = buildStockStatementHtml(rows);
+                        const safeName = 'Item_Stock_Register_' + siDateStamp();
+                        const zipName = safeName + '.zip';
+                        const files = [
+                            { name: safeName + '.csv', content: csvContent },
+                            { name: safeName + '.html', content: htmlContent }
+                        ];
+                        siDownloadZip(zipName, files);
+                        if (window.Swal) Swal.close();
+                    } catch (e) {
+                        if (window.Swal) {
+                            Swal.close();
+                            Swal.fire('Error', 'Failed to generate ZIP: ' + (e.message || e), 'error');
+                        }
+                    }
+                }, 50);
+            }
+
+            if (Array.isArray(prefetchedRows) && prefetchedRows.length) {
+                runDownload(prefetchedRows);
+                return;
+            }
+
+            if (lastSearchPayload) {
+                if (window.Swal) {
+                    Swal.fire({
+                        title: 'Fetching Records...',
+                        text: 'Please wait while all searched records are fetched for download',
+                        allowOutsideClick: false,
+                        didOpen: function() { Swal.showLoading(); }
+                    });
+                }
+                $.get("{{ route('stock-statement.search') }}", $.extend({}, lastSearchPayload, { limit: 0 }), function(data) {
+                    if (window.Swal) Swal.close();
+                    const allRows = SiLazyScroll.unwrap(data);
+                    runDownload(allRows);
+                }).fail(function(xhr) {
+                    if (window.Swal) {
+                        Swal.close();
+                        Swal.fire('Error', xhr.responseJSON?.message || 'Failed to fetch records for download', 'error');
+                    }
+                });
+                return;
+            }
+
+            runDownload(printRows);
+        }
+
+        function printStock() {
+            // Guard 1: Fast check if total records > 1000
+            if (totalRecordsCount !== null && totalRecordsCount > 1000) {
+                siWarnPrintLimit(totalRecordsCount, downloadStockZip);
+                return;
+            }
+
+            // Guard 2: If rows in memory exceed 1000
+            if (printRows && printRows.length > 1000) {
+                siWarnPrintLimit(printRows.length, downloadStockZip);
+                return;
+            }
+
+            function run(rows) {
+                printRows = rows || [];
+                if (!printRows.length) {
+                    Swal.fire('Error', 'Search the report first', 'error');
+                    return;
+                }
+                if (printRows.length > 1000) {
+                    siWarnPrintLimit(printRows.length, function() {
+                        downloadStockZip(printRows);
+                    });
+                    return;
+                }
+                doPrintStock();
+            }
+            if (lastSearchPayload) {
+                if (window.Swal) {
+                    Swal.fire({
+                        title: 'Preparing Print...',
+                        text: 'Loading report records',
+                        allowOutsideClick: false,
+                        didOpen: function() { Swal.showLoading(); }
+                    });
+                }
+                $.get("{{ route('stock-statement.search') }}", $.extend({}, lastSearchPayload, { limit: 0 }), function(data) {
+                    if (window.Swal) Swal.close();
+                    const allRows = SiLazyScroll.unwrap(data);
+                    totalRecordsCount = allRows.length;
+                    run(allRows);
+                }).fail(function(xhr) {
+                    if (window.Swal) {
+                        Swal.close();
+                        Swal.fire('Error', xhr.responseJSON?.message || 'Failed to load report for print', 'error');
+                    }
+                });
+                return;
+            }
+            run(printRows);
+        }
+
+        function doPrintStock() {
+            if (!printRows.length) {
+                Swal.fire('Error', 'Search the report first', 'error');
+                return;
+            }
+            const html = buildStockStatementHtml(printRows);
+            siPrint(html);
         }
 
         $('#cateId').on('change', function() {
@@ -431,6 +660,9 @@
         });
 
         $('#printBtn').on('click', printStock);
+        $(document).on('click', '#downloadBtn', function() {
+            downloadStockZip();
+        });
 
         $(document).on('click', '.stock-detail-btn', function() {
             const row = printRows[$(this).data('idx')];
@@ -477,24 +709,31 @@
                 return;
             }
 
-            resetTable('Loading...', false);
-            $.get("{{ route('stock-statement.search') }}", {
+            lastSearchPayload = {
                 frm_date: frmDate,
                 to_date: toDate,
                 cat_id: $('#cateId').val() || 0,
                 sub_cat_id: $('#subCateId').val() || 0
-            }, function(data) {
-                if (!data.length) {
-                    resetTable('No stock found', false);
-                    return;
-                }
-                printRows = data;
-                let html = '';
-                const totals = blankTotals();
-                data.forEach(function(row, idx) {
+            };
+            printRows = [];
+            totalRecordsCount = null;
+            savedTotals = null;
+            $('#printBtn').prop('disabled', true);
+            $('#downloadBtn').prop('disabled', true);
+            resetTotals();
+            if (statementLazy) statementLazy.destroy();
+            statementLazy = SiLazyScroll.create({
+                scrollEl: $('#reportBody').closest('.report-scroll'),
+                tbody: '#reportBody',
+                url: "{{ route('stock-statement.search') }}",
+                pageSize: 40,
+                showEndRow: false,
+                colSpan: 17,
+                params: function() { return lastSearchPayload; },
+                emptyHtml: '<tr><td colspan="17" class="text-center text-muted">No stock found</td></tr>',
+                renderRow: function(row, idx) {
                     const cells = statementCells(row);
-                    addTotals(totals, cells);
-                    html += `<tr>
+                    return `<tr>
                         <td><button type="button" class="detail-link stock-detail-btn" data-idx="${idx}">Detail</button></td>
                         <td class="item-name">${esc(row.Prod_ShortNm)}</td>
                         <td class="num">${fmtQty(cells.opening)}</td>
@@ -513,33 +752,32 @@
                         <td class="num">${fmtQty(cells.available)}</td>
                         <td class="num">${fmtAmt(cells.value)}</td>
                     </tr>`;
-                });
-                $('#reportBody').html(html);
-                $('#totalOpening').text(fmtQty(totals.opening));
-                $('#totalPurchase').text(fmtQty(totals.purchase));
-                $('#totalPurchaseValue').text(fmtAmt(totals.purchaseValue));
-                $('#totalPurchaseReturn').text(fmtQty(totals.purchaseReturn));
-                $('#totalPurchaseReturnValue').text(fmtAmt(totals.purchaseReturnValue));
-                $('#totalSold').text(fmtQty(totals.sold));
-                $('#totalSoldValue').text(fmtAmt(totals.soldValue));
-                $('#totalSoldReturn').text(fmtQty(totals.soldReturn));
-                $('#totalSoldReturnValue').text(fmtAmt(totals.soldReturnValue));
-                $('#totalDamage').text(fmtQty(totals.damage));
-                $('#totalDamageValue').text(fmtAmt(totals.damageValue));
-                $('#totalAgent').text(fmtQty(totals.agent));
-                $('#totalAgentValue').text(fmtAmt(totals.agentValue));
-                $('#totalAvailable').text(fmtQty(totals.available));
-                $('#totalValue').text(fmtAmt(totals.value));
-                const frmText = (window.siDate && siDate.toDisplay) ? siDate.toDisplay(frmDate) : frmDate;
-                const toText = (window.siDate && siDate.toDisplay) ? siDate.toDisplay(toDate) : toDate;
-                $('#registerPeriod').text('FROM ' + frmText + ' TO ' + toText);
-                $('#registerHeading').show();
-                $('#printBtn').prop('disabled', false);
-            }).fail(function(xhr) {
-                const msg = xhr.responseJSON?.message || 'Failed to load stock statement';
-                Swal.fire('Error', msg, 'error');
-                resetTable('Failed to load', true);
+                },
+                onChunk: function(rows, payload, reset) {
+                    if (reset) {
+                        printRows = [];
+                        totalRecordsCount = (payload && payload.recordsTotal != null) ? Number(payload.recordsTotal) : null;
+                    }
+                    printRows = printRows.concat(rows);
+                    if (payload && payload.totals && Object.keys(payload.totals).length) {
+                        paintStatementTotals(totalsFromApi(payload.totals));
+                    } else if (reset) {
+                        const totals = blankTotals();
+                        printRows.forEach(function(row) { addTotals(totals, statementCells(row)); });
+                        paintStatementTotals(totals);
+                    }
+                    const frmText = (window.siDate && siDate.toDisplay) ? siDate.toDisplay(frmDate) : frmDate;
+                    const toText = (window.siDate && siDate.toDisplay) ? siDate.toDisplay(toDate) : toDate;
+                    $('#registerPeriod').text('FROM ' + frmText + ' TO ' + toText);
+                    $('#registerHeading').show();
+                    $('#printBtn').prop('disabled', printRows.length === 0);
+                    $('#downloadBtn').prop('disabled', printRows.length === 0);
+                },
+                onError: function(xhr) {
+                    Swal.fire('Error', xhr.responseJSON?.message || 'Failed to load stock statement', 'error');
+                }
             });
+            statementLazy.resetAndLoad();
         });
     </script>
 @endpush

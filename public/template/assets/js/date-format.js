@@ -128,7 +128,9 @@
             '.si-date-wrap > .bootstrap-datetimepicker-widget.si-date-flip { top: auto !important; bottom: calc(100% + 4px) !important; }',
             '.bootstrap-datetimepicker-widget { z-index: 20000 !important; }',
             '.bootstrap-datetimepicker-widget.dropdown-menu { margin: 0 !important; }',
-            '.modal .bootstrap-datetimepicker-widget { z-index: 20050 !important; }'
+            '.bootstrap-datetimepicker-widget.si-date-floating { position: fixed !important; z-index: 20060 !important; margin: 0 !important; }',
+            '.modal .modal-body { overflow-x: visible; }',
+            '.modal-dialog-scrollable .modal-body { overflow-x: visible; }'
         ].join('');
         $('<style id="si-date-styles">').text(css).appendTo('head');
     }
@@ -170,23 +172,51 @@
         });
     };
 
+    function findWidget($wrap) {
+        var $widget = $wrap.children('.bootstrap-datetimepicker-widget');
+        if (!$widget.length) {
+            $widget = $('body > .bootstrap-datetimepicker-widget').filter(function () {
+                return $(this).data('si-owner') === $wrap[0];
+            }).first();
+        }
+        if (!$widget.length) {
+            $widget = $wrap.find('.bootstrap-datetimepicker-widget').first();
+        }
+        return $widget;
+    }
+
     function placeWidget($input) {
         var $wrap = $input.closest('.si-date-wrap');
         if (!$wrap.length) {
             return;
         }
-        var $widget = $wrap.children('.bootstrap-datetimepicker-widget');
-        if (!$widget.length) {
-            $widget = $wrap.find('.bootstrap-datetimepicker-widget').first();
-        }
-        if (!$widget.length) {
+        var $widget = findWidget($wrap);
+        if (!$widget.length || !$widget.is(':visible')) {
             return;
         }
-        $widget.removeClass('si-date-flip');
+
+        var inModal = $wrap.closest('.modal').length > 0;
         var rect = $wrap[0].getBoundingClientRect();
         var widgetHeight = $widget.outerHeight() || 280;
-        if (rect.bottom + widgetHeight > window.innerHeight - 8 && rect.top > widgetHeight + 8) {
-            $widget.addClass('si-date-flip');
+        var widgetWidth = $widget.outerWidth() || 280;
+        var flip = (rect.bottom + widgetHeight > window.innerHeight - 8) && (rect.top > widgetHeight + 8);
+        var left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - widgetWidth - 8));
+        var top = flip ? Math.max(8, rect.top - widgetHeight - 4) : (rect.bottom + 4);
+
+        $widget.toggleClass('si-date-flip', flip && !inModal);
+
+        if (inModal || $widget.parent().is('body')) {
+            $widget.addClass('si-date-floating').css({
+                position: 'fixed',
+                top: top + 'px',
+                left: left + 'px',
+                right: 'auto',
+                bottom: 'auto',
+                transform: 'none',
+                margin: 0,
+                zIndex: 20060
+            });
+            $widget.data('si-owner', $wrap[0]);
         }
     }
 
@@ -240,6 +270,7 @@
                 return;
             }
 
+            var inModal = $el.closest('.modal').length > 0;
             var options = {
                 format: 'DD/MM/YYYY',
                 extraFormats: ['DD/MM/YYYY', 'YYYY-MM-DD', 'DD-MM-YYYY'],
@@ -261,7 +292,8 @@
                         this.hide();
                     }
                 },
-                widgetParent: $wrap,
+                // Modals clip overflow — attach calendar to body and position fixed.
+                widgetParent: inModal ? $('body') : $wrap,
                 widgetPositioning: {
                     horizontal: 'auto',
                     vertical: 'bottom'
@@ -348,13 +380,25 @@
             $wrap.on('dp.show', function () {
                 $('.si-date-wrap').removeClass('si-picker-open');
                 $wrap.addClass('si-picker-open');
+                var $widget = findWidget($wrap);
+                if ($widget.length) {
+                    $widget.data('si-owner', $wrap[0]);
+                }
                 placeWidget($el);
                 requestAnimationFrame(function () {
                     placeWidget($el);
                 });
+                setTimeout(function () {
+                    placeWidget($el);
+                }, 0);
             });
             $wrap.on('dp.hide', function () {
                 $wrap.removeClass('si-picker-open');
+            });
+            $(window).off('resize.siDate.' + $el.attr('id')).on('resize.siDate.' + ($el.attr('id') || Math.random()), function () {
+                if ($wrap.hasClass('si-picker-open')) {
+                    placeWidget($el);
+                }
             });
         });
     }
@@ -423,6 +467,17 @@
         toInput: isoToDmy,
         toIso: dmyToIso,
         init: initDateInputs
+    };
+
+    window.siFmtQty = function (n) {
+        if (n === null || n === undefined || n === '') {
+            return '0';
+        }
+        var v = parseFloat(n);
+        if (isNaN(v)) {
+            return '0';
+        }
+        return String(Math.round(v));
     };
 
     $(function () {

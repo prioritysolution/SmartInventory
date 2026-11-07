@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Agent;
 
 use App\Http\Controllers\Concerns\ResolvesOrganisationAddress;
 use App\Http\Controllers\Concerns\SearchesItemsByCode;
+use App\Http\Controllers\Concerns\SearchesParties;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,17 +15,15 @@ class AgentSale extends Controller
 {
     use ResolvesOrganisationAddress;
     use SearchesItemsByCode;
+    use SearchesParties;
 
     public function index()
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
 
-        $customers = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [
-            2,
-            session('branch_id'),
-            session('agent_id'),
-        ]);
+        // Customers load via AJAX Select2 filtered by logged-in agent.
+        $customers = [];
         $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
         $this->organisationAddress();
         return view('Agent.sale', [
@@ -33,6 +32,18 @@ class AgentSale extends Controller
             'year_start' => session('year_start'),
             'year_end'   => session('year_end'),
         ]);
+    }
+
+    /**
+     * Agent portal party search — always scoped to the logged-in agent.
+     */
+    public function searchMyParties(Request $request)
+    {
+        $request->merge([
+            'party_type' => 2,
+            'agent_id' => (int) session('agent_id'),
+        ]);
+        return $this->searchParties($request);
     }
 
     private function toIsoDate(?string $date): ?string
@@ -134,50 +145,29 @@ class AgentSale extends Controller
      */
     private function agentProductBarcodes(int $prodId, string $date): array
     {
-        return DB::connection('coops')->select("
-            SELECT
-                x.Barcode AS Barcode,
-                CAST(MAX(x.MRP) AS DECIMAL(10,2)) AS MRP,
-                SUM(x.Qty) AS Avil_Qnty
-            FROM (
-                SELECT
-                    COALESCE(NULLIF(s.Barcode, 0), (
-                        SELECT p.Barcode
-                          FROM trns_stockinout p
-                         WHERE p.Prod_Id = s.Prod_Id
-                           AND p.Stock_Type IN (1, 2)
-                           AND IFNULL(p.Barcode, 0) <> 0
-                           AND (IFNULL(s.MRP, 0) = 0 OR ROUND(p.MRP, 2) = ROUND(s.MRP, 2))
-                         ORDER BY (p.Stock_Type = 2) DESC, p.Stock_Id DESC
-                         LIMIT 1
-                    )) AS Barcode,
-                    IFNULL(NULLIF(s.MRP, 0), (
-                        SELECT p.MRP
-                          FROM trns_stockinout p
-                         WHERE p.Prod_Id = s.Prod_Id
-                           AND p.Stock_Type IN (1, 2)
-                           AND IFNULL(p.Barcode, 0) <> 0
-                           AND (IFNULL(s.MRP, 0) = 0 OR ROUND(p.MRP, 2) = ROUND(s.MRP, 2))
-                         ORDER BY (p.Stock_Type = 2) DESC, p.Stock_Id DESC
-                         LIMIT 1
-                    )) AS MRP,
-                    CASE
-                        WHEN s.Stock_Type IN (4, 8) THEN s.Quantity
-                        WHEN s.Stock_Type IN (5, 6) THEN -s.Quantity
-                        ELSE 0
-                    END AS Qty
-                FROM trns_stockinout s
-                INNER JOIN trans_agent_stock a ON a.TrnsStock_Id = s.Stock_Id
-                WHERE a.Agent_Id = ?
-                  AND a.Prod_Id = ?
-                  AND a.Trans_Date <= ?
-                  AND s.Stock_Type IN (4, 5, 6, 8)
-            ) x
-            WHERE IFNULL(x.Barcode, 0) <> 0
-            GROUP BY x.Barcode
-            HAVING Avil_Qnty > 0
-            ORDER BY MAX(x.MRP) DESC, x.Barcode DESC
-        ", [session('agent_id'), $prodId, $date]);
+        $rows = DB::connection('coops')->select(
+            'CALL USP_GET_AGENT_PRODUCT_BARCODES(?, ?, ?)',
+            [session('agent_id'), $prodId, $date]
+        );
+        $availTotal = $this->agentAvailableQty($prodId, $date);
+        $held = 0.0;
+        foreach ($rows as $row) {
+            $held += (float) ($row->Avil_Qnty ?? 0);
+        }
+        $cut = max(0, round($held - $availTotal, 2));
+        foreach ($rows as $row) {
+            if ($cut <= 0) {
+                break;
+            }
+            $qty = (float) ($row->Avil_Qnty ?? 0);
+            $take = min($qty, $cut);
+            $row->Avil_Qnty = round($qty - $take, 2);
+            $cut = round($cut - $take, 2);
+        }
+
+        return array_values(array_filter($rows, function ($row) {
+            return (float) ($row->Avil_Qnty ?? 0) > 0.0001;
+        }));
     }
 
     private function agentBarcodeRow(int $prodId, string $date, string $barcode): ?object
@@ -251,11 +241,29 @@ class AgentSale extends Controller
 
         if ($partyId > 0) {
             $party = DB::connection('coops')->selectOne(
-                'SELECT Party_Id FROM mst_party WHERE Party_Id = ? AND Party_Type = 2 AND Cust_Agent_Id = ? LIMIT 1',
+                'CALL USP_VALIDATE_AGENT_CUSTOMER(?, ?)',
                 [$partyId, session('agent_id')]
             );
             if (!$party) {
                 return response()->json(['error' => 'Selected customer is not assigned to you'], 400);
+            }
+        }
+
+        $needed = [];
+        foreach ($request->items as $item) {
+            $prodId = (int) ($item['item_id'] ?? 0);
+            if ($prodId <= 0) {
+                continue;
+            }
+            $needed[$prodId] = ($needed[$prodId] ?? 0) + (float) ($item['quantity'] ?? 0);
+        }
+        foreach ($needed as $prodId => $qty) {
+            $avail = $this->agentAvailableQty($prodId, (string) $request->input('sale_date'));
+            if ($qty > $avail + 0.0001) {
+                return response()->json([
+                    'error' => 'Cannot sell more than available stock. Pending office return is held. Available qty: '
+                        . rtrim(rtrim(number_format($avail, 2, '.', ''), '0'), '.'),
+                ], 400);
             }
         }
 

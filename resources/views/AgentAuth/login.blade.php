@@ -11,7 +11,7 @@
             </div>
 
             <div class="form-login">
-                <label>Organization code Code</label>
+                <label>Organization Code</label>
                 <div class="form-addons">
                     <input type="text" id="org_code" placeholder="Enter your organization code" autocomplete="off">
                 </div>

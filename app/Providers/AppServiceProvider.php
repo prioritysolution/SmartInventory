@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
@@ -16,6 +17,16 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Prefer the live request host/path over APP_URL=localhost so AJAX/route()
+        // URLs work when the app is served under /smartinventory on a public IP.
+        if (!$this->app->runningInConsole()) {
+            try {
+                URL::forceRootUrl(rtrim(request()->root(), '/'));
+            } catch (\Throwable $e) {
+                // keep configured APP_URL
+            }
+        }
+
         View::composer([
             'Dashboard.Layouts.sidebar',
             'Dashboard.Layouts.topbar',

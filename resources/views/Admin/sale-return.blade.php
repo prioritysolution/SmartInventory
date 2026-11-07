@@ -35,6 +35,18 @@
             overflow-y: auto;
         }
 
+        .find-sale-scroll {
+            max-height: min(55vh, 420px);
+            overflow-y: auto;
+        }
+
+        .find-sale-scroll thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: #f8f9fa;
+        }
+
         .barcode-picker-scroll thead th {
             position: sticky;
             top: 0;
@@ -125,10 +137,6 @@
                             <div id="customerDiv">
                                 <select class="form-select" id="partyId">
                                     <option value="">-- Select Customer --</option>
-                                    @foreach ($customers as $customer)
-                                        <option value="{{ $customer->Party_Id }}">
-                                            {{ $customer->Party_Name }}-{{ $customer->Party_Code }}</option>
-                                    @endforeach
                                 </select>
                             </div>
                             <div id="cashDiv" style="display:none;">
@@ -436,32 +444,7 @@
         </div>
     </div>
 
-    <div class="modal fade" id="barcodePickerModal" tabindex="-1" data-bs-backdrop="static">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="barcodePickerTitle">Select Barcode</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="table-responsive barcode-picker-scroll">
-                        <table class="table table-bordered table-hover table-sm mb-0" id="barcodePickerTable">
-                            <thead class="thead-light">
-                                <tr>
-                                    <th>Sl</th>
-                                    <th>Barcode</th>
-                                    <th>Item Name</th>
-                                    <th class="text-end">MRP</th>
-                                    <th class="text-end">Sold Qty</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    @include('Admin.partials.barcode-picker-modal', ['qtyColumnLabel' => 'Sold Qty'])
 
     {{-- Sale Return Search Modal --}}
 <div class="modal fade" id="saleReturnSearchModal" tabindex="-1" data-bs-backdrop="static">
@@ -473,17 +456,26 @@
             </div>
             <div class="modal-body">
                 <div class="row mb-3">
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label class="form-label">From Date</label>
                         <input type="date" class="form-control" id="searchFromDate" 
                                max="{{ session('year_end') }}">
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label class="form-label">To Date</label>
                         <input type="date" class="form-control" id="searchToDate" 
                                max="{{ session('year_end') }}">
                     </div>
-                    
+                    <div class="col-md-3">
+                        <label class="form-label">Select Customer</label>
+                        <select class="form-select" id="searchPartyId">
+                            <option value=""></option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Bill No / Ref Bill No</label>
+                        <input type="text" class="form-control" id="searchSaleReturnNo" maxlength="120">
+                    </div>
                     <div class="col-md-2 d-flex align-items-end">
                         <button type="button" class="btn btn-primary w-100" id="searchSaleReturnGo">Search</button>
                     </div>
@@ -494,6 +486,8 @@
                             <tr>
                                 <th>Sl</th>
                                 <th>Invoice No</th>
+                                <th>Ref No</th>
+                                <th>Customer Name</th>
                                 <th>Invoice Date</th>
                                 <th>Net Amount</th>
                                 <th>Action</th>
@@ -501,7 +495,7 @@
                         </thead>
                         <tbody id="saleReturnSearchBody">
                             <tr>
-                                <td colspan="5" class="text-center text-muted">Use filters above to search</td>
+                                <td colspan="7" class="text-center text-muted">Use filters above to search</td>
                             </tr>
                         </tbody>
                     </table>
@@ -511,7 +505,7 @@
     </div>
 </div>
 
-    {{-- Find Sale (by customer / date) --}}
+    {{-- Find Sale (bill-wise / date) --}}
     <div class="modal fade" id="findSaleModal" tabindex="-1" data-bs-backdrop="static">
         <div class="modal-dialog modal-lg modal-xl-custom">
             <div class="modal-content">
@@ -519,34 +513,35 @@
                     <h5 class="modal-title">Find Sale</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="row mb-3">
-                        <div class="col-md-3">
+                <div class="modal-body overflow-visible">
+                    <div class="row mb-3 g-2 find-sale-filters">
+                        <div class="col-md-2">
                             <label class="form-label">From Date</label>
                             <input type="date" class="form-control" id="findFromDate"
                                 min="{{ session('year_start') }}" max="{{ session('year_end') }}">
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label class="form-label">To Date</label>
                             <input type="date" class="form-control" id="findToDate"
                                 min="{{ session('year_start') }}" max="{{ session('year_end') }}">
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Customer (optional)</label>
+                        <div class="col-md-3">
+                            <label class="form-label">Select Customer</label>
                             <select class="form-select" id="findPartyId">
-                                <option value="0">-- All / Outside --</option>
-                                @foreach ($customers as $customer)
-                                    <option value="{{ $customer->Party_Id }}">
-                                        {{ $customer->Party_Name }}-{{ $customer->Party_Code }}</option>
-                                @endforeach
+                                <option value=""></option>
                             </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Bill No</label>
+                            <input type="text" class="form-control" id="findBillNo"
+                                placeholder="Invoice / Ref No" autocomplete="off">
                         </div>
                         <div class="col-md-2 d-flex align-items-end">
                             <button type="button" class="btn btn-primary w-100" id="findSaleGo">Search</button>
                         </div>
                     </div>
-                    <div class="table-responsive">
-                        <table id="findSaleTable" class="table table-bordered table-sm w-100">
+                    <div class="table-responsive find-sale-scroll">
+                        <table id="findSaleTable" class="table table-bordered table-sm w-100 mb-0">
                             <thead class="thead-light">
                                 <tr>
                                     <th>Sl</th>
@@ -560,7 +555,7 @@
                             </thead>
                             <tbody id="findSaleBody">
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted">Use filters above to search</td>
+                                    <td colspan="7" class="text-center text-muted">Enter Bill No and/or dates, then Search</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -613,6 +608,7 @@
 
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="{{ asset('template/assets/js/si-lazy-scroll.js') }}?v=1"></script>
     <script>
         const SESSION_YEAR_START = "{{ session('year_start') }}";
         const SESSION_YEAR_END = "{{ session('year_end') }}";
@@ -620,9 +616,11 @@
         let itemsArray = [];
         let currentSaleId = 0;
         let saleReturnSearchDT = null;
+        let saleReturnLazy = null;
         let itemPickerDT = null;
         let allItemsData = [];
         let findSaleDT = null;
+        let findSaleLazy = null;
         let saleItemsDT = null;
         let skipFindSaleReset = false;
         let reopenFindSale = true;
@@ -633,30 +631,43 @@
 
         $(document).ready(function() {
 
-            $('#partyId').select2({
-                placeholder: '-- Select Customer --',
-                allowClear: true
-            });
+            if (typeof siAjaxSelect2 === 'function') {
+                siAjaxSelect2('#partyId', {
+                    url: "{{ route('parties.search') }}",
+                    placeholder: '-- Select Customer --',
+                    partyType: 2,
+                    minLength: 0
+                });
+            } else {
+                $('#partyId').select2({
+                    placeholder: '-- Select Customer --',
+                    allowClear: true
+                });
+            }
+            if (typeof siAjaxSelect2 === 'function') {
+                siAjaxSelect2('#searchPartyId, #findPartyId', {
+                    url: "{{ route('parties.search') }}",
+                    placeholder: '-- Select Customer --',
+                    partyType: 2,
+                    minLength: 0
+                });
+            }
 
             $('input[name="saleType"]').on('change', function() {
                 if ($(this).val() === 'outside') {
                     $('#customerDiv').hide();
                     $('#cashDiv').show();
-                    $('#partyId').val('').trigger('change');
+                    $('#partyId').val(null).trigger('change');
                 } else {
                     $('#customerDiv').show();
                     $('#cashDiv').hide();
-                    $('#partyId').val('').trigger('change');
+                    $('#partyId').val(null).trigger('change');
                 }
             });
             $('#bankAccountId').select2({
                 placeholder: '-- Select Bank --',
-                allowClear: true
-            });
-            $('#findPartyId').select2({
-                placeholder: '-- All / Outside --',
                 allowClear: true,
-                dropdownParent: $('#findSaleModal')
+                width: '100%'
             });
             if (GST_TYPE == 2) {
                 $('#cgstRate, #cgstAmount, #sgstRate, #sgstAmount, #totalGst').closest('.gst-col').hide();
@@ -672,9 +683,19 @@
             $('#searchSaleReturnGo').on('click', function() {
                 const fromDate = $('#searchFromDate').val();
                 const toDate = $('#searchToDate').val();
+                const partyId = $('#searchPartyId').val() || 0;
+                const billNo = $('#searchSaleReturnNo').val().trim();
 
-                if (!fromDate || !toDate) {
-                    Swal.fire('Error', 'Please select From Date and To Date', 'error');
+                if (!partyId || partyId === '0') {
+                    Swal.fire('Error', 'Please select a Customer', 'error');
+                    return;
+                }
+                if ((!fromDate || !toDate) && !billNo) {
+                    Swal.fire('Error', 'Enter Bill No or Ref Bill No, or select From Date and To Date', 'error');
+                    return;
+                }
+                if ((fromDate && !toDate) || (!fromDate && toDate)) {
+                    Swal.fire('Error', 'Please select both From Date and To Date', 'error');
                     return;
                 }
 
@@ -682,48 +703,42 @@
                     saleReturnSearchDT.destroy();
                     saleReturnSearchDT = null;
                 }
-                $('#saleReturnSearchBody').html('<tr><td colspan="5" class="text-center">Loading...</td></tr>');
-
-                $.get("{{ url('sale-return/search') }}", {
-                    from_date: fromDate,
-                    to_date: toDate
-                }, function(data) {
-                    let html = '';
-                    if (!data.length) {
-                        html = '<tr><td colspan="5" class="text-center text-muted">No records found</td></tr>';
-                        $('#saleReturnSearchBody').html(html);
-                        return;
+                if (!saleReturnLazy) {
+                    const $wrap = $('#saleReturnSearchTable').closest('.table-responsive, .modal-body');
+                    if (!$wrap.hasClass('si-lazy-scroll-box')) {
+                        $wrap.addClass('si-lazy-scroll-box').css({ maxHeight: '360px', overflowY: 'auto' });
                     }
-                    data.forEach((row, i) => {
-                        html += `<tr>
-                            <td>${i + 1}</td>
-                            <td>${row.Invoice_No}</td>
-                            <td>${siDate.toDisplay(row.Invoice_Date)}</td>
-                            <td>${row.Net_Amt}</td>
-                            <td><button class="btn btn-sm btn-primary viewSaleReturn" data-id="${row.Sale_Id}">Edit</button></td>
-                        </tr>`;
-                    });
-                    $('#saleReturnSearchBody').html(html);
-                    saleReturnSearchDT = $('#saleReturnSearchTable').DataTable({
-                        pageLength: 10,
-                        ordering: true,
-                        sDom: 'fBtlpi',
-                        language: {
-                            search: '',
-                            searchPlaceholder: 'Search...',
-                            sLengthMenu: 'Row Per Page _MENU_ Entries',
-                            info: '_START_ - _END_ of _TOTAL_ items',
-                            paginate: {
-                                next: '<i class="isax isax-arrow-right-1"></i>',
-                                previous: '<i class="isax isax-arrow-left"></i>'
-                            }
+                    saleReturnLazy = SiLazyScroll.create({
+                        scrollEl: $wrap,
+                        tbody: '#saleReturnSearchBody',
+                        url: "{{ url('sale-return/search') }}",
+                        pageSize: 30,
+                        colSpan: 7,
+                        params: function () {
+                            return {
+                                from_date: $('#searchFromDate').val(),
+                                to_date: $('#searchToDate').val(),
+                                party_id: $('#searchPartyId').val() || 0,
+                                bill_no: $('#searchSaleReturnNo').val().trim()
+                            };
+                        },
+                        renderRow: function (row, i) {
+                            return `<tr>
+                                <td>${i + 1}</td>
+                                <td>${row.Invoice_No ?? ''}</td>
+                                <td>${row.Ref_No ?? ''}</td>
+                                <td>${row.Party_Name ?? ''}</td>
+                                <td>${siDate.toDisplay(row.Invoice_Date)}</td>
+                                <td>${row.Net_Amt ?? ''}</td>
+                                <td><button class="btn btn-sm btn-primary viewSaleReturn" data-id="${row.Sale_Id}">Edit</button></td>
+                            </tr>`;
+                        },
+                        onError: function () {
+                            Swal.fire('Error', 'Failed to load data', 'error');
                         }
                     });
-                    $('#searchFromDate, #searchToDate').val('');
-                }).fail(function() {
-                    Swal.fire('Error', 'Failed to load data', 'error');
-                    $('#saleReturnSearchBody').html('<tr><td colspan="5" class="text-center text-danger">Failed to load</td></tr>');
-                });
+                }
+                saleReturnLazy.resetAndLoad();
             });
 
             // View Sale Return Details
@@ -736,7 +751,11 @@
 
                     // Fill header
                     $('#saleDate').val(data.Invoice_Date ? data.Invoice_Date.substring(0, 10) : '');
-                    $('#partyId').val(data.Party_Id).trigger('change');
+                    if (data.Party_Id && typeof siSetAjaxSelect2Value === 'function') {
+                        siSetAjaxSelect2Value('#partyId', data.Party_Id, data.Party_Name || String(data.Party_Id));
+                    } else {
+                        $('#partyId').val(data.Party_Id || null).trigger('change');
+                    }
                     $('#saleNo').val(data.Ref_No);
 
                     const mode = String(data.Trans_Mode || '1');
@@ -796,86 +815,90 @@
                     saleReturnSearchDT.destroy();
                     saleReturnSearchDT = null;
                 }
-                $('#saleReturnSearchBody').html('<tr><td colspan="5" class="text-center text-muted">Use filters above to search</td></tr>');
-                $('#searchFromDate, #searchToDate').val('');
+                $('#saleReturnSearchBody').html('<tr><td colspan="7" class="text-center text-muted">Use filters above to search</td></tr>');
+                $('#searchFromDate, #searchToDate, #searchSaleReturnNo').val('');
+                $('#searchPartyId').val(null).trigger('change');
             });
 
             $('#findSaleBtn').on('click', function() {
-                const party = $('#partyId').val();
-                if (party) {
-                    $('#findPartyId').val(party).trigger('change');
-                }
                 $('#findSaleModal').modal('show');
+                setTimeout(function() { $('#findBillNo').trigger('focus'); }, 250);
+            });
+
+            $('#findBillNo').on('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    $('#findSaleGo').trigger('click');
+                }
+            });
+
+            findSaleLazy = SiLazyScroll.create({
+                scrollEl: '.find-sale-scroll',
+                tbody: '#findSaleBody',
+                url: "{{ url('sale-return/find-sale') }}",
+                pageSize: 30,
+                colSpan: 7,
+                params: function () {
+                    return {
+                        from_date: $('#findFromDate').val(),
+                        to_date: $('#findToDate').val(),
+                        bill_no: String($('#findBillNo').val() || '').trim(),
+                        party_id: $('#findPartyId').val() || 0
+                    };
+                },
+                renderRow: function (row, i) {
+                    const party = String(row.Party_Name || 'Cash').replace(/"/g, '&quot;');
+                    return `<tr>
+                        <td>${i + 1}</td>
+                        <td>${row.Invoice_No ?? ''}</td>
+                        <td>${row.Ref_No ?? ''}</td>
+                        <td>${siDate.toDisplay(row.Invoice_Date)}</td>
+                        <td>${row.Party_Name ?? 'Cash'}</td>
+                        <td>${row.Net_Amt ?? ''}</td>
+                        <td><button type="button" class="btn btn-sm btn-primary viewSaleItems"
+                            data-id="${row.Sale_Id}"
+                            data-party="${party}">Details</button></td>
+                    </tr>`;
+                },
+                emptyHtml: '<tr><td colspan="7" class="text-center text-muted">No records found</td></tr>',
+                onError: function (xhr) {
+                    Swal.fire('Error', xhr.responseJSON?.message || 'Failed to load sales', 'error');
+                }
             });
 
             $('#findSaleGo').on('click', function() {
                 const fromDate = $('#findFromDate').val();
                 const toDate = $('#findToDate').val();
+                const billNo = String($('#findBillNo').val() || '').trim();
                 const partyId = $('#findPartyId').val() || 0;
-                if (!fromDate || !toDate) {
-                    Swal.fire('Error', 'Please select From Date and To Date', 'error');
+                if (!partyId || partyId === '0') {
+                    Swal.fire('Error', 'Please select a Customer', 'error');
+                    return;
+                }
+                if (!billNo && (!fromDate || !toDate)) {
+                    Swal.fire('Error', 'Enter Bill No or Ref Bill No, or select From Date and To Date', 'error');
+                    return;
+                }
+                if ((fromDate && !toDate) || (!fromDate && toDate)) {
+                    Swal.fire('Error', 'Please select both From Date and To Date', 'error');
                     return;
                 }
                 if (findSaleDT) {
                     findSaleDT.destroy();
                     findSaleDT = null;
                 }
-                $('#findSaleBody').html(
-                    '<tr><td colspan="7" class="text-center">Loading...</td></tr>');
-                $.get("{{ url('sale-return/find-sale') }}", {
-                    from_date: fromDate,
-                    to_date: toDate,
-                    party_id: partyId
-                }, function(data) {
-                    let html = '';
-                    if (!data.length) {
-                        $('#findSaleBody').html(
-                            '<tr><td colspan="7" class="text-center text-muted">No records found</td></tr>'
-                        );
-                        return;
-                    }
-                    data.forEach((row, i) => {
-                        html += `<tr>
-                            <td>${i + 1}</td>
-                            <td>${row.Invoice_No ?? ''}</td>
-                            <td>${row.Ref_No ?? ''}</td>
-                            <td>${siDate.toDisplay(row.Invoice_Date)}</td>
-                            <td>${row.Party_Name ?? 'Outside / Cash'}</td>
-                            <td>${row.Net_Amt ?? ''}</td>
-                            <td><button type="button" class="btn btn-sm btn-primary viewSaleItems" data-id="${row.Sale_Id}">Details</button></td>
-                        </tr>`;
-                    });
-                    $('#findSaleBody').html(html);
-                    findSaleDT = $('#findSaleTable').DataTable({
-                        pageLength: 10,
-                        ordering: true,
-                        sDom: 'fBtlpi',
-                        language: {
-                            search: '',
-                            searchPlaceholder: 'Search...',
-                            sLengthMenu: 'Row Per Page _MENU_ Entries',
-                            info: '_START_ - _END_ of _TOTAL_ items',
-                            paginate: {
-                                next: '<i class="isax isax-arrow-right-1"></i>',
-                                previous: '<i class="isax isax-arrow-left"></i>'
-                            }
-                        }
-                    });
-                }).fail(function() {
-                    Swal.fire('Error', 'Failed to load sales', 'error');
-                    $('#findSaleBody').html(
-                        '<tr><td colspan="7" class="text-center text-danger">Failed to load</td></tr>'
-                    );
-                });
+                findSaleLazy.resetAndLoad();
             });
 
             $(document).on('click', '.viewSaleItems', function() {
                 const saleId = $(this).data('id');
+                const partyLabel = $(this).attr('data-party') || '';
                 reopenFindSale = true;
                 $.get("{{ url('sale-return/find-sale-details') }}/" + saleId, function(data) {
                     findSaleHeader = {
                         Sale_Id: data.Sale_Id,
                         Party_Id: data.Party_Id,
+                        Party_Name: data.Party_Name || partyLabel,
                         Invoice_No: data.Invoice_No,
                         Ref_No: data.Ref_No,
                         Invoice_Date: data.Invoice_Date
@@ -930,10 +953,11 @@
                     findSaleDT = null;
                 }
                 $('#findSaleBody').html(
-                    '<tr><td colspan="7" class="text-center text-muted">Use filters above to search</td></tr>'
+                    '<tr><td colspan="7" class="text-center text-muted">Enter Bill No and/or dates, then Search</td></tr>'
                 );
-                $('#findFromDate, #findToDate').val('');
-                $('#findPartyId').val('0').trigger('change');
+                $('#findFromDate, #findToDate, #findBillNo').val('');
+                $('#findPartyId').val(null).trigger('change');
+                $('.bootstrap-datetimepicker-widget').hide();
             });
 
             $('#saleItemsModal').on('hidden.bs.modal', function() {
@@ -967,11 +991,26 @@
                 return null;
             }
 
+            function filterBarcodePickerRows() {
+                const needle = String($('#barcodePickerSearch').val() || '').trim().toLowerCase();
+                const $rows = $('#barcodePickerTable tbody tr.barcode-pick-row');
+                let visible = 0;
+                $rows.each(function() {
+                    const hay = String($(this).attr('data-search') || '').toLowerCase();
+                    const show = !needle || hay.indexOf(needle) !== -1;
+                    $(this).toggle(show);
+                    if (show) visible++;
+                });
+                $('#barcodePickerEmpty').toggleClass('d-none', !$rows.length || visible > 0);
+            }
+
             function openBarcodePicker(payload) {
                 const item = payload.item || {};
                 const name = item.Prod_ShortNm || item.Prod_Name || '';
                 const rows = payload.barcodes || [];
                 $('#barcodePickerTitle').text(name ? ('Select Barcode — ' + name) : 'Select Barcode');
+                $('#barcodePickerSearch').val('');
+                $('#barcodePickerEmpty').addClass('d-none');
                 const $body = $('#barcodePickerTable tbody').empty();
                 if (!rows.length) {
                     $body.append(
@@ -979,25 +1018,41 @@
                     );
                 } else {
                     rows.forEach(function(row, i) {
+                        const barcode = String(row.Barcode || '');
                         const mrp = parseFloat(row.MRP) || 0;
                         const rate = parseFloat(row.Rate) || mrp;
                         const qty = parseFloat(row.Returnable_Qty);
+                        const qtyText = isNaN(qty) ? '' : qty;
+                        const searchText = [i + 1, barcode, name, mrp.toFixed(2), qtyText].join(' ');
                         const $tr = $('<tr class="barcode-pick-row"></tr>');
-                        $tr.attr('data-barcode', row.Barcode);
+                        $tr.attr('data-barcode', barcode);
                         $tr.attr('data-mrp', mrp);
                         $tr.attr('data-rate', rate);
-                        $tr.attr('data-qty', isNaN(qty) ? '' : qty);
+                        $tr.attr('data-qty', qtyText);
+                        $tr.attr('data-search', searchText);
                         $tr.append($('<td></td>').text(i + 1));
-                        $tr.append($('<td></td>').text(row.Barcode));
+                        $tr.append($('<td></td>').text(barcode));
                         $tr.append($('<td></td>').text(name));
                         $tr.append($('<td class="text-end"></td>').text(mrp.toFixed(2)));
-                        $tr.append($('<td class="text-end"></td>').text(isNaN(qty) ? '' : qty));
+                        $tr.append($('<td class="text-end"></td>').text(qtyText));
                         $body.append($tr);
                     });
                 }
                 $('#barcodePickerModal').data('item', item).data('hsn', payload.hsn || '');
                 $('#barcodePickerModal').modal('show');
+                setTimeout(function() { $('#barcodePickerSearch').trigger('focus'); }, 250);
             }
+
+            $('#barcodePickerSearchBtn').on('click', filterBarcodePickerRows);
+            $('#barcodePickerClearBtn').on('click', function() {
+                $('#barcodePickerSearch').val('');
+                filterBarcodePickerRows();
+                $('#barcodePickerSearch').trigger('focus');
+            });
+            $('#barcodePickerSearch').on('keydown', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); filterBarcodePickerRows(); }
+            });
+            $('#barcodePickerSearch').on('input', filterBarcodePickerRows);
 
             function selectProductForReturn(prodId, hsn, saleId) {
                 if (!prodId || !ensureSaleDate()) return;
@@ -1578,12 +1633,16 @@
                 $('#saleInternal').prop('checked', true);
                 $('#customerDiv').show();
                 $('#cashDiv').hide();
-                $('#partyId').val(header.Party_Id).trigger('change');
+                if (typeof siSetAjaxSelect2Value === 'function') {
+                    siSetAjaxSelect2Value('#partyId', header.Party_Id, header.Party_Name || String(header.Party_Id));
+                } else {
+                    $('#partyId').val(header.Party_Id).trigger('change');
+                }
             } else if (header) {
                 $('#saleOutside').prop('checked', true);
                 $('#customerDiv').hide();
                 $('#cashDiv').show();
-                $('#partyId').val('').trigger('change');
+                $('#partyId').val(null).trigger('change');
             }
             if (header && !$('#saleNo').val()) {
                 $('#saleNo').val(header.Invoice_No || header.Ref_No || '');
@@ -1863,12 +1922,16 @@
                 $('#saleInternal').prop('checked', true);
                 $('#customerDiv').show();
                 $('#cashDiv').hide();
-                $('#partyId').val(header.Party_Id).trigger('change');
+                if (typeof siSetAjaxSelect2Value === 'function') {
+                    siSetAjaxSelect2Value('#partyId', header.Party_Id, header.Party_Name || String(header.Party_Id));
+                } else {
+                    $('#partyId').val(header.Party_Id).trigger('change');
+                }
             } else if (header) {
                 $('#saleOutside').prop('checked', true);
                 $('#customerDiv').hide();
                 $('#cashDiv').show();
-                $('#partyId').val('').trigger('change');
+                $('#partyId').val(null).trigger('change');
             }
             if (header && !$('#saleNo').val()) {
                 $('#saleNo').val(header.Invoice_No || header.Ref_No || '');

@@ -204,7 +204,7 @@
 
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <script src="{{ asset('template/assets/js/address-master-form.js') }}?v=3"></script>
+    <script src="{{ asset('template/assets/js/address-master-form.js') }}?v=5"></script>
     <script>
         const ADM_FEES  = {{ (float) ($shareConfig->adm_fees  ?? 0) }};
         const RATE_SHARE = {{ (float) ($shareConfig->rate_share ?? 0) }};
@@ -241,7 +241,7 @@
                     $(this).prop('disabled', true).text('Updating...');
                     const id = $('#edit_mem_id').val();
                     $.ajax({
-                        url: `/member-share/${id}`,
+                        url: (typeof siApiUrl === 'function' ? siApiUrl('member-share/' + id) : ("{{ url('member-share') }}/" + id)),
                         type: 'POST',
                         data: Object.assign({
                             _token:    '{{ csrf_token() }}',
@@ -285,7 +285,7 @@
                     if (!validateForm()) return;
                     $(this).prop('disabled', true).text('Saving...');
                     $.ajax({
-                        url: '/member-share/save',
+                        url: (typeof siApiUrl === 'function' ? siApiUrl('member-share/save') : "{{ url('member-share/save') }}"),
                         type: 'POST',
                         data: Object.assign({
                             mem_type:    $('#mem_type').val(),

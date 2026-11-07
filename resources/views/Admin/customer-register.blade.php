@@ -1,6 +1,8 @@
 @extends('Dashboard.Layouts.layout')
 
 @push('style')
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="{{ asset('template/assets/css/select2-custom.css') }}" rel="stylesheet" />
     <style>
         .party-ledger-banner h5 { font-size: 1.05rem; }
         .party-ledger-table th,
@@ -19,13 +21,11 @@
                         <div class="col-md-3">
                             <label class="form-label">From Date<span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="frmDate"
-                                min="{{ $year_start }}" max="{{ $year_end }}"
                                 value="{{ $year_start }}">
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">To Date<span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="toDate"
-                                min="{{ $year_start }}" max="{{ $year_end }}"
                                 value="{{ min($year_end, date('Y-m-d')) }}">
                         </div>
                         <div class="col-md-4 d-flex align-items-end">
@@ -43,13 +43,8 @@
                         </div>
                         <div class="col-md-4 ledger-party-filter d-none">
                             <label class="form-label">Customer<span class="text-danger">*</span></label>
-                            <select class="form-select" id="partyId">
+                            <select class="form-select" id="partyId" data-si-ajax="parties" data-party-type="2">
                                 <option value="">Select Customer</option>
-                                @foreach ($parties as $party)
-                                    <option value="{{ $party->Party_Id }}" data-code="{{ $party->Party_Code }}" data-name="{{ $party->Party_Name }}">
-                                        {{ $party->Party_Name }}-{{ $party->Party_Code }}
-                                    </option>
-                                @endforeach
                             </select>
                         </div>
                         <div class="col-md-3 d-flex align-items-end gap-2">
@@ -58,6 +53,9 @@
                             </button>
                             <button type="button" class="btn btn-outline-secondary" id="printBtn" disabled>
                                 <i class="fas fa-print me-1"></i> Print
+                            </button>
+                            <button type="button" class="btn btn-outline-success" id="downloadBtn" disabled>
+                                <i class="fas fa-download me-1"></i> Download
                             </button>
                         </div>
                     </div>
@@ -89,6 +87,7 @@
 @endsection
 
 @push('scripts')
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     @php
         $reportCfg = [
             'slug' => 'customer-register',

@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 
 class Sales extends Controller
 {
@@ -21,11 +22,7 @@ class Sales extends Controller
         $branchId = session('branch_id');
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::connection('coops')->reconnect();
-        $pdo  = DB::connection('coops')->getPdo();
-        $stmt = $pdo->prepare('CALL USP_GET_AGENT_LIST(?, ?, ?, ?)');
-        $stmt->execute([$branchId, '', 1, 0]);
-        $agents = $stmt->fetchAll(\PDO::FETCH_OBJ);
-        $stmt->closeCursor();
+        $agents = [];
         $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
         return view('Admin.agent-indent', compact('agents', 'categories'))
             ->with('pageTitle', 'Agent Indent');
@@ -35,13 +32,11 @@ class Sales extends Controller
     {
         try {
             $result = $this->resolveProductInfo($request->input('barcode'), $request->input('date'));
-            Log::channel('trading')->info('Product Info Result: ', ['data' => $result]);
 
             if (!empty($result)) {
-                $item = $this->attachIndentRates($result[0], (int) $result[0]->Prod_Id, (string) $request->input('date'));
                 return response()->json([
                     'success' => true,
-                    'data' => $item
+                    'data' => $result[0]
                 ]);
             }
             return response()->json([
@@ -73,7 +68,6 @@ class Sales extends Controller
                 'CALL USP_GET_PENDING_INDENT(?, ?)',
                 [$agentId, $indentTypeId]
             );
-            Log::channel('trading')->info('Pending Indent Result: ' . json_encode($result));
 
             return response()->json([
                 'success' => true,
@@ -269,11 +263,7 @@ class Sales extends Controller
         $branchId = session('branch_id');
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::connection('coops')->reconnect();
-        $pdo  = DB::connection('coops')->getPdo();
-        $stmt = $pdo->prepare('CALL USP_GET_AGENT_LIST(?, ?, ?, ?)');
-        $stmt->execute([$branchId, '', 1, 0]);
-        $agents = $stmt->fetchAll(\PDO::FETCH_OBJ);
-        $stmt->closeCursor();
+        $agents = [];
         $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
         return view('Admin.agent-return', compact('agents', 'categories'))
             ->with('pageTitle', 'Agent Return');
@@ -366,6 +356,16 @@ class Sales extends Controller
         return (float) ($row->Avil_Qnty ?? 0);
     }
 
+    private function resolveAgentProductBarcode(int $agentId, int $prodId): ?string
+    {
+        $row = DB::connection('coops')->selectOne(
+            'CALL USP_GET_AGENT_ISSUE_BARCODE(?, ?)',
+            [$agentId, $prodId]
+        );
+        $barcode = trim((string) ($row->Barcode ?? ''));
+        return ($barcode !== '' && ctype_digit($barcode)) ? $barcode : null;
+    }
+
     public function storeAgentReturn(Request $request)
     {
         $request->validate([
@@ -377,27 +377,50 @@ class Sales extends Controller
             'items.*.unit_id' => 'required|integer',
             'items.*.quantity' => 'required|numeric|min:0.01',
             'items.*.mrp' => 'nullable|numeric|min:0',
+            'items.*.barcode' => 'nullable|string|max:30',
             'indent_id' => 'nullable|integer',
         ]);
 
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
+
+        $date = $request->input('indent_date');
+        $agentId = (int) $request->input('agent_id');
+        $returnType = (int) $request->input('return_type');
+        $indentId = (int) $request->input('indent_id', 0);
+
+        $items = [];
+        foreach ($request->input('items', []) as $item) {
+            $barcode = trim((string) ($item['barcode'] ?? ''));
+            if ($barcode === '' || !ctype_digit($barcode)) {
+                $resolved = $this->resolveAgentProductBarcode(
+                    $agentId,
+                    (int) ($item['prod_id'] ?? 0)
+                );
+                if ($resolved) {
+                    $item['barcode'] = $resolved;
+                    $barcode = $resolved;
+                }
+            }
+            if ($barcode === '' || !ctype_digit($barcode)) {
+                return response()->json([
+                    'error' => 'Select a stock barcode for each return item before saving.',
+                ], 422);
+            }
+            $items[] = $item;
+        }
+
         $conn = DB::connection('coops');
         $conn->beginTransaction();
 
         try {
-            $date = $request->input('indent_date');
-            $agentId = (int) $request->input('agent_id');
-            $returnType = (int) $request->input('return_type');
-            $indentId = (int) $request->input('indent_id', 0);
-
             if ($returnType === 1 && $indentId <= 0) {
                 $conn->rollBack();
                 return response()->json(['error' => 'Please attach a return requisition first.'], 400);
             }
 
             $usedQty = [];
-            foreach ($request->items as $item) {
+            foreach ($items as $item) {
                 $prodId = (int) $item['prod_id'];
                 $already = $usedQty[$prodId] ?? 0;
                 $avail = $this->agentAvailableQty($agentId, $prodId, $date) - $already;
@@ -421,7 +444,7 @@ class Sales extends Controller
                 mrp DECIMAL(10,2) DEFAULT 0
             )');
 
-            foreach ($request->items as $item) {
+            foreach ($items as $item) {
                 $conn->insert(
                     'INSERT INTO tempitem (indent_id, item_id, prod_id, unit_id, qnty, mrp) VALUES (?, ?, ?, ?, ?, ?)',
                     [
@@ -447,6 +470,33 @@ class Sales extends Controller
                 return response()->json(['error' => $result[0]->Message ?? 'Save failed'], 400);
             }
 
+            foreach (array_reverse($items) as $item) {
+                $qty = round((float) ($item['quantity'] ?? 0), 2);
+                $barcode = trim((string) ($item['barcode'] ?? ''));
+                if ($qty <= 0 || $barcode === '' || !ctype_digit($barcode)) {
+                    continue;
+                }
+                $conn->statement(
+                    'UPDATE trns_stockinout
+                     SET Barcode = ?
+                     WHERE Stock_Type = 6
+                       AND Prod_Id = ?
+                       AND InOut_Date = ?
+                       AND Quantity = ?
+                       AND ROUND(IFNULL(MRP, 0), 2) = ?
+                       AND IFNULL(Barcode, 0) = 0
+                     ORDER BY Stock_Id DESC
+                     LIMIT 1',
+                    [
+                        $barcode,
+                        (int) $item['prod_id'],
+                        $date,
+                        $qty,
+                        round((float) ($item['mrp'] ?? 0), 2),
+                    ]
+                );
+            }
+
             $conn->commit();
             return response()->json(['message' => $result[0]->Message ?? 'Agent return saved successfully']);
         } catch (\Exception $e) {
@@ -461,9 +511,9 @@ class Sales extends Controller
 
     public function indexCounterSale()
     {
-        $branchId = session('branch_id');
         Config::set('database.connections.coops.database', session('org_schema'));
-        $customers  = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [2, $branchId, 0]);
+        // Customers load via AJAX Select2 (parties.search) — list is too large to embed.
+        $customers  = [];
         $banks      = DB::connection('coops')->select('CALL USP_GET_BANK_LEDGER()');
         $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
         $this->organisationAddress();
@@ -505,7 +555,7 @@ class Sales extends Controller
             $result = DB::connection('coops')->select('CALL USP_GET_PROD_INFO_BY_ITEM(?, ?)', [$prodId, $date]);
             if (!empty($result)) {
                 if ($request->routeIs('agent-indent.item-info')) {
-                    return response()->json($this->attachIndentRates($result[0], $prodId, (string) $date));
+                    return response()->json($result[0]);
                 }
                 return response()->json($this->attachSaleRates($result[0], $prodId));
             }
@@ -611,67 +661,74 @@ class Sales extends Controller
     }
 
     /**
+     * Barcodes previously issued to an agent (for Agent Return picker).
+     */
+    /**
+     * Item picker for Agent Return — only products with returnable stock
+     * for the selected agent as of the return date.
+     */
+    public function getAgentReturnItems(Request $request)
+    {
+        $agentId = (int) $request->input('agent_id', 0);
+        $date = (string) $request->input('sale_date', '');
+        if ($agentId <= 0 || $date === '') {
+            return response()->json(['error' => 'Select agent and return date first'], 400);
+        }
+
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+
+        $catId = (int) $request->input('cat_id', 0);
+        $subCatId = (int) $request->input('sub_cat_id', 0);
+        $code = trim((string) ($request->input('code') ?? ''));
+        $like = $code === '' ? '' : ('%' . str_replace(['%', '_'], ['\\%', '\\_'], $code) . '%');
+
+        $rows = DB::connection('coops')->select(
+            'CALL USP_GET_AGENT_RETURN_ITEMS(?, ?, ?, ?, ?, ?)',
+            [
+                $agentId,
+                $date,
+                $catId,
+                $subCatId,
+                $code,
+                $like === '' ? '' : $like,
+            ]
+        );
+
+        return response()->json($rows);
+    }
+
+    public function getAgentReturnBarcodes(Request $request)
+    {
+        $agentId = (int) $request->input('agent_id', 0);
+        $prodId = (int) $request->input('prod_id', 0);
+        $date = (string) $request->input('sale_date', '');
+        if ($agentId <= 0 || $prodId <= 0 || $date === '') {
+            return response()->json(['error' => 'Agent, product and date are required'], 400);
+        }
+
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+
+        $rows = DB::connection('coops')->select(
+            'CALL USP_GET_AGENT_RETURN_BARCODES(?, ?, ?)',
+            [$agentId, $prodId, $date]
+        );
+
+        return response()->json($rows);
+    }
+
+    /**
      * Office stock left on each barcode. A movement saved without a barcode
      * is applied to that MRP when only one barcode exists for it, so the
      * quantity matches the indent MRP stock.
      */
     private function officeBarcodeStock(int $prodId, string $date, bool $onlyInStock): array
     {
-        $signed = "
-            CASE
-                WHEN s.Stock_Type IN (1, 2, 6) THEN s.Quantity
-                WHEN s.Stock_Type = 8 AND NOT EXISTS (
-                    SELECT 1 FROM trans_agent_stock a WHERE a.TrnsStock_Id = s.Stock_Id
-                ) THEN s.Quantity
-                WHEN s.Stock_Type IN (3, 4, 7, 9) THEN -s.Quantity
-                ELSE 0
-            END
-        ";
-
-        $rows = DB::connection('coops')->select("
-            SELECT
-                b.Barcode,
-                b.MRP,
-                (b.Avil_Qnty + CASE WHEN c.Barcode_Count = 1 THEN IFNULL(u.Unbar_Qnty, 0) ELSE 0 END) AS Avil_Qnty
-            FROM (
-                SELECT
-                    s.Barcode AS Barcode,
-                    CAST(IFNULL(MAX(CASE WHEN s.Stock_Type IN (1, 2) THEN s.MRP END), MAX(s.MRP)) AS DECIMAL(10,2)) AS MRP,
-                    IFNULL(SUM($signed), 0) AS Avil_Qnty,
-                    MAX(CASE WHEN s.Stock_Type = 2 THEN s.Stock_Id END) AS Purchase_Id,
-                    MAX(s.Stock_Id) AS Last_Id
-                FROM trns_stockinout s
-                WHERE s.Prod_Id = ?
-                  AND s.InOut_Date <= ?
-                  AND IFNULL(s.Barcode, 0) <> 0
-                GROUP BY s.Barcode
-            ) b
-            LEFT JOIN (
-                SELECT MRP, COUNT(*) AS Barcode_Count
-                FROM (
-                    SELECT
-                        s.Barcode,
-                        CAST(IFNULL(MAX(CASE WHEN s.Stock_Type IN (1, 2) THEN s.MRP END), MAX(s.MRP)) AS DECIMAL(10,2)) AS MRP
-                    FROM trns_stockinout s
-                    WHERE s.Prod_Id = ?
-                      AND s.InOut_Date <= ?
-                      AND IFNULL(s.Barcode, 0) <> 0
-                    GROUP BY s.Barcode
-                ) m
-                GROUP BY MRP
-            ) c ON c.MRP = b.MRP
-            LEFT JOIN (
-                SELECT
-                    CAST(IFNULL(s.MRP, 0) AS DECIMAL(10,2)) AS MRP,
-                    IFNULL(SUM($signed), 0) AS Unbar_Qnty
-                FROM trns_stockinout s
-                WHERE s.Prod_Id = ?
-                  AND s.InOut_Date <= ?
-                  AND IFNULL(s.Barcode, 0) = 0
-                GROUP BY CAST(IFNULL(s.MRP, 0) AS DECIMAL(10,2))
-            ) u ON u.MRP = b.MRP
-            ORDER BY b.Purchase_Id DESC, b.Last_Id DESC
-        ", [$prodId, $date, $prodId, $date, $prodId, $date]);
+        $rows = DB::connection('coops')->select(
+            'CALL USP_GET_OFFICE_BARCODE_STOCK(?, ?, ?, ?)',
+            [$prodId, $date, 0, 0]
+        );
 
         $this->applyUnbarcodedPurchaseReturns($rows, $prodId, $date);
 
@@ -694,43 +751,10 @@ class Sales extends Controller
             return [];
         }
 
-        $rows = DB::connection('coops')->select("
-            SELECT
-                s.Barcode AS Barcode,
-                MAX(s.Prod_Id) AS Prod_Id,
-                CAST(IFNULL(MAX(CASE WHEN s.Stock_Type = 3 THEN s.MRP END), MAX(s.MRP)) AS DECIMAL(10,2)) AS MRP,
-                CAST(IFNULL(MAX(CASE WHEN s.Stock_Type = 3 THEN s.Rate END), 0) AS DECIMAL(10,2)) AS Rate,
-                IFNULL(SUM(CASE WHEN s.Stock_Type = 3 THEN s.Quantity ELSE 0 END), 0) AS Sold_Qty,
-                IFNULL(SUM(CASE
-                    WHEN s.Stock_Type = 8
-                     AND NOT EXISTS (
-                        SELECT 1 FROM trans_agent_stock a WHERE a.TrnsStock_Id = s.Stock_Id
-                     )
-                     AND (? = 0 OR IFNULL(s.Type_Id, 0) <> ?)
-                    THEN s.Quantity ELSE 0 END), 0) AS Returned_Qty
-            FROM trns_stockinout s
-            WHERE s.InOut_Date <= ?
-              AND IFNULL(s.Barcode, 0) <> 0
-              AND (? = 0 OR s.Prod_Id = ?)
-              AND (? = '' OR s.Barcode = ?)
-              AND (
-                    s.Stock_Type = 8
-                    OR (s.Stock_Type = 3 AND (? = 0 OR s.Type_Id = ?))
-              )
-            GROUP BY s.Barcode
-            HAVING Sold_Qty > 0
-            ORDER BY s.Barcode
-        ", [
-            $excludeReturnId,
-            $excludeReturnId,
-            $date,
-            $prodId,
-            $prodId,
-            $barcode,
-            $barcode,
-            $saleId,
-            $saleId,
-        ]);
+        $rows = DB::connection('coops')->select(
+            'CALL USP_GET_SOLD_BARCODES_FOR_RETURN(?, ?, ?, ?, ?)',
+            [$excludeReturnId, $date, $prodId, $barcode, $saleId]
+        );
 
         foreach ($rows as $row) {
             $row->Returnable_Qty = max(0, round((float) $row->Sold_Qty - (float) $row->Returned_Qty, 2));
@@ -762,23 +786,10 @@ class Sales extends Controller
             }
             $mrp = round((float) ($item['sale_mrp'] ?? 0), 2);
             if ($mrp <= 0) {
-                $sold = $conn->selectOne(
-                    'SELECT IFNULL(MAX(MRP), 0) AS MRP FROM trns_stockinout WHERE Barcode = ? AND Stock_Type = 3',
-                    [$barcode]
-                );
+                $sold = $conn->selectOne('CALL USP_GET_BARCODE_SALE_MRP(?)', [$barcode]);
                 $mrp = round((float) ($sold->MRP ?? 0), 2);
             }
-            $conn->statement("
-                UPDATE trns_stockinout
-                SET Barcode = ?,
-                    MRP = CASE WHEN IFNULL(MRP, 0) = 0 THEN ? ELSE MRP END
-                WHERE Stock_Type = 8
-                  AND Prod_Id = ?
-                  AND IFNULL(Barcode, 0) = 0
-                  AND InOut_Date = ?
-                ORDER BY Stock_Id ASC
-                LIMIT 1
-            ", [$barcode, $mrp, $prodId, $date]);
+            $conn->select('CALL USP_ASSIGN_SALE_RETURN_BARCODE(?, ?, ?, ?)', [$barcode, $mrp, $prodId, $date]);
         }
     }
 
@@ -792,17 +803,10 @@ class Sales extends Controller
             return;
         }
 
-        $returns = DB::connection('coops')->select("
-            SELECT
-                CAST(IFNULL(s.MRP, 0) AS DECIMAL(10,2)) AS MRP,
-                IFNULL(SUM(s.Quantity), 0) AS Qty
-            FROM trns_stockinout s
-            WHERE s.Prod_Id = ?
-              AND s.InOut_Date <= ?
-              AND s.Stock_Type = 7
-              AND IFNULL(s.Barcode, 0) = 0
-            GROUP BY CAST(IFNULL(s.MRP, 0) AS DECIMAL(10,2))
-        ", [$prodId, $date]);
+        $returns = DB::connection('coops')->select(
+            'CALL USP_GET_OFFICE_UNBARCODED_PURCHASE_RETURNS(?, ?)',
+            [$prodId, $date]
+        );
 
         $countByMrp = [];
         foreach ($rows as $row) {
@@ -881,25 +885,70 @@ class Sales extends Controller
     public function countersalesearch(Request $request)
     {
         try {
-            $fromDate = $request->input('from_date');
-            $toDate = $request->input('to_date');
-
-            if (!$fromDate || !$toDate) {
-                return response()->json(['error' => 'From Date and To Date are required'], 400);
+            $filters = $this->saleSearchFilters($request, false);
+            if ($filters instanceof \Illuminate\Http\JsonResponse) {
+                return $filters;
             }
 
             Config::set('database.connections.coops.database', session('org_schema'));
+            $limit = min(100, max(10, (int) $request->input('limit', 30)));
+            $offset = max(0, (int) $request->input('offset', 0));
 
-            $sales = DB::connection('coops')->select('CALL USP_SEARCH_SALE(?, ?)', [
-                $fromDate,
-                $toDate
+            $sales = DB::connection('coops')->select('CALL USP_SEARCH_SALE_PAGE(?, ?, ?, ?, ?, ?)', [
+                $filters['from_date'],
+                $filters['to_date'],
+                $filters['party_id'],
+                $filters['bill_like'],
+                $limit,
+                $offset,
             ]);
+            $total = (int) ($sales[0]->Total_Count ?? count($sales));
 
-            return response()->json($sales);
+            return response()->json([
+                'results' => $sales,
+                'recordsTotal' => $total,
+                'has_more' => ($offset + count($sales)) < $total,
+            ]);
         } catch (\Exception $e) {
             Log::error('Counter Sale Search Error: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to search sales'], 500);
         }
+    }
+
+    private function saleSearchFilters(Request $request, bool $partyRequired): array|\Illuminate\Http\JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'from_date' => 'nullable|date_format:Y-m-d',
+            'to_date' => 'nullable|date_format:Y-m-d',
+            'party_id' => 'nullable|integer|min:0',
+            'bill_no' => 'nullable|string|max:120',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['error' => $validator->errors()->first()], 422);
+        }
+        $validated = $validator->validated();
+
+        $fromDate = $validated['from_date'] ?? null;
+        $toDate = $validated['to_date'] ?? null;
+        $partyId = (int) ($validated['party_id'] ?? 0);
+        $billNo = trim($validated['bill_no'] ?? '');
+
+        if (($partyRequired || $billNo !== '') && $partyId <= 0) {
+            return response()->json(['error' => 'Please select a Customer'], 422);
+        }
+        if (($fromDate === null) !== ($toDate === null)) {
+            return response()->json(['error' => 'Please select both From Date and To Date'], 422);
+        }
+        if ($billNo === '' && ($fromDate === null || $toDate === null)) {
+            return response()->json(['error' => 'Enter Bill No or Ref Bill No, or select From Date and To Date'], 422);
+        }
+
+        return [
+            'from_date' => $fromDate,
+            'to_date' => $toDate,
+            'party_id' => $partyId,
+            'bill_like' => $billNo === '' ? null : '%' . str_replace(['%', '_'], ['\\%', '\\_'], $billNo) . '%',
+        ];
     }
 
 
@@ -1106,60 +1155,7 @@ class Sales extends Controller
      */
     private function saleLineItems(int $tradingId): array
     {
-        $rows = DB::connection('coops')->select("
-            SELECT
-                p.Prod_Id,
-                i.Cate_Id AS Cat_Id,
-                i.Prod_ShortNm AS Prod_Name,
-                i.Prod_Code,
-                p.Gst_Code AS hsn_code,
-                p.Item_Qty AS qnty,
-                p.Item_Rate,
-                p.Unit_Id,
-                UDF_GET_UNIT_NAME(p.Unit_Id) AS Unit_Name,
-                p.Item_Total,
-                p.MRP,
-                p.Disc_Prcnt,
-                p.Disc_Amt,
-                p.Taxable_Amt,
-                p.SGST_Prcnt,
-                p.CGST_Prcnt,
-                p.SGST_Amt,
-                p.CGST_Amt,
-                p.Net_Amt,
-                s.Pack_Date,
-                s.Barcode
-            FROM (
-                SELECT tp.*,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY tp.Prod_Id, tp.Item_Qty, ROUND(tp.Item_Rate, 2), ROUND(IFNULL(tp.MRP, 0), 2)
-                           ORDER BY tp.Sl
-                       ) AS line_no
-                FROM trans_trading_products tp
-                WHERE tp.Trading_Id = ?
-            ) p
-            JOIN mst_product i ON i.Prod_Id = p.Prod_Id
-            LEFT JOIN (
-                SELECT
-                    st.Prod_Id,
-                    st.Quantity,
-                    ROUND(st.Rate, 2) AS Rate,
-                    ROUND(IFNULL(st.MRP, 0), 2) AS MRP,
-                    st.Pack_Date,
-                    st.Barcode,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY st.Prod_Id, st.Quantity, ROUND(st.Rate, 2), ROUND(IFNULL(st.MRP, 0), 2)
-                        ORDER BY st.Stock_Id
-                    ) AS line_no
-                FROM trns_stockinout st
-                WHERE st.Type_Id = ?
-            ) s ON s.Prod_Id = p.Prod_Id
-               AND s.Quantity = p.Item_Qty
-               AND s.Rate = ROUND(p.Item_Rate, 2)
-               AND s.MRP = ROUND(IFNULL(p.MRP, 0), 2)
-               AND s.line_no = p.line_no
-            ORDER BY p.Sl
-        ", [$tradingId, $tradingId]);
+        $rows = DB::connection('coops')->select('CALL USP_GET_SALE_LINE_ITEMS(?)', [$tradingId]);
 
         return array_map(static fn ($row) => (array) $row, $rows);
     }
@@ -1168,9 +1164,9 @@ class Sales extends Controller
     //sale return
     public function indexSaleReturn()
     {
-        $branchId = session('branch_id');
         Config::set('database.connections.coops.database', session('org_schema'));
-        $customers  = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [2, $branchId, 0]);
+        // Customers load via AJAX Select2 (parties.search) — list is too large to embed.
+        $customers  = [];
         $banks      = DB::connection('coops')->select('CALL USP_GET_BANK_LEDGER()');
         $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
         return view('Admin.sale-return', compact('customers', 'banks', 'categories'))
@@ -1397,21 +1393,30 @@ class Sales extends Controller
     public function saleReturnsearch(Request $request)
     {
         try {
-            $fromDate = $request->input('from_date');
-            $toDate = $request->input('to_date');
-
-            if (!$fromDate || !$toDate) {
-                return response()->json(['error' => 'From Date and To Date are required'], 400);
+            $filters = $this->saleSearchFilters($request, true);
+            if ($filters instanceof \Illuminate\Http\JsonResponse) {
+                return $filters;
             }
 
             Config::set('database.connections.coops.database', session('org_schema'));
+            $limit = min(100, max(10, (int) $request->input('limit', 30)));
+            $offset = max(0, (int) $request->input('offset', 0));
 
-            $saleReturns = DB::connection('coops')->select('CALL USP_SEARCH_SALE_RETURN(?, ?)', [
-                $fromDate,
-                $toDate
+            $saleReturns = DB::connection('coops')->select('CALL USP_SEARCH_SALE_RETURN_PAGE(?, ?, ?, ?, ?, ?)', [
+                $filters['from_date'],
+                $filters['to_date'],
+                $filters['party_id'],
+                $filters['bill_like'],
+                $limit,
+                $offset,
             ]);
+            $total = (int) ($saleReturns[0]->Total_Count ?? count($saleReturns));
 
-            return response()->json($saleReturns);
+            return response()->json([
+                'results' => $saleReturns,
+                'recordsTotal' => $total,
+                'has_more' => ($offset + count($saleReturns)) < $total,
+            ]);
         } catch (\Exception $e) {
             Log::error('Sale Return Search Error: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to search sale returns'], 500);
@@ -1441,16 +1446,78 @@ class Sales extends Controller
 
     public function searchForReturn(Request $request)
     {
-        Config::set('database.connections.coops.database', session('org_schema'));
-
-        $results = DB::connection('coops')->select('CALL USP_SEARCH_SALE_FOR_RETURN(?, ?, ?, ?)', [
-            $request->input('from_date'),
-            $request->input('to_date'),
-            $request->input('party_id') ?: 0,
-            session('branch_id'),
+        $validated = $request->validate([
+            'from_date' => 'nullable|date_format:Y-m-d',
+            'to_date' => 'nullable|date_format:Y-m-d',
+            'bill_no' => 'nullable|string|max:120',
+            'party_id' => 'required|integer|min:1',
         ]);
 
-        return response()->json($results);
+        Config::set('database.connections.coops.database', session('org_schema'));
+        DB::purge('coops');
+
+        $fromDate = (string) ($validated['from_date'] ?? '');
+        $toDate = (string) ($validated['to_date'] ?? '');
+        $billNo = trim($validated['bill_no'] ?? '');
+        $partyId = (int) $validated['party_id'];
+        $branchId = (int) session('branch_id');
+        $limit = min(100, max(10, (int) $request->input('limit', 30)));
+        $offset = max(0, (int) $request->input('offset', 0));
+
+        if ($partyId <= 0) {
+            return response()->json(['message' => 'Please select a Customer'], 422);
+        }
+        if (($fromDate === '') !== ($toDate === '')) {
+            return response()->json(['message' => 'Please select both From Date and To Date'], 422);
+        }
+        if ($billNo === '' && ($fromDate === '' || $toDate === '')) {
+            return response()->json(['message' => 'Enter Bill No or Ref Bill No, or select From Date and To Date'], 422);
+        }
+
+        if ($billNo !== '') {
+            $saleType = 3;
+            $returnType = 5;
+            try {
+                $opt = DB::connection('coops')->selectOne('CALL USP_GET_CORE_SALE_RETURN_OPTION_TYPES()');
+                if ($opt) {
+                    $saleType = (int) ($opt->SaleType ?: 3);
+                    $returnType = (int) ($opt->ReturnType ?: 5);
+                }
+            } catch (\Throwable $e) {
+                // keep defaults
+            }
+
+            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $billNo) . '%';
+            $useDateRange = ($fromDate !== '' && $toDate !== '') ? 1 : 0;
+            $rows = DB::connection('coops')->select(
+                'CALL USP_SEARCH_SALE_FOR_RETURN_BILL(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [
+                    $saleType,
+                    $returnType,
+                    $like,
+                    $branchId,
+                    $fromDate !== '' ? $fromDate : '1970-01-01',
+                    $toDate !== '' ? $toDate : '2099-12-31',
+                    $partyId,
+                    $useDateRange,
+                    $limit,
+                    $offset,
+                ]
+            );
+        } else {
+            $rows = DB::connection('coops')->select(
+                'CALL USP_SEARCH_SALE_FOR_RETURN(?, ?, ?, ?, ?, ?)',
+                [$fromDate, $toDate, $partyId, $branchId, $limit, $offset]
+            );
+        }
+
+        $total = (int) ($rows[0]->Total_Count ?? count($rows));
+
+        return response()->json([
+            'results' => $rows,
+            'recordsTotal' => $total,
+            'has_more' => ($offset + count($rows)) < $total,
+        ]);
     }
 
     public function returnableDetails($id)

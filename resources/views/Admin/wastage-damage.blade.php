@@ -281,32 +281,7 @@
         </div>
     </div>
 
-    <div class="modal fade" id="barcodePickerModal" tabindex="-1" data-bs-backdrop="static">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="barcodePickerTitle">Select Barcode</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="table-responsive barcode-picker-scroll">
-                        <table class="table table-bordered table-hover table-sm mb-0" id="barcodePickerTable">
-                            <thead class="thead-light">
-                                <tr>
-                                    <th>Sl</th>
-                                    <th>Barcode</th>
-                                    <th>Item Name</th>
-                                    <th class="text-end">MRP</th>
-                                    <th class="text-end">Available Qty</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    @include('Admin.partials.barcode-picker-modal')
 
     <div class="modal fade" id="searchModal" tabindex="-1" data-bs-backdrop="static">
         <div class="modal-dialog modal-lg modal-xl-custom">
@@ -422,11 +397,26 @@
             $('#quantity').focus();
         }
 
+        function filterBarcodePickerRows() {
+            const needle = String($('#barcodePickerSearch').val() || '').trim().toLowerCase();
+            const $rows = $('#barcodePickerTable tbody tr.barcode-pick-row');
+            let visible = 0;
+            $rows.each(function() {
+                const hay = String($(this).attr('data-search') || '').toLowerCase();
+                const show = !needle || hay.indexOf(needle) !== -1;
+                $(this).toggle(show);
+                if (show) visible++;
+            });
+            $('#barcodePickerEmpty').toggleClass('d-none', !$rows.length || visible > 0);
+        }
+
         function openBarcodePicker(payload) {
             const item = payload.item || {};
             const name = item.Prod_ShortNm || '';
             const rows = payload.barcodes || [];
             $('#barcodePickerTitle').text(name ? ('Select Barcode — ' + name) : 'Select Barcode');
+            $('#barcodePickerSearch').val('');
+            $('#barcodePickerEmpty').addClass('d-none');
             const $body = $('#barcodePickerTable tbody').empty();
             if (!rows.length) {
                 $body.append(
@@ -434,16 +424,19 @@
                 );
             } else {
                 rows.forEach(function(row, i) {
+                    const barcode = String(row.Barcode || '');
                     const mrp = parseFloat(row.MRP) || 0;
                     const qty = parseFloat(row.Avil_Qnty);
                     const qtyText = isNaN(qty) ? '' : qty;
+                    const searchText = [i + 1, barcode, name, mrp.toFixed(2), qtyText].join(' ');
                     const $tr = $('<tr class="barcode-pick-row"></tr>');
-                    $tr.attr('data-barcode', row.Barcode);
+                    $tr.attr('data-barcode', barcode);
                     $tr.attr('data-mrp', mrp);
                     $tr.attr('data-qty', qtyText);
                     $tr.attr('data-rate', row.Purchase_Rate || 0);
+                    $tr.attr('data-search', searchText);
                     $tr.append($('<td></td>').text(i + 1));
-                    $tr.append($('<td></td>').text(row.Barcode));
+                    $tr.append($('<td></td>').text(barcode));
                     $tr.append($('<td></td>').text(name));
                     $tr.append($('<td class="text-end"></td>').text(mrp.toFixed(2)));
                     $tr.append($('<td class="text-end"></td>').text(qtyText));
@@ -452,7 +445,19 @@
             }
             $('#barcodePickerModal').data('item', item);
             $('#barcodePickerModal').modal('show');
+            setTimeout(function() { $('#barcodePickerSearch').trigger('focus'); }, 250);
         }
+
+        $('#barcodePickerSearchBtn').on('click', filterBarcodePickerRows);
+        $('#barcodePickerClearBtn').on('click', function() {
+            $('#barcodePickerSearch').val('');
+            filterBarcodePickerRows();
+            $('#barcodePickerSearch').trigger('focus');
+        });
+        $('#barcodePickerSearch').on('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); filterBarcodePickerRows(); }
+        });
+        $('#barcodePickerSearch').on('input', filterBarcodePickerRows);
 
         function selectProductForDamage(item) {
             const date = $('#entryDate').val();

@@ -42,8 +42,9 @@
                          </a>
                          <ul class="dropdown-menu dropdown-menu-start p-2 add-menu-dropdown">
                              @forelse ($menuLinks ?? [] as $link)
+                                 @continue(!routeExists($link->route ?? null))
                                  <li>
-                                     <a href="{{ route($link->route) }}" class="dropdown-item d-flex align-items-start">
+                                     <a href="{{ safeRoute($link->route) }}" class="dropdown-item d-flex align-items-start">
                                          <i class="{{ $link->icon }} me-2 mt-1"></i>
                                          <span>
                                              <span class="qa-link-name">{{ $link->name }}</span>

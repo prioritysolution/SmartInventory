@@ -20,11 +20,8 @@ class AgentCustomer extends Controller
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
 
-        $customers = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [
-            2,
-            session('branch_id'),
-            session('agent_id'),
-        ]);
+        // Customers via AJAX Select2 (agent.parties.search)
+        $customers = [];
         $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
         $this->organisationAddress();
         return view('Agent.agent-custmer', [
@@ -176,7 +173,7 @@ class AgentCustomer extends Controller
         DB::purge('coops');
 
         $party = DB::connection('coops')->selectOne(
-            'SELECT Party_Id FROM mst_party WHERE Party_Id = ? AND Party_Type = 2 AND Cust_Agent_Id = ? LIMIT 1',
+            'CALL USP_VALIDATE_AGENT_CUSTOMER(?, ?)',
             [$request->party_id, session('agent_id')]
         );
         if (!$party) {

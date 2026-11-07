@@ -5,7 +5,7 @@
     @foreach($agentMenu as $parent)
         @if(count($parent->children) > 0)
         {{-- Parent with submenus --}}
-        <li class="submenu {{ collect($parent->children)->contains(fn($c) => $c->route && request()->routeIs($c->route)) ? 'active' : '' }}">
+        <li class="submenu {{ collect($parent->children)->contains(fn($c) => $c->route && routeExists($c->route) && request()->routeIs($c->route)) ? 'active' : '' }}">
             <a href="javascript:void(0);">
                 <i class="{{ $parent->icon ?: 'fas fa-circle' }}"></i>
                 <span> {{ $parent->name }}</span>
@@ -14,9 +14,10 @@
             <ul>
                 @foreach($parent->children as $child)
                 @if($child->name)
+                @continue($child->route && !routeExists($child->route))
                 <li>
-                    <a href="{{ $child->route ? route($child->route) : 'javascript:void(0);' }}"
-                       class="{{ $child->route && request()->routeIs($child->route) ? 'active' : '' }}">
+                    <a href="{{ safeRoute($child->route) }}"
+                       class="{{ $child->route && routeExists($child->route) && request()->routeIs($child->route) ? 'active' : '' }}">
                         <i class="fa-solid fa-circle"></i>
                         <span>{{ $child->name }}</span>
                     </a>
@@ -27,8 +28,8 @@
         </li>
         @else
         {{-- Single menu item --}}
-        <li class="{{ $parent->route && request()->routeIs($parent->route) ? 'active' : '' }}">
-            <a href="{{ $parent->route ? route($parent->route) : 'javascript:void(0);' }}">
+        <li class="{{ $parent->route && routeExists($parent->route) && request()->routeIs($parent->route) ? 'active' : '' }}">
+            <a href="{{ safeRoute($parent->route) }}">
                 <i class="{{ $parent->icon ?: 'fas fa-circle' }}"></i>
                 <span> {{ $parent->name }}</span>
             </a>

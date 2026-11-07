@@ -129,7 +129,7 @@
         </div>
         <div class="quick-access-grid">
             @foreach ($menuLinks ?? [] as $link)
-                <a href="{{ route($link->route) }}" title="{{ $link->name }}">
+                <a href="{{ safeRoute($link->route) }}" title="{{ $link->name }}">
                     <i class="{{ $link->icon }}"></i>
                     <span>{{ $link->name }}</span>
                 </a>

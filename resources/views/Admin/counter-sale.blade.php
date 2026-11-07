@@ -284,10 +284,6 @@
                             <div id="customerDiv">
                                 <select class="form-select" id="partyId">
                                     <option value="">-- Select Customer --</option>
-                                    @foreach ($customers as $customer)
-                                        <option value="{{ $customer->Party_Id }}">
-                                            {{ $customer->Party_Name }}-{{ $customer->Party_Code }}</option>
-                                    @endforeach
                                 </select>
                             </div>
                             <div id="cashDiv" style="display:none;">
@@ -593,33 +589,7 @@
         </div>
     </div>
 
-    {{-- Barcode picker for a chosen product --}}
-    <div class="modal fade" id="barcodePickerModal" tabindex="-1" data-bs-backdrop="static">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="barcodePickerTitle">Select Barcode</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="table-responsive barcode-picker-scroll">
-                        <table class="table table-bordered table-hover table-sm mb-0" id="barcodePickerTable">
-                            <thead class="thead-light">
-                                <tr>
-                                    <th>Sl</th>
-                                    <th>Barcode</th>
-                                    <th>Item Name</th>
-                                    <th class="text-end">MRP</th>
-                                    <th class="text-end">Available Qty</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    @include('Admin.partials.barcode-picker-modal')
 
     {{-- Sale Search Modal --}}
     <div class="modal fade" id="saleSearchModal" tabindex="-1" data-bs-backdrop="static">
@@ -631,17 +601,26 @@
                 </div>
                 <div class="modal-body">
                     <div class="row mb-3">
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label class="form-label">From Date</label>
                             <input type="date" class="form-control" id="searchFromDate"
                                 max="{{ session('year_end') }}">
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label class="form-label">To Date</label>
                             <input type="date" class="form-control" id="searchToDate"
                                 max="{{ session('year_end') }}">
                         </div>
-
+                        <div class="col-md-3">
+                            <label class="form-label">Select Customer</label>
+                            <select class="form-select" id="searchPartyId">
+                                <option value=""></option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Bill No / Ref Bill No</label>
+                            <input type="text" class="form-control" id="searchSaleNo" maxlength="120">
+                        </div>
                         <div class="col-md-2 d-flex align-items-end">
                             <button type="button" class="btn btn-primary w-100" id="searchSaleGo">Search</button>
                         </div>
@@ -652,6 +631,8 @@
                                 <tr>
                                     <th>Sl</th>
                                     <th>Invoice No</th>
+                                    <th>Ref No</th>
+                                    <th>Customer Name</th>
                                     <th>Invoice Date</th>
                                     <th>Net Amount</th>
                                     <th>Action</th>
@@ -1031,7 +1012,7 @@
         }
 
         function drawPhoneBill(billData, showAgent) {
-            const width = 384;
+            const width = 576;
             const scratch = document.createElement('canvas').getContext('2d');
             const rows = billData.items && Array.isArray(billData.items) ? billData.items : [];
             const discount = parseFloat(billData.Discount) || 0;
@@ -1298,7 +1279,7 @@
             frame = document.createElement('iframe');
             frame.id = 'printFrame';
             frame.setAttribute('aria-hidden', 'true');
-            frame.style.cssText = 'position:fixed;left:-1200px;top:0;width:420px;height:700px;border:0;';
+            frame.style.cssText = 'position:fixed;left:-1200px;top:0;width:320px;height:900px;border:0;';
             document.body.appendChild(frame);
             const win = frame.contentWindow;
             win.document.open();
@@ -1310,43 +1291,43 @@
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 @page {
-    size: 72mm 190mm;
+    size: 80mm auto;
     margin: 0;
 }
 html, body {
     margin: 0;
     padding: 0;
-    width: 46mm;
+    width: 72mm;
     background: #fff;
     color: #000;
 }
-body { width: 46mm; }
+body { width: 72mm; }
 .bill-container {
-    width: 46mm;
-    max-width: 46mm;
-    margin: 0;
+    width: 72mm;
+    max-width: 72mm;
+    margin: 0 auto;
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 9px;
+    font-size: 11px;
     color: #000;
-    line-height: 1.25;
+    line-height: 1.3;
     word-wrap: break-word;
 }
-.bill-header { text-align:center; padding-bottom:2px; }
-.bill-header h3 { font-size:9px; font-weight:bold; text-transform:uppercase; margin:0 auto; line-height:1.25; text-align:center; word-break:break-word; }
-.bill-header p { font-size:8px; margin:2px 0 0; text-align:center; }
-.bill-title { text-align:center; font-weight:bold; text-decoration:underline; text-transform:uppercase; letter-spacing:1px; margin:4px 0 6px; font-size:10px; }
-.bill-meta { display:block; overflow:hidden; margin:2px 0; font-size:8px; }
+.bill-header { text-align:center; padding-bottom:3px; }
+.bill-header h3 { font-size:12px; font-weight:bold; text-transform:uppercase; margin:0 auto; line-height:1.3; text-align:center; word-break:break-word; }
+.bill-header p { font-size:10px; margin:2px 0 0; text-align:center; }
+.bill-title { text-align:center; font-weight:bold; text-decoration:underline; text-transform:uppercase; letter-spacing:1px; margin:5px 0 7px; font-size:12px; }
+.bill-meta { display:block; overflow:hidden; margin:3px 0; font-size:10px; }
 .bill-meta span { display:block; width:100%; text-align:left; }
-.bill-date { display:flex; justify-content:space-between; margin:2px 0; font-size:8px; }
-.bill-customer { margin:3px 0 6px; font-size:8px; word-break:break-word; }
-.items-table { width:100%; border-collapse:collapse; font-size:8px; table-layout:fixed; }
-.items-table th, .items-table td { border:1px dashed #000; padding:2px 2px; text-align:left; vertical-align:top; }
+.bill-date { display:flex; justify-content:space-between; margin:3px 0; font-size:10px; }
+.bill-customer { margin:4px 0 7px; font-size:10px; word-break:break-word; }
+.items-table { width:100%; border-collapse:collapse; font-size:10px; table-layout:fixed; }
+.items-table th, .items-table td { border:1px dashed #000; padding:3px 3px; text-align:left; vertical-align:top; }
 .items-table th { font-weight:bold; text-transform:uppercase; }
 .items-table .item-name { word-break:break-word; }
-.item-code { display:block; font-size:7px; }
+.item-code { display:block; font-size:9px; }
 .text-right { text-align:right; white-space:nowrap; }
 .text-center { text-align:center; white-space:nowrap; }
-.bill-words { font-size:7px; line-height:1.2; white-space:normal; word-break:break-word; }
+.bill-words { font-size:9px; line-height:1.25; white-space:normal; word-break:break-word; }
 </style>
 </head>
 <body>${billHtml}</body>
@@ -1362,13 +1343,33 @@ body { width: 46mm; }
 
         $(document).ready(function() {
 
-            $('#partyId').select2({
-                placeholder: '-- Select Customer --',
-                allowClear: true
-            });
+            if (typeof siAjaxSelect2 === 'function') {
+                siAjaxSelect2('#partyId', {
+                    url: "{{ route('parties.search') }}",
+                    placeholder: '-- Select Customer --',
+                    partyType: 2,
+                    minLength: 0
+                });
+            } else {
+                $('#partyId').select2({
+                    placeholder: '-- Select Customer --',
+                    allowClear: true,
+                    width: '100%'
+                });
+            }
+            if (typeof siAjaxSelect2 === 'function') {
+                siAjaxSelect2('#searchPartyId', {
+                    url: "{{ route('parties.search') }}",
+                    placeholder: '-- All Customers --',
+                    partyType: 2,
+                    minLength: 0,
+                    allOption: { id: '0', text: '-- All Customers --' }
+                });
+            }
             $('#bankAccountId').select2({
                 placeholder: '-- Select Bank --',
-                allowClear: true
+                allowClear: true,
+                width: '100%'
             });
             if (GST_TYPE == 2) {
                 $('.gst-col').hide();
@@ -1396,12 +1397,23 @@ body { width: 46mm; }
                 $('#saleSearchModal').modal('show');
             });
 
+            let saleSearchLazy = null;
             $('#searchSaleGo').on('click', function() {
                 const fromDate = $('#searchFromDate').val();
                 const toDate = $('#searchToDate').val();
+                const partyId = $('#searchPartyId').val() || 0;
+                const billNo = $('#searchSaleNo').val().trim();
 
-                if (!fromDate || !toDate) {
-                    Swal.fire('Error', 'Please select From Date and To Date', 'error');
+                if (billNo && (!partyId || partyId === '0')) {
+                    Swal.fire('Error', 'Please select a Customer when searching by Bill No or Ref Bill No', 'error');
+                    return;
+                }
+                if ((!fromDate || !toDate) && !billNo) {
+                    Swal.fire('Error', 'Enter Bill No or Ref Bill No, or select From Date and To Date', 'error');
+                    return;
+                }
+                if ((fromDate && !toDate) || (!fromDate && toDate)) {
+                    Swal.fire('Error', 'Please select both From Date and To Date', 'error');
                     return;
                 }
 
@@ -1409,51 +1421,42 @@ body { width: 46mm; }
                     saleSearchDT.destroy();
                     saleSearchDT = null;
                 }
-                $('#saleSearchBody').html('<tr><td colspan="5" class="text-center">Loading...</td></tr>');
-
-                $.get("{{ url('counter-sale/search') }}", {
-                    from_date: fromDate,
-                    to_date: toDate
-                }, function(data) {
-                    let html = '';
-                    if (!data.length) {
-                        html =
-                            '<tr><td colspan="5" class="text-center text-muted">No records found</td></tr>';
-                        $('#saleSearchBody').html(html);
-                        return;
+                if (!saleSearchLazy) {
+                    const $wrap = $('#saleSearchTable').closest('.table-responsive, .modal-body');
+                    if (!$wrap.hasClass('si-lazy-scroll-box')) {
+                        $wrap.addClass('si-lazy-scroll-box').css({ maxHeight: '360px', overflowY: 'auto' });
                     }
-                    data.forEach((row, i) => {
-                        html += `<tr>
+                    saleSearchLazy = SiLazyScroll.create({
+                        scrollEl: $wrap,
+                        tbody: '#saleSearchBody',
+                        url: "{{ url('counter-sale/search') }}",
+                        pageSize: 30,
+                        colSpan: 7,
+                        params: function () {
+                            return {
+                                from_date: $('#searchFromDate').val(),
+                                to_date: $('#searchToDate').val(),
+                                party_id: $('#searchPartyId').val() || 0,
+                                bill_no: $('#searchSaleNo').val().trim()
+                            };
+                        },
+                        renderRow: function (row, i) {
+                            return `<tr>
                 <td>${i + 1}</td>
-                <td>${row.Invoice_No}</td>
+                <td>${row.Invoice_No ?? ''}</td>
+                <td>${row.Ref_No ?? ''}</td>
+                <td>${row.Party_Name ?? ''}</td>
                 <td>${siDate.toDisplay(row.Invoice_Date)}</td>
-                <td>${row.Net_Amt}</td>
+                <td>${row.Net_Amt ?? ''}</td>
                 <td><button type="button" class="btn btn-sm btn-primary viewSale" data-id="${row.Sale_Id}">Edit</button></td>
             </tr>`;
-                    });
-                    $('#saleSearchBody').html(html);
-                    saleSearchDT = $('#saleSearchTable').DataTable({
-                        pageLength: 10,
-                        ordering: true,
-                        sDom: 'fBtlpi',
-                        language: {
-                            search: '',
-                            searchPlaceholder: 'Search...',
-                            sLengthMenu: 'Row Per Page _MENU_ Entries',
-                            info: '_START_ - _END_ of _TOTAL_ items',
-                            paginate: {
-                                next: '<i class="isax isax-arrow-right-1"></i>',
-                                previous: '<i class="isax isax-arrow-left"></i>'
-                            }
+                        },
+                        onError: function () {
+                            Swal.fire('Error', 'Failed to load data', 'error');
                         }
                     });
-                    $('#searchFromDate, #searchToDate').val('');
-                }).fail(function() {
-                    Swal.fire('Error', 'Failed to load data', 'error');
-                    $('#saleSearchBody').html(
-                        '<tr><td colspan="5" class="text-center text-danger">Failed to load</td></tr>'
-                    );
-                });
+                }
+                saleSearchLazy.resetAndLoad();
             });
 
 
@@ -1533,6 +1536,7 @@ body { width: 46mm; }
                     '<tr><td colspan="7" class="text-center text-muted">Use filters above to search</td></tr>'
                 );
                 $('#searchFromDate, #searchToDate, #searchSaleNo').val('');
+                $('#searchPartyId').val('0').trigger('change');
             });
             // ── Barcode Scanner ──────────────────────────────────────────
             $('#barcodeInput').on('keydown', function(e) {
@@ -1554,11 +1558,26 @@ body { width: 46mm; }
 
             let pendingBarcodePick = null;
 
+            function filterBarcodePickerRows() {
+                const needle = String($('#barcodePickerSearch').val() || '').trim().toLowerCase();
+                const $rows = $('#barcodePickerTable tbody tr.barcode-pick-row');
+                let visible = 0;
+                $rows.each(function() {
+                    const hay = String($(this).attr('data-search') || '').toLowerCase();
+                    const show = !needle || hay.indexOf(needle) !== -1;
+                    $(this).toggle(show);
+                    if (show) visible++;
+                });
+                $('#barcodePickerEmpty').toggleClass('d-none', !$rows.length || visible > 0);
+            }
+
             function openBarcodePicker(payload) {
                 const item = payload.item || {};
                 const name = item.Prod_ShortNm || '';
                 const rows = payload.barcodes || [];
                 $('#barcodePickerTitle').text(name ? ('Select Barcode — ' + name) : 'Select Barcode');
+                $('#barcodePickerSearch').val('');
+                $('#barcodePickerEmpty').addClass('d-none');
                 const $body = $('#barcodePickerTable tbody').empty();
                 if (!rows.length) {
                     $body.append(
@@ -1566,15 +1585,18 @@ body { width: 46mm; }
                     );
                 } else {
                     rows.forEach(function(row, i) {
+                        const barcode = String(row.Barcode || '');
                         const mrp = parseFloat(row.MRP) || 0;
                         const qty = parseFloat(row.Avil_Qnty);
                         const qtyText = isNaN(qty) ? '' : qty;
+                        const searchText = [i + 1, barcode, name, mrp.toFixed(2), qtyText].join(' ');
                         const $tr = $('<tr class="barcode-pick-row"></tr>');
-                        $tr.attr('data-barcode', row.Barcode);
+                        $tr.attr('data-barcode', barcode);
                         $tr.attr('data-mrp', mrp);
                         $tr.attr('data-qty', qtyText);
+                        $tr.attr('data-search', searchText);
                         $tr.append($('<td></td>').text(i + 1));
-                        $tr.append($('<td></td>').text(row.Barcode));
+                        $tr.append($('<td></td>').text(barcode));
                         $tr.append($('<td></td>').text(name));
                         $tr.append($('<td class="text-end"></td>').text(mrp.toFixed(2)));
                         $tr.append($('<td class="text-end"></td>').text(qtyText));
@@ -1583,26 +1605,50 @@ body { width: 46mm; }
                 }
                 $('#barcodePickerModal').data('item', item).data('hsn', payload.hsn || '');
                 $('#barcodePickerModal').modal('show');
+                setTimeout(function() { $('#barcodePickerSearch').trigger('focus'); }, 250);
             }
+
+            $('#barcodePickerSearchBtn').on('click', filterBarcodePickerRows);
+            $('#barcodePickerClearBtn').on('click', function() {
+                $('#barcodePickerSearch').val('');
+                filterBarcodePickerRows();
+                $('#barcodePickerSearch').trigger('focus');
+            });
+            $('#barcodePickerSearch').on('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    filterBarcodePickerRows();
+                }
+            });
+            $('#barcodePickerSearch').on('input', filterBarcodePickerRows);
 
             function selectProductForSale(prodId, hsn) {
                 if (!prodId) return;
                 if (!ensureSaleDate()) return;
                 const saleDate = $('#saleDate').val();
-                $.when(
-                    $.get("{{ route('counter-sale.item-info') }}", {
-                        prod_id: prodId,
-                        sale_date: saleDate
-                    }),
-                    $.get("{{ route('counter-sale.product-barcodes') }}", {
-                        prod_id: prodId,
-                        sale_date: saleDate
-                    })
-                ).done(function(infoRes, barcodeRes) {
+                const infoReq = $.get("{{ route('counter-sale.item-info') }}", {
+                    prod_id: prodId,
+                    sale_date: saleDate
+                });
+                const barcodeReq = $.get("{{ route('counter-sale.product-barcodes') }}", {
+                    prod_id: prodId,
+                    sale_date: saleDate
+                }).then(null, function() {
+                    return [];
+                });
+                $.when(infoReq, barcodeReq).done(function(infoRes, barcodeRes) {
+                    const item = Array.isArray(infoRes) ? infoRes[0] : infoRes;
+                    const barcodes = Array.isArray(barcodeRes)
+                        ? (Array.isArray(barcodeRes[0]) ? barcodeRes[0] : barcodeRes)
+                        : [];
+                    if (!item || item.error) {
+                        Swal.fire('Error', (item && item.error) || 'Failed to load item details', 'error');
+                        return;
+                    }
                     pendingBarcodePick = {
-                        item: infoRes[0],
+                        item: item,
                         hsn: hsn || '',
-                        barcodes: barcodeRes[0] || []
+                        barcodes: barcodes || []
                     };
                     if ($('#itemPickerModal').hasClass('show')) {
                         $('#itemPickerModal').modal('hide');

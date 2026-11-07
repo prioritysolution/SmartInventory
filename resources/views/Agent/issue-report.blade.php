@@ -13,13 +13,11 @@
             <div class="row g-3">
                 <div class="col-md-3">
                     <label class="form-label">From Date <span class="text-danger">*</span></label>
-                    <input type="date" class="form-control" id="frmDate"
-                        min="{{ $year_start }}" max="{{ $year_end }}" value="{{ $year_start }}">
+                    <input type="date" class="form-control" id="frmDate" value="{{ $year_start }}">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">To Date <span class="text-danger">*</span></label>
                     <input type="date" class="form-control" id="toDate"
-                        min="{{ $year_start }}" max="{{ $year_end }}"
                         value="{{ min($year_end, date('Y-m-d')) }}">
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
@@ -30,6 +28,11 @@
                 <div class="col-md-2 d-flex align-items-end">
                     <button type="button" class="btn btn-outline-secondary w-100" id="printBtn" disabled>
                         <i class="fas fa-print me-1"></i> Print
+                    </button>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="button" class="btn btn-outline-success w-100" id="downloadBtn" disabled>
+                        <i class="fas fa-download me-1"></i> Download
                     </button>
                 </div>
             </div>
@@ -72,27 +75,78 @@
     const agentName = @json($agent_name);
     let printRows = [];
 
-    function printReport() {
-        if (!printRows.length) {
-            Swal.fire('Error', 'Search the report first', 'error');
-            return;
-        }
+    function buildIssueCsv(rows) {
+        const frm = siDate.toDisplay($('#frmDate').val());
+        const to = siDate.toDisplay($('#toDate').val());
+        const meta = [
+            ['Organization', orgName || 'Smart Inventory'],
+            ['Report', 'Issue Report'],
+            ['Agent', agentName || ''],
+            ['Period', (frm && to ? `From ${frm} To ${to}` : '')],
+            ['Generated At', (window.siDate && siDate.toDisplay ? siDate.toDisplay(new Date()) : new Date().toLocaleString())]
+        ];
+
+        const headers = ['Sl', 'Indent No', 'Date', 'Item Code', 'Item Name', 'Qty', 'Reject Qty', 'Unit'];
+
+        let totQty = 0;
+        let totRej = 0;
+        const dataRows = (rows || []).map(function(row, idx) {
+            const q = parseFloat(row.Quantity) || 0;
+            const r = parseFloat(row.Reject_Qty) || 0;
+            totQty += q;
+            totRej += r;
+            return [
+                String(idx + 1),
+                row.Doc_No || '',
+                siDate.toDisplay(row.Doc_Date),
+                row.Prod_Code || '',
+                row.Prod_ShortNm || '',
+                siFmtQty(q),
+                siFmtQty(r),
+                row.Unit_Name || ''
+            ];
+        });
+
+        const totals = ['Total', '', '', '', '', siFmtQty(totQty), siFmtQty(totRej), ''];
+
+        return siBuildCsv({
+            meta: meta,
+            headers: headers,
+            rows: dataRows,
+            totals: totals
+        });
+    }
+
+    function buildIssueHtml(rows) {
         const frm = siDate.toDisplay($('#frmDate').val());
         const to = siDate.toDisplay($('#toDate').val());
         let body = '';
-        printRows.forEach((row, idx) => {
+        let totQty = 0;
+        let totRej = 0;
+        (rows || []).forEach((row, idx) => {
+            const q = parseFloat(row.Quantity) || 0;
+            const r = parseFloat(row.Reject_Qty) || 0;
+            totQty += q;
+            totRej += r;
             body += `<tr>
                 <td>${idx + 1}</td>
                 <td>${row.Doc_No ?? ''}</td>
                 <td>${siDate.toDisplay(row.Doc_Date)}</td>
                 <td>${row.Prod_Code ?? ''}</td>
                 <td>${row.Prod_ShortNm ?? ''}</td>
-                <td style="text-align:right;">${row.Quantity ?? 0}</td>
-                <td style="text-align:right;">${row.Reject_Qty ?? 0}</td>
+                <td style="text-align:right;">${siFmtQty(q)}</td>
+                <td style="text-align:right;">${siFmtQty(r)}</td>
                 <td>${row.Unit_Name ?? ''}</td>
             </tr>`;
         });
-        siPrint(`<!DOCTYPE html><html><head><title>Issue Report</title>
+        body += `<tr>
+            <th colspan="5" style="text-align:right;">Total</th>
+            <th style="text-align:right;">${siFmtQty(totQty)}</th>
+            <th style="text-align:right;">${siFmtQty(totRej)}</th>
+            <th></th>
+        </tr>`;
+
+        return `<!DOCTYPE html><html><head><title>Issue Report</title>
             <style>
                 body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
                 h3, h4, p { margin: 0 0 6px 0; text-align: center; }
@@ -111,10 +165,60 @@
                 </tr></thead>
                 <tbody>${body}</tbody>
             </table>
-            </body></html>`);
+            </body></html>`;
+    }
+
+    function downloadIssueZip() {
+        if (!printRows.length) {
+            Swal.fire('Error', 'Search the report first', 'error');
+            return;
+        }
+        if (window.Swal) {
+            Swal.fire({
+                title: 'Generating ZIP...',
+                text: 'Packaging records',
+                allowOutsideClick: false,
+                didOpen: function() { Swal.showLoading(); }
+            });
+        }
+        setTimeout(function() {
+            try {
+                const csvContent = buildIssueCsv(printRows);
+                const htmlContent = buildIssueHtml(printRows);
+                const safeName = 'Issue_Report_' + siDateStamp();
+                const zipName = safeName + '.zip';
+                const files = [
+                    { name: safeName + '.csv', content: csvContent },
+                    { name: safeName + '.html', content: htmlContent }
+                ];
+                siDownloadZip(zipName, files);
+                if (window.Swal) Swal.close();
+            } catch (e) {
+                if (window.Swal) {
+                    Swal.close();
+                    Swal.fire('Error', 'Failed to generate ZIP: ' + (e.message || e), 'error');
+                }
+            }
+        }, 50);
+    }
+
+    function printReport() {
+        if (!printRows.length) {
+            Swal.fire('Error', 'Search the report first', 'error');
+            return;
+        }
+        if (printRows.length > 1000) {
+            siWarnPrintLimit(printRows.length, downloadIssueZip);
+            return;
+        }
+        const html = buildIssueHtml(printRows);
+        siPrint(html);
     }
 
     $('#printBtn').on('click', printReport);
+    $(document).on('click', '#downloadBtn', function() {
+        downloadIssueZip();
+    });
 
     $('#searchBtn').on('click', function () {
         const frmDate = $('#frmDate').val();
@@ -130,33 +234,40 @@
 
         printRows = [];
         $('#printBtn').prop('disabled', true);
-        $('#reportBody').html('<tr><td colspan="8" class="text-center">Loading...</td></tr>');
-
-        $.get(searchUrl, { frm_date: frmDate, to_date: toDate }, function (data) {
-            if (!data.length) {
-                $('#reportBody').html('<tr><td colspan="8" class="text-center text-muted">No records found</td></tr>');
-                return;
-            }
-            printRows = data;
-            let html = '';
-            data.forEach((row, idx) => {
-                html += `<tr>
+        $('#downloadBtn').prop('disabled', true);
+        if (window._issueLazy) window._issueLazy.destroy();
+        window._issueLazy = SiLazyScroll.create({
+            scrollEl: $('#reportBody').closest('.report-scroll'),
+            tbody: '#reportBody',
+            url: searchUrl,
+            pageSize: 40,
+            showEndRow: false,
+            colSpan: 8,
+            params: function () { return { frm_date: frmDate, to_date: toDate }; },
+            emptyHtml: '<tr><td colspan="8" class="text-center text-muted">No records found</td></tr>',
+            renderRow: function (row, idx) {
+                return `<tr>
                     <td>${idx + 1}</td>
                     <td>${row.Doc_No ?? ''}</td>
                     <td>${siDate.toDisplay(row.Doc_Date)}</td>
                     <td>${row.Prod_Code ?? ''}</td>
                     <td>${row.Prod_ShortNm ?? ''}</td>
-                    <td class="text-end">${row.Quantity ?? 0}</td>
-                    <td class="text-end">${row.Reject_Qty ?? 0}</td>
+                    <td class="text-end">${siFmtQty(row.Quantity)}</td>
+                    <td class="text-end">${siFmtQty(row.Reject_Qty)}</td>
                     <td>${row.Unit_Name ?? ''}</td>
                 </tr>`;
-            });
-            $('#reportBody').html(html);
-            $('#printBtn').prop('disabled', false);
-        }).fail(function (xhr) {
-            Swal.fire('Error', xhr.responseJSON?.message || 'Failed to load report', 'error');
-            $('#reportBody').html('<tr><td colspan="8" class="text-center text-danger">Failed to load</td></tr>');
+            },
+            onChunk: function (rows, payload, reset) {
+                if (reset) printRows = [];
+                printRows = printRows.concat(rows);
+                $('#printBtn').prop('disabled', printRows.length === 0);
+                $('#downloadBtn').prop('disabled', printRows.length === 0);
+            },
+            onError: function (xhr) {
+                Swal.fire('Error', xhr.responseJSON?.message || 'Failed to load report', 'error');
+            }
         });
+        window._issueLazy.resetAndLoad();
     });
 
     if (new URLSearchParams(window.location.search).get('today') === '1') {

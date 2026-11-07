@@ -11,21 +11,22 @@
                         <div class="col-md-3">
                             <label class="form-label">From Date<span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="frmDate"
-                                min="{{ $year_start }}" max="{{ $year_end }}"
                                 value="{{ min($year_end, date('Y-m-d')) }}">
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">To Date<span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="toDate"
-                                min="{{ $year_start }}" max="{{ $year_end }}"
                                 value="{{ min($year_end, date('Y-m-d')) }}">
                         </div>
-                        <div class="col-md-3 d-flex align-items-end gap-2">
+                        <div class="col-md-3 d-flex align-items-end gap-2 flex-wrap">
                             <button type="button" class="btn btn-primary" id="searchBtn">
                                 <i class="fas fa-search me-1"></i> Search
                             </button>
                             <button type="button" class="btn btn-outline-secondary" id="printBtn" disabled>
                                 <i class="fas fa-print me-1"></i> Print
+                            </button>
+                            <button type="button" class="btn btn-outline-success" id="downloadBtn" disabled>
+                                <i class="fas fa-download me-1"></i> Download
                             </button>
                         </div>
                     </div>
@@ -122,6 +123,7 @@
         function resetTable(message, isError) {
             printData = null;
             $('#printBtn').prop('disabled', true);
+            $('#downloadBtn').prop('disabled', true);
             $('#closingWords').text('');
             const cls = isError ? 'text-danger' : 'text-muted';
             $('#reportBody').html(`<tr><td colspan="7" class="text-center ${cls}">${message}</td></tr>`);
@@ -214,14 +216,73 @@
             $('#closingWords').text(closingWords(closing));
         }
 
-        function printReport() {
-            if (!printData) {
-                Swal.fire('Error', 'Search the report first', 'error');
-                return;
-            }
+        function buildCashBookCsv(data) {
             const frm = fmtDate($('#frmDate').val());
             const to = fmtDate($('#toDate').val());
-            const pairs = buildPairs(printData);
+            const pairs = buildPairs(data);
+
+            const meta = [
+                ['Organization', orgName || 'Smart Inventory'],
+                ['Branch', branchName || ''],
+                ['Report', 'Cash Book'],
+                ['Period', (frm && to ? `From ${frm} To ${to}` : '')],
+                ['Generated At', (window.siDate && siDate.toDisplay ? siDate.toDisplay(new Date()) : new Date().toLocaleString())]
+            ];
+
+            const headers = [
+                'Date',
+                'Receipt GL Head', 'Receipt Particulars', 'Receipt Amount',
+                'Payment GL Head', 'Payment Particulars', 'Payment Amount'
+            ];
+
+            const rows = pairs.map(function(row) {
+                return [
+                    row.date ? fmtDate(row.date) : '',
+                    cell(row.rec, 'Gl_Head'),
+                    cell(row.rec, 'Particulars'),
+                    row.rec ? fmtAmt(row.rec.Amount) : '',
+                    cell(row.pay, 'Gl_Head'),
+                    cell(row.pay, 'Particulars'),
+                    row.pay ? fmtAmt(row.pay.Amount) : ''
+                ];
+            });
+
+            const rec = parseFloat(data.receipt_total) || 0;
+            const pay = parseFloat(data.payment_total) || 0;
+            const opening = parseFloat(data.opening) || 0;
+            const closing = parseFloat(data.closing) || 0;
+            const grand = opening + rec;
+
+            const totals = [
+                'Total Receipt', '', '', fmtAmt(rec),
+                'Total Payment', '', fmtAmt(pay)
+            ];
+
+            const openingClosingRow = [
+                'Add Opening Balance', '', '', fmtAmt(opening),
+                'Closing Balance', '', fmtAmt(closing)
+            ];
+
+            const grandRow = [
+                'Grand Total', '', '', fmtAmt(grand),
+                'Grand Total', '', fmtAmt(pay + closing)
+            ];
+
+            const csv1 = siBuildCsv({
+                meta: meta,
+                headers: headers,
+                rows: rows,
+                totals: totals
+            });
+
+            return csv1 + '\r\n' + openingClosingRow.map(function(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(',')
+                 + '\r\n' + grandRow.map(function(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(',');
+        }
+
+        function buildCashBookHtml(data) {
+            const frm = fmtDate($('#frmDate').val());
+            const to = fmtDate($('#toDate').val());
+            const pairs = buildPairs(data);
             let body = '';
             pairs.forEach(function (row) {
                 body += `<tr>
@@ -234,12 +295,12 @@
                     <td style="text-align:right;">${row.pay ? fmtAmt(row.pay.Amount) : ''}</td>
                 </tr>`;
             });
-            const rec = parseFloat(printData.receipt_total) || 0;
-            const pay = parseFloat(printData.payment_total) || 0;
-            const opening = parseFloat(printData.opening) || 0;
-            const closing = parseFloat(printData.closing) || 0;
+            const rec = parseFloat(data.receipt_total) || 0;
+            const pay = parseFloat(data.payment_total) || 0;
+            const opening = parseFloat(data.opening) || 0;
+            const closing = parseFloat(data.closing) || 0;
             const grand = opening + rec;
-            siPrint(`<!DOCTYPE html><html><head><title>Cash Book</title>
+            return `<!DOCTYPE html><html><head><title>Cash Book</title>
                 <style>
                     body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
                     h3, h4, p { margin: 0 0 4px 0; text-align: center; }
@@ -285,10 +346,61 @@
                 </table>
                 <p style="text-align:right; font-weight:bold; margin-top:16px;">${closingWords(closing)}</p>
                 <div class="sign"><span>Secretary / Treasurer</span><span>Accountant</span></div>
-                </body></html>`);
+                </body></html>`;
+        }
+
+        function downloadCashBookZip() {
+            if (!printData) {
+                Swal.fire('Error', 'Search the report first', 'error');
+                return;
+            }
+            if (window.Swal) {
+                Swal.fire({
+                    title: 'Generating ZIP...',
+                    text: 'Packaging records',
+                    allowOutsideClick: false,
+                    didOpen: function() { Swal.showLoading(); }
+                });
+            }
+            setTimeout(function() {
+                try {
+                    const csvContent = buildCashBookCsv(printData);
+                    const htmlContent = buildCashBookHtml(printData);
+                    const safeName = 'Cash_Book_' + siDateStamp();
+                    const zipName = safeName + '.zip';
+                    const files = [
+                        { name: safeName + '.csv', content: csvContent },
+                        { name: safeName + '.html', content: htmlContent }
+                    ];
+                    siDownloadZip(zipName, files);
+                    if (window.Swal) Swal.close();
+                } catch (e) {
+                    if (window.Swal) {
+                        Swal.close();
+                        Swal.fire('Error', 'Failed to generate ZIP: ' + (e.message || e), 'error');
+                    }
+                }
+            }, 50);
+        }
+
+        function printReport() {
+            if (!printData) {
+                Swal.fire('Error', 'Search the report first', 'error');
+                return;
+            }
+            const pairs = buildPairs(printData);
+            if (pairs.length > 1000) {
+                siWarnPrintLimit(pairs.length, downloadCashBookZip);
+                return;
+            }
+            const html = buildCashBookHtml(printData);
+            siPrint(html);
         }
 
         $('#printBtn').on('click', printReport);
+        $(document).on('click', '#downloadBtn', function() {
+            downloadCashBookZip();
+        });
 
         $('#searchBtn').on('click', function () {
             const frm = $('#frmDate').val();
@@ -307,6 +419,7 @@
                 printData = data;
                 renderReport(data);
                 $('#printBtn').prop('disabled', false);
+                $('#downloadBtn').prop('disabled', false);
             }).fail(function (xhr) {
                 const msg = xhr.responseJSON?.message || 'Failed to load cash book';
                 Swal.fire('Error', msg, 'error');

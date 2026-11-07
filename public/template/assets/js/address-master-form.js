@@ -1,6 +1,6 @@
 /**
  * Shared Address Master helpers for Agent / Member / Supplier / Customer forms.
- * Loads options from /address-master/data/{type}.
+ * Loads options from address-master/data/{type} using the live app base path.
  * PIN Code comes from the selected Post Office (mst_post.Pin_Code).
  */
 window.AddressMasterForm = (function ($) {
@@ -14,6 +14,40 @@ window.AddressMasterForm = (function ($) {
     const cache = {};
     let loaded = false;
     let loading = null;
+    let loadErrorShown = false;
+
+    function resolveAppBase() {
+        const meta = document.querySelector('meta[name="app-base"]');
+        let configured = (meta && meta.content) || window.APP_BASE || '';
+        try {
+            if (configured) {
+                const u = new URL(configured, window.location.href);
+                if (u.origin === window.location.origin) {
+                    return (u.origin + u.pathname).replace(/\/$/, '');
+                }
+                // APP_URL host mismatch (e.g. localhost) — keep path only.
+                const pathOnly = (u.pathname || '').replace(/\/$/, '');
+                if (pathOnly && pathOnly !== '/') {
+                    return window.location.origin + pathOnly;
+                }
+            }
+        } catch (e) {}
+
+        const segs = window.location.pathname.split('/').filter(Boolean);
+        if (segs.length >= 1 && /smartinventory/i.test(segs[0])) {
+            return window.location.origin + '/' + segs[0];
+        }
+        return window.location.origin;
+    }
+
+    function apiUrl(path) {
+        if (typeof window.siApiUrl === 'function') {
+            return window.siApiUrl(path);
+        }
+        const base = resolveAppBase().replace(/\/$/, '');
+        const clean = String(path || '').replace(/^\//, '');
+        return base + '/' + clean;
+    }
 
     function optionHtml(rows, type) {
         return (rows || []).map(r => {
@@ -35,18 +69,38 @@ window.AddressMasterForm = (function ($) {
         if (loaded) return $.Deferred().resolve().promise();
         if (loading) return loading;
 
-        const requests = TYPES.map(type =>
-            $.get(`/address-master/data/${type}`).then(data => {
-                cache[type] = data || [];
+        const deferreds = TYPES.map(type =>
+            $.ajax({
+                url: apiUrl('address-master/data/' + type),
+                method: 'GET',
+                dataType: 'json',
+                cache: true
+            }).then(function (data) {
+                cache[type] = Array.isArray(data) ? data : [];
+                return cache[type];
+            }, function () {
+                cache[type] = cache[type] || [];
+                return $.Deferred().reject(type);
             })
         );
 
-        loading = $.when.apply($, requests).then(function () {
+        loading = $.when.apply($, deferreds).then(function () {
             loaded = true;
             fillSelects();
-        }).fail(function () {
+        }, function () {
+            // Partial success still usable — mark loaded if any type has rows.
+            const any = TYPES.some(t => (cache[t] || []).length > 0);
+            if (any) {
+                loaded = true;
+                fillSelects();
+                return;
+            }
             loading = null;
-            Swal.fire('Error', 'Failed to load address master options', 'error');
+            if (!loadErrorShown && typeof Swal !== 'undefined') {
+                loadErrorShown = true;
+                Swal.fire('Error', 'Failed to load address master options', 'error');
+            }
+            return $.Deferred().reject().promise();
         });
 
         return loading;
@@ -118,6 +172,7 @@ window.AddressMasterForm = (function ($) {
     }
 
     $(function () {
+        window.APP_BASE = resolveAppBase();
         loadAll();
         $(document).on('change', 'select.addr-master-select[data-addr-type="post"]', function () {
             const prefix = ($(this).attr('id') || 'post_id').replace(/post_id$/, '');
@@ -133,6 +188,7 @@ window.AddressMasterForm = (function ($) {
         collect,
         selectedName,
         validate,
-        syncPinFromPost
+        syncPinFromPost,
+        apiUrl
     };
 })(jQuery);

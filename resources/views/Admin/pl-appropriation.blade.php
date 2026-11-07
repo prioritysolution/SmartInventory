@@ -11,7 +11,6 @@
                         <div class="col-md-3">
                             <label class="form-label">As on Date<span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="asOnDate"
-                                min="{{ $year_start }}" max="{{ $year_end }}"
                                 value="{{ min($year_end, date('Y-m-d')) }}">
                         </div>
                         <div class="col-md-3 d-flex align-items-end gap-2">
@@ -20,6 +19,9 @@
                             </button>
                             <button type="button" class="btn btn-outline-secondary" id="printBtn" disabled>
                                 <i class="fas fa-print me-1"></i> Print
+                            </button>
+                            <button type="button" class="btn btn-outline-success" id="downloadBtn" disabled>
+                                <i class="fas fa-download me-1"></i> Download
                             </button>
                         </div>
                     </div>

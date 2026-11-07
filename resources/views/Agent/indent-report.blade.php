@@ -13,13 +13,11 @@
             <div class="row g-3">
                 <div class="col-md-3">
                     <label class="form-label">From Date <span class="text-danger">*</span></label>
-                    <input type="date" class="form-control" id="frmDate"
-                        min="{{ $year_start }}" max="{{ $year_end }}" value="{{ $year_start }}">
+                    <input type="date" class="form-control" id="frmDate" value="{{ $year_start }}">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">To Date <span class="text-danger">*</span></label>
                     <input type="date" class="form-control" id="toDate"
-                        min="{{ $year_start }}" max="{{ $year_end }}"
                         value="{{ min($year_end, date('Y-m-d')) }}">
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
@@ -30,6 +28,11 @@
                 <div class="col-md-2 d-flex align-items-end">
                     <button type="button" class="btn btn-outline-secondary w-100" id="printBtn" disabled>
                         <i class="fas fa-print me-1"></i> Print
+                    </button>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="button" class="btn btn-outline-success w-100" id="downloadBtn" disabled>
+                        <i class="fas fa-download me-1"></i> Download
                     </button>
                 </div>
             </div>
@@ -121,29 +124,60 @@
         return rows;
     }
 
-    function printIndent() {
-        if (!printRows.length) {
-            Swal.fire('Error', 'Search the report first', 'error');
-            return;
-        }
+    function buildIndentCsv(rows) {
+        const frm = siDate.toDisplay($('#frmDate').val());
+        const to = siDate.toDisplay($('#toDate').val());
+        const meta = [
+            ['Organization', orgName || 'Smart Inventory'],
+            ['Report', 'Indent Report'],
+            ['Agent', agentName || ''],
+            ['Period', (frm && to ? `From ${frm} To ${to}` : '')],
+            ['Generated At', (window.siDate && siDate.toDisplay ? siDate.toDisplay(new Date()) : new Date().toLocaleString())]
+        ];
+
+        const headers = ['Sl', 'Indent No', 'Date', 'Item Code', 'Item Name', 'Req Qty', 'Issue Qty', 'Reject Qty', 'Unit', 'Status'];
+
+        const dataRows = (rows || []).map(function(row, idx) {
+            return [
+                String(idx + 1),
+                row.indent_no || '',
+                row.date || '',
+                row.prod_code || '',
+                row.prod_name || '',
+                siFmtQty(row.qty),
+                siFmtQty(row.issue_qty),
+                siFmtQty(row.reject_qty),
+                row.unit || '',
+                row.status || ''
+            ];
+        });
+
+        return siBuildCsv({
+            meta: meta,
+            headers: headers,
+            rows: dataRows
+        });
+    }
+
+    function buildIndentHtml(rows) {
         const frm = siDate.toDisplay($('#frmDate').val());
         const to = siDate.toDisplay($('#toDate').val());
         let body = '';
-        printRows.forEach((row, idx) => {
+        (rows || []).forEach(function(row, idx) {
             body += `<tr>
                 <td>${idx + 1}</td>
                 <td>${row.indent_no}</td>
                 <td>${row.date}</td>
                 <td>${row.prod_code}</td>
                 <td>${row.prod_name}</td>
-                <td style="text-align:right;">${row.qty}</td>
-                <td style="text-align:right;">${row.issue_qty}</td>
-                <td style="text-align:right;">${row.reject_qty}</td>
+                <td style="text-align:right;">${siFmtQty(row.qty)}</td>
+                <td style="text-align:right;">${siFmtQty(row.issue_qty)}</td>
+                <td style="text-align:right;">${siFmtQty(row.reject_qty)}</td>
                 <td>${row.unit}</td>
                 <td>${row.status}</td>
             </tr>`;
         });
-        siPrint(`<!DOCTYPE html><html><head><title>Indent Report</title>
+        return `<!DOCTYPE html><html><head><title>Indent Report</title>
             <style>
                 body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
                 h3, h4, p { margin: 0 0 6px 0; text-align: center; }
@@ -163,10 +197,60 @@
                 </tr></thead>
                 <tbody>${body}</tbody>
             </table>
-            </body></html>`);
+            </body></html>`;
+    }
+
+    function downloadIndentZip() {
+        if (!printRows.length) {
+            Swal.fire('Error', 'Search the report first', 'error');
+            return;
+        }
+        if (window.Swal) {
+            Swal.fire({
+                title: 'Generating ZIP...',
+                text: 'Packaging records',
+                allowOutsideClick: false,
+                didOpen: function() { Swal.showLoading(); }
+            });
+        }
+        setTimeout(function() {
+            try {
+                const csvContent = buildIndentCsv(printRows);
+                const htmlContent = buildIndentHtml(printRows);
+                const safeName = 'Indent_Report_' + siDateStamp();
+                const zipName = safeName + '.zip';
+                const files = [
+                    { name: safeName + '.csv', content: csvContent },
+                    { name: safeName + '.html', content: htmlContent }
+                ];
+                siDownloadZip(zipName, files);
+                if (window.Swal) Swal.close();
+            } catch (e) {
+                if (window.Swal) {
+                    Swal.close();
+                    Swal.fire('Error', 'Failed to generate ZIP: ' + (e.message || e), 'error');
+                }
+            }
+        }, 50);
+    }
+
+    function printIndent() {
+        if (!printRows.length) {
+            Swal.fire('Error', 'Search the report first', 'error');
+            return;
+        }
+        if (printRows.length > 1000) {
+            siWarnPrintLimit(printRows.length, downloadIndentZip);
+            return;
+        }
+        const html = buildIndentHtml(printRows);
+        siPrint(html);
     }
 
     $('#printBtn').on('click', printIndent);
+    $(document).on('click', '#downloadBtn', function() {
+        downloadIndentZip();
+    });
 
     $('#searchBtn').on('click', function () {
         const frmDate = $('#frmDate').val();
@@ -182,39 +266,59 @@
 
         printRows = [];
         $('#printBtn').prop('disabled', true);
-        $('#indentBody').html('<tr><td colspan="10" class="text-center">Loading...</td></tr>');
-
-        $.get(searchUrl, { frm_date: frmDate, to_date: toDate }, function (data) {
-            printRows = flattenRows(data);
-            if (!printRows.length) {
-                $('#indentBody').html('<tr><td colspan="10" class="text-center text-muted">No records found</td></tr>');
-                return;
+        $('#downloadBtn').prop('disabled', true);
+        if (window._indentLazy) window._indentLazy.destroy();
+        window._indentLazy = SiLazyScroll.create({
+            scrollEl: $('#indentBody').closest('.report-scroll'),
+            tbody: '#indentBody',
+            url: searchUrl,
+            pageSize: 40,
+            showEndRow: false,
+            colSpan: 10,
+            params: function () { return { frm_date: frmDate, to_date: toDate }; },
+            emptyHtml: '<tr><td colspan="10" class="text-center text-muted">No records found</td></tr>',
+            onChunk: function (rows, payload, reset) {
+                const flat = flattenRows(rows);
+                if (reset) printRows = [];
+                const start = printRows.length;
+                printRows = printRows.concat(flat);
+                if (!printRows.length) {
+                    $('#indentBody').html('<tr><td colspan="10" class="text-center text-muted">No records found</td></tr>');
+                    return;
+                }
+                let html = '';
+                flat.forEach(function (row, i) {
+                    const idx = start + i;
+                    const statusHtml = row.status === 'Issued'
+                        ? '<span class="badge bg-success">Issued</span>'
+                        : '<span class="badge bg-warning text-dark">Pending</span>';
+                    html += `<tr>
+                        <td>${idx + 1}</td>
+                        <td>${row.indent_no}</td>
+                        <td>${row.date}</td>
+                        <td>${row.prod_code}</td>
+                        <td>${row.prod_name}</td>
+                        <td class="text-end">${siFmtQty(row.qty)}</td>
+                        <td class="text-end">${siFmtQty(row.issue_qty)}</td>
+                        <td class="text-end">${siFmtQty(row.reject_qty)}</td>
+                        <td>${row.unit}</td>
+                        <td>${statusHtml}</td>
+                    </tr>`;
+                });
+                if (reset) {
+                    $('#indentBody').html(html);
+                } else {
+                    $('#indentBody').append(html);
+                }
+                $('#printBtn').prop('disabled', printRows.length === 0);
+                $('#downloadBtn').prop('disabled', printRows.length === 0);
+            },
+            onError: function (xhr) {
+                const msg = xhr.responseJSON?.message || 'Failed to load indent report. Run USP_AGENT_REPORTS.sql on the organisation database.';
+                Swal.fire('Error', msg, 'error');
             }
-            let html = '';
-            printRows.forEach((row, idx) => {
-                const statusHtml = row.status === 'Issued'
-                    ? '<span class="badge bg-success">Issued</span>'
-                    : '<span class="badge bg-warning text-dark">Pending</span>';
-                html += `<tr>
-                    <td>${idx + 1}</td>
-                    <td>${row.indent_no}</td>
-                    <td>${row.date}</td>
-                    <td>${row.prod_code}</td>
-                    <td>${row.prod_name}</td>
-                    <td class="text-end">${row.qty}</td>
-                    <td class="text-end">${row.issue_qty}</td>
-                    <td class="text-end">${row.reject_qty}</td>
-                    <td>${row.unit}</td>
-                    <td>${statusHtml}</td>
-                </tr>`;
-            });
-            $('#indentBody').html(html);
-            $('#printBtn').prop('disabled', false);
-        }).fail(function (xhr) {
-            const msg = xhr.responseJSON?.message || 'Failed to load indent report. Run USP_AGENT_REPORTS.sql on the organisation database.';
-            Swal.fire('Error', msg, 'error');
-            $('#indentBody').html('<tr><td colspan="10" class="text-center text-danger">Failed to load</td></tr>');
         });
+        window._indentLazy.resetAndLoad();
     });
 
     if (new URLSearchParams(window.location.search).get('today') === '1') {

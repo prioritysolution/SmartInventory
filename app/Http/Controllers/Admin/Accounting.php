@@ -61,27 +61,10 @@ class Accounting extends Controller
     public function detailsGeneralVoucher($id)
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $row = DB::connection('coops')->selectOne("
-            SELECT m.Voucher_Id,
-                   DATE_FORMAT(m.Vou_Date, '%Y-%m-%d') AS Vou_Date,
-                   m.Vou_Type,
-                   m.Vou_Mode,
-                   m.Vou_No,
-                   m.Ref_Vou_No,
-                   m.Particulars,
-                   m.Instrument_No,
-                   dr.GlHead_Id AS Debit_Ledger,
-                   cr.GlHead_Id AS Credit_Ledger,
-                   dr.Vou_Amount AS Amount
-            FROM trans_voucher_master m
-            INNER JOIN trans_voucher_details dr
-                ON dr.Voucher_Id = m.Voucher_Id AND dr.Trans_Type = 'D'
-            INNER JOIN trans_voucher_details cr
-                ON cr.Voucher_Id = m.Voucher_Id AND cr.Trans_Type = 'C'
-            WHERE m.Voucher_Id = ?
-              AND m.Trans_Type = 9
-            LIMIT 1
-        ", [intval($id)]);
+        $row = DB::connection('coops')->selectOne(
+            'CALL USP_GET_GENERAL_VOUCHER_DTLS(?)',
+            [intval($id)]
+        );
         if (!$row) {
             return response()->json(['error' => 'Voucher not found'], 404);
         }
@@ -221,7 +204,7 @@ class Accounting extends Controller
     private function savePairVoucher($conn, int $vouchId, int $mode, int $voucherType, string $vouDate, int $debitLedger, int $creditLedger, float $amount, string $particulars, string $refNo): array
     {
         $heads = $conn->select(
-            'SELECT Account_Id, Is_Active FROM mst_acct_glhead WHERE Account_Id IN (?, ?)',
+            'CALL USP_GET_GLHEAD_ACTIVE_PAIR(?, ?)',
             [$debitLedger, $creditLedger]
         );
         $active = [];
@@ -258,7 +241,7 @@ class Accounting extends Controller
             $vouchId = (int) $conn->getPdo()->lastInsertId();
         } else {
             $existing = $conn->selectOne(
-                'SELECT Voucher_Id, Vou_No FROM trans_voucher_master WHERE Voucher_Id = ? AND Trans_Type = 9 AND IFNULL(Type_Id, 0) = 0',
+                'CALL USP_GET_VOUCHER_MASTER_PAIR(?)',
                 [$vouchId]
             );
             if (!$existing) {
@@ -290,17 +273,9 @@ class Accounting extends Controller
 
     private function ensureNumberSeries($conn, string $element, int $yearId, int $branchId): void
     {
-        $row = $conn->selectOne(
-            'SELECT Id FROM stores_id WHERE Element_Name = ? AND Year_Id = ? AND (Branch_Id IS NULL OR Branch_Id = ?) LIMIT 1',
+        $conn->statement(
+            'CALL USP_ENSURE_NUMBER_SERIES(?, ?, ?)',
             [$element, $yearId, $branchId]
-        );
-        if ($row) {
-            return;
-        }
-        $for = $element === 'CON' ? 'For Contra Voucher Generate' : 'For Journal Voucher Generate';
-        $conn->insert(
-            'INSERT INTO stores_id (Element_Name, Element_For, Cur_Val, Year_Id, Branch_Id) VALUES (?, ?, 0, ?, ?)',
-            [$element, $for, $yearId, $branchId]
         );
     }
 
@@ -392,15 +367,12 @@ class Accounting extends Controller
     {
         Config::set('database.connections.coops.database', session('org_schema'));
 
-        $allParties = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [$partyType, session('branch_id'), 0]);
-        $parties = array_values(array_filter($allParties, function ($row) {
-            return (int) ($row->Status_Cd ?? 1) === 1;
-        }));
-
+        // Parties load via AJAX Select2 — especially customers (~25k).
+        $parties = [];
         $banks    = DB::connection('coops')->select('CALL USP_GET_BANK_LEDGER()');
         $vouchers = DB::connection('coops')->select('CALL USP_GET_PARTY_VOUCHER_LIST(?, ?)', [session('year_id'), $partyType]);
 
-        return view('Admin.party-voucher', compact('parties', 'banks', 'vouchers', 'partyLabel', 'routePrefix'))
+        return view('Admin.party-voucher', compact('parties', 'banks', 'vouchers', 'partyLabel', 'routePrefix', 'partyType'))
             ->with('pageTitle', $pageTitle);
     }
 

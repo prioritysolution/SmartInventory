@@ -6,9 +6,14 @@
 
     <div class="d-flex justify-content-between align-items-center ps-2 mb-3">
         <h6 class="mb-0">Office Settlement</h6>
-        <button type="button" class="btn btn-outline-secondary btn-sm" id="printBtn" disabled>
-            <i class="fas fa-print me-1"></i> Print
-        </button>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="printBtn" disabled>
+                <i class="fas fa-print me-1"></i> Print
+            </button>
+            <button type="button" class="btn btn-outline-success btn-sm" id="downloadBtn" disabled>
+                <i class="fas fa-download me-1"></i> Download
+            </button>
+        </div>
     </div>
 
     <div class="card mb-3">
@@ -364,6 +369,7 @@
             printRows = [];
             $('#reportBody').html('<tr><td colspan="6" class="text-center text-muted">No unsettled transactions</td></tr>');
             $('#printBtn').prop('disabled', true);
+            $('#downloadBtn').prop('disabled', true);
             updateSummary([]);
             updateGenerateTokenBtn();
             return;
@@ -383,6 +389,7 @@
         $('#reportBody').html(html);
         updateSummary(data);
         $('#printBtn').prop('disabled', false);
+        $('#downloadBtn').prop('disabled', false);
         updateGenerateTokenBtn();
     }
 
@@ -543,12 +550,17 @@
             updateSummary([]);
             updateGenerateTokenBtn();
             $('#printBtn').prop('disabled', true);
+            $('#downloadBtn').prop('disabled', true);
         });
     }
 
     function printReport() {
         if (!printRows.length) {
             Swal.fire('Error', 'No data to print', 'error');
+            return;
+        }
+        if (printRows.length > 1000) {
+            siWarnPrintLimit(printRows.length, downloadSettlementZip);
             return;
         }
         const totals = calcModeTotals(printRows);
@@ -620,7 +632,98 @@
         siPrint(html);
     }
 
+    function buildSettlementCsv() {
+        const totals = calcModeTotals(printRows);
+        const headers = ['Sl', 'Invoice No', 'Date', 'Customer', 'Payment Mode', 'Net Amount'];
+        const rows = printRows.map((row, idx) => [
+            idx + 1,
+            row.Invoice_No || '',
+            row.Invoice_Date ? siDate.toDisplay(row.Invoice_Date) : '',
+            row.Customer_Name || '',
+            row.Trans_Mode || '',
+            fmtAmt(row.Net_Amt)
+        ]);
+        const totalsRow = ['Total', '', '', '', '', fmtAmt(totals.net)];
+        const meta = [
+            ['Office Settlement Report'],
+            ['Organization', orgName || 'Smart Inventory'],
+            ['Agent', agentName || ''],
+            ['Token', currentToken || 'None'],
+            ['Cash Total', fmtAmt(totals.cash)],
+            ['Bank Total', fmtAmt(totals.bank)],
+            ['Credit Total', fmtAmt(totals.credit)],
+            ['Generated At', new Date().toLocaleString()],
+            ['Total Records', printRows.length]
+        ];
+        return siBuildCsv({ meta, headers, rows, totals: totalsRow });
+    }
+
+    function buildSettlementHtml() {
+        const totals = calcModeTotals(printRows);
+        let body = '';
+        printRows.forEach((row, idx) => {
+            body += `<tr>
+                <td>${idx + 1}</td>
+                <td>${row.Invoice_No ?? ''}</td>
+                <td>${row.Invoice_Date ? siDate.toDisplay(row.Invoice_Date) : ''}</td>
+                <td>${row.Customer_Name ?? ''}</td>
+                <td>${row.Trans_Mode ?? '-'}</td>
+                <td style="text-align:right;">${fmtAmt(row.Net_Amt)}</td>
+            </tr>`;
+        });
+        body += `<tr>
+            <td colspan="5" style="text-align:right;font-weight:bold;">Total</td>
+            <td style="text-align:right;font-weight:bold;">${fmtAmt(totals.net)}</td>
+        </tr>`;
+        return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Office Settlement</title>
+            <style>
+                * { box-sizing: border-box; }
+                body { font-family: Arial, sans-serif; font-size: 12px; color: #000; padding: 12px; }
+                h3, h4, p { margin: 0 0 6px 0; text-align: center; }
+                table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+                th, td { border: 1px solid #000; padding: 4px 6px; }
+                th { background: #f0f0f0; }
+                .summary { margin-top: 14px; width: 100%; }
+                .summary td { border: 1px solid #000; padding: 8px; width: 33.33%; text-align: center; }
+            </style></head><body>
+            <h3>${orgName || 'Smart Inventory'}</h3>
+            <h4>Office Settlement (Unsettled)</h4>
+            <p>Agent: ${agentName || ''}${currentToken ? ' &nbsp;|&nbsp; Token: ' + currentToken : ''}</p>
+            <table>
+                <thead><tr>
+                    <th>Sl</th><th>Invoice No</th><th>Date</th><th>Customer</th><th>Payment Mode</th><th>Net Amount</th>
+                </tr></thead>
+                <tbody>${body}</tbody>
+            </table>
+            <table class="summary">
+                <tr>
+                    <td><div>Cash Total</div><div style="font-weight:bold;margin-top:4px;">₹ ${fmtAmt(totals.cash)}</div></td>
+                    <td><div>Bank Total</div><div style="font-weight:bold;margin-top:4px;">₹ ${fmtAmt(totals.bank)}</div></td>
+                    <td><div>Credit Total</div><div style="font-weight:bold;margin-top:4px;">₹ ${fmtAmt(totals.credit)}</div></td>
+                </tr>
+            </table>
+            </body></html>`;
+    }
+
+    function downloadSettlementZip() {
+        if (!printRows.length) {
+            Swal.fire('Error', 'No data to download', 'warning');
+            return;
+        }
+        const base = 'office_settlement_' + siDateStamp();
+        const csv = buildSettlementCsv();
+        const html = buildSettlementHtml();
+        siDownloadZip({
+            filename: base + '.zip',
+            files: [
+                { name: base + '.csv', content: csv, mime: 'text/csv;charset=utf-8;' },
+                { name: base + '.html', content: html, mime: 'text/html;charset=utf-8;' }
+            ]
+        });
+    }
+
     $('#printBtn').on('click', printReport);
+    $('#downloadBtn').on('click', downloadSettlementZip);
     $('#cancelTokenBtn').on('click', cancelActiveToken);
 
     $('#generateTokenBtn').on('click', function () {

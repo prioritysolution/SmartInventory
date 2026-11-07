@@ -90,7 +90,7 @@
                         <i class="fa fa-calendar me-1 text-primary"></i>{{ $now->format('l, d M Y') }}
                     </span>
                     @foreach (collect($agentMenuLinks ?? [])->filter(fn ($link) => !str_starts_with($link->route, 'agent.report.'))->take(2) as $link)
-                        <a href="{{ route($link->route) }}" class="btn {{ $loop->first ? 'btn-primary' : 'btn-outline-primary' }}">
+                        <a href="{{ safeRoute($link->route) }}" class="btn {{ $loop->first ? 'btn-primary' : 'btn-outline-primary' }}">
                             <i class="{{ $link->icon }} me-1"></i>{{ $link->name }}
                         </a>
                     @endforeach

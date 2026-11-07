@@ -51,9 +51,10 @@
                                       </a>
                                       <ul style="padding-left: 20px;">
                                           @foreach ($parent->children as $child)
+                                              @continue($child->route && !routeExists($child->route))
                                               <li>
-                                                  <a href="{{ $child->route ? route($child->route) : 'javascript:void(0);' }}"
-                                                      class="{{ $child->route && request()->routeIs($child->route) ? 'active' : '' }}"
+                                                  <a href="{{ safeRoute($child->route) }}"
+                                                      class="{{ $child->route && routeExists($child->route) && request()->routeIs($child->route) ? 'active' : '' }}"
                                                       style="font-weight: 300; display: flex; align-items: flex-start; gap: 10px;">
                                                       <i class="fa-solid fa-circle"
                                                           style="font-size: 6px; margin-top: 8px; flex-shrink: 0;"></i>
@@ -64,8 +65,8 @@
                                       </ul>
                                   </li>
                               @else
-                                  <li class="{{ $parent->route && request()->routeIs($parent->route) ? 'active' : '' }}">
-                                      <a href="{{ $parent->route ? route($parent->route) : 'javascript:void(0);' }}"
+                                  <li class="{{ $parent->route && routeExists($parent->route) && request()->routeIs($parent->route) ? 'active' : '' }}">
+                                      <a href="{{ safeRoute($parent->route) }}"
                                           style="display: flex; align-items: center; gap: 10px;">
                                           <i class="{{ $parent->icon ?: 'isax isax-box' }}"></i>
                                           <span>{{ $parent->name }}</span>

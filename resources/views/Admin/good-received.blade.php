@@ -81,12 +81,12 @@
                             <div>
                                 <div class="form-check form-check-inline mb-0">
                                     <input class="form-check-input" type="radio" name="gstMode" id="withGst"
-                                        value="1" checked>
+                                        value="1">
                                     <label class="form-check-label" for="withGst">With GST</label>
                                 </div>
                                 <div class="form-check form-check-inline mb-0">
                                     <input class="form-check-input" type="radio" name="gstMode" id="withoutGst"
-                                        value="0">
+                                        value="0" checked>
                                     <label class="form-check-label" for="withoutGst">Without GST</label>
                                 </div>
                             </div>
@@ -176,7 +176,6 @@
                                 <input type="hidden" id="unitId">
                                 <input type="hidden" id="originalCgst">
                                 <input type="hidden" id="originalSgst">
-                                <input type="hidden" id="saleMargin" value="0">
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label class="form-label">Unit</label>
@@ -423,12 +422,12 @@
                 </div>
                 <div class="modal-body">
                     <div class="row mb-3">
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label class="form-label">From Date</label>
                             <input type="date" class="form-control" id="searchFromDate"
                                 max="{{ session('year_end') }}">
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label class="form-label">To Date</label>
                             <input type="date" class="form-control" id="searchToDate"
                                 max="{{ session('year_end') }}">
@@ -442,6 +441,10 @@
                                 @endforeach
                             </select>
                         </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Bill No / Ref Bill No</label>
+                            <input type="text" class="form-control" id="searchBillNo" maxlength="120">
+                        </div>
                         <div class="col-md-2 d-flex align-items-end">
                             <button type="button" class="btn btn-primary w-100" id="searchPurchaseGo">Search</button>
                         </div>
@@ -453,6 +456,7 @@
                                     <th>Sl</th>
                                     <th>Invoice No</th>
                                     <th>Ref No</th>
+                                    <th>Party Name</th>
                                     <th>Invoice Date</th>
                                     <th>Net Amount</th>
                                     <th>Action</th>
@@ -460,7 +464,7 @@
                             </thead>
                             <tbody id="purchaseSearchBody">
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted">Use filters above to search</td>
+                                    <td colspan="7" class="text-center text-muted">Use filters above to search</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -521,6 +525,7 @@
                 }
                 calculateAmounts();
             });
+            $('.gst-col').toggle($('input[name="gstMode"]:checked').val() === '1');
 
             function applyGoodReceivedItem(item) {
                 const gst = item.GST_Data ? JSON.parse(item.GST_Data) : {
@@ -539,13 +544,11 @@
                 $('#sgstRate').val(isWithGst ? gst.SGST : 0);
                 $('#originalCgst').val(gst.CGST);
                 $('#originalSgst').val(gst.SGST);
-                $('#saleMargin').val(item.Sale_Margin ?? 0);
                 if (item.Is_Fmcg == 1) {
                     showPackDateField(true);
                 } else {
                     showPackDateField(false);
                 }
-                calcSaleMrp();
                 $('#quantity').focus();
             }
 
@@ -696,8 +699,6 @@
                 $('#itemSelected').val($(this).data('name'));
                 $('#unitId').val($(this).data('unit'));
                 $('#unitDisplay').val($(this).data('unitname'));
-                $('#saleMargin').val($(this).data('margin') || 0);
-
                 if (isFmcg) {
                     showPackDateField(true);
                 } else {
@@ -711,13 +712,11 @@
                 $('#sgstRate').val(isWithGst ? sgst : 0);
                 $('#originalCgst').val(cgst);
                 $('#originalSgst').val(sgst);
-                calcSaleMrp();
                 $('#quantity').focus();
             });
 
             $('#quantity, #rate, #discountPercent').on('input', function() {
                 calculateAmounts();
-                calcSaleMrp();
             });
 
             $('#summaryDiscPercent').on('input', function() {
@@ -783,7 +782,6 @@
                     total_gst: $('#totalGst').val(),
                     net_amount: $('#netAmount').val(),
                     sale_mrp: $('#saleMrp').val() || 0,
-                    sale_margin: parseFloat($('#saleMargin').val()) || 0,
                     item_purchase_date: $('#itemPurchaseDate').val() || '',
                 });
                 renderItemsTable();
@@ -821,7 +819,6 @@
                 $('#totalGst').val(item.total_gst);
                 $('#netAmount').val(item.net_amount);
                 $('#saleMrp').val(item.sale_mrp);
-                $('#saleMargin').val(item.sale_margin || 0);
                 $('#itemPurchaseDate').val(item.item_purchase_date);
 
                 if (item.item_purchase_date) {
@@ -835,24 +832,24 @@
 
             $('#savePurchase').on('click', function() {
                 if (!$('#purchaseDate').val()) {
-                    Swal.fire('Error', 'Purchase Date is required', 'error');
+                    showValidationError('Purchase Date is required', '#purchaseDate');
                     return;
                 }
                 if (!$('#partyId').val()) {
-                    Swal.fire('Error', 'Please select a Party', 'error');
+                    showValidationError('Please select a Party', '#partyId');
                     return;
                 }
                 if (itemsArray.length === 0) {
-                    Swal.fire('Error', 'Please add at least one item', 'error');
+                    showValidationError('Please add at least one item', '#productCodeInput');
                     return;
                 }
                 if ($('input[name="transMode"]:checked').val() === '2') {
                     if (!$('#bankAccountId').val()) {
-                        Swal.fire('Error', 'Please select a Bank', 'error');
+                        showValidationError('Please select a Bank', '#bankAccountId');
                         return;
                     }
                     if (!$('#instrumentNo').val().trim()) {
-                        Swal.fire('Error', 'Instrument No is required for Bank', 'error');
+                        showValidationError('Instrument No is required for Bank', '#instrumentNo');
                         return;
                     }
                 }
@@ -906,6 +903,15 @@
                 $.get("{{ url('good-received/details') }}/" + purId, function(data) {
                     $('#purchaseSearchModal').modal('hide');
                     currentVouchId = data.Voucher_Id ;
+                    const purchaseHasGst = (data.Item_Details || []).some(item =>
+                        (parseFloat(item.CGST_Prcnt) || 0) > 0 ||
+                        (parseFloat(item.SGST_Prcnt) || 0) > 0 ||
+                        (parseFloat(item.CGST_Amt) || 0) > 0 ||
+                        (parseFloat(item.SGST_Amt) || 0) > 0
+                    );
+                    $('#withGst').prop('checked', purchaseHasGst);
+                    $('#withoutGst').prop('checked', !purchaseHasGst);
+                    $('.gst-col').toggle(purchaseHasGst);
                     $('#purchaseDate').val(data.Invoice_Date ? data.Invoice_Date.substring(0, 10) :
                         '');
                     $('#partyId').val(data.Party_Id).trigger('change');
@@ -921,7 +927,7 @@
                         item_id: item.Prod_Id,
                         hsn_code: parseInt(item.hsn_code) || 0,
                         item_name: item.Prod_Name,
-                        quantity: item.qnty,
+                        quantity: parseFloat(item.qnty) || 0,
                         unit_id: item.Unit_Id,
                         unit_name: item.Unit_Name,
                         rate: item.Item_Rate,
@@ -937,7 +943,6 @@
                             .CGST_Amt)).toFixed(2),
                         net_amount: item.Net_Amt,
                         sale_mrp: item.MRP,
-                        sale_margin: item.Sale_Margin ?? 0,
                         item_purchase_date: item.Pack_Date ? item.Pack_Date.substring(0,
                             10) : '',
                     }));
@@ -967,13 +972,20 @@
                 const fromDate = $('#searchFromDate').val();
                 const toDate = $('#searchToDate').val();
                 const partyId = $('#searchPartyId').val() || 0;
+                const billNo = $('#searchBillNo').val().trim();
 
-                if (!fromDate || !toDate) {
-                    Swal.fire('Error', 'Please select From Date and To Date', 'error');
+                if (billNo && (!partyId || partyId === '0')) {
+                    showValidationError('Please select a Party when searching by Bill No or Ref Bill No', '#searchPartyId');
                     return;
                 }
-                if (!partyId || partyId == '0') {
-                    Swal.fire('Error', 'Please select a Party', 'error');
+                if ((!fromDate || !toDate) && !billNo) {
+                    showValidationError('Enter Bill No or Ref Bill No, or select From Date and To Date',
+                        !fromDate ? '#searchFromDate' : '#searchToDate');
+                    return;
+                }
+                if ((fromDate && !toDate) || (!fromDate && toDate)) {
+                    showValidationError('Please select both From Date and To Date',
+                        !fromDate ? '#searchFromDate' : '#searchToDate');
                     return;
                 }
 
@@ -981,54 +993,42 @@
                     purchaseSearchDT.destroy();
                     purchaseSearchDT = null;
                 }
-                $('#purchaseSearchBody').html(
-                    '<tr><td colspan="6" class="text-center">Loading...</td></tr>');
-
-                $.get("{{ url('good-received/search') }}", {
-                        from_date: fromDate,
-                        to_date: toDate,
-                        party_id: partyId
-                    },
-                    function(data) {
-                        let html = '';
-                        if (!data.length) {
-                            $('#purchaseSearchBody').html(
-                                '<tr><td colspan="6" class="text-center text-muted">No records found</td></tr>'
-                            );
-                            return;
-                        }
-                        data.forEach((row, i) => {
-                            html += `<tr>
+                if (!window._grPurchaseSearchLazy) {
+                    const $wrap = $('#purchaseSearchTable').closest('.table-responsive, .modal-body');
+                    if (!$wrap.hasClass('si-lazy-scroll-box')) {
+                        $wrap.addClass('si-lazy-scroll-box').css({ maxHeight: '360px', overflowY: 'auto' });
+                    }
+                    window._grPurchaseSearchLazy = SiLazyScroll.create({
+                        scrollEl: $wrap,
+                        tbody: '#purchaseSearchBody',
+                        url: "{{ url('good-received/search') }}",
+                        pageSize: 30,
+                        colSpan: 7,
+                        params: function () {
+                            return {
+                                from_date: $('#searchFromDate').val(),
+                                to_date: $('#searchToDate').val(),
+                                party_id: $('#searchPartyId').val() || 0,
+                                bill_no: $('#searchBillNo').val().trim()
+                            };
+                        },
+                        renderRow: function (row, i) {
+                            return `<tr>
                             <td>${i + 1}</td>
-                            <td>${row.Invoice_No}</td>
+                            <td>${row.Invoice_No ?? ''}</td>
                             <td>${row.Ref_No ?? ''}</td>
+                            <td>${row.Party_Name ?? ''}</td>
                             <td>${siDate.toDisplay(row.Invoice_Date)}</td>
-                            <td>${row.Net_Amt}</td>
+                            <td>${row.Net_Amt ?? ''}</td>
                             <td><button class="btn btn-sm btn-primary viewPurchase" data-id="${row.Pur_Id}">Edit</button></td>
                         </tr>`;
-                        });
-                        $('#purchaseSearchBody').html(html);
-                        purchaseSearchDT = $('#purchaseSearchTable').DataTable({
-                            pageLength: 10,
-                            ordering: true,
-                            sDom: 'fBtlpi',
-                            language: {
-                                search: '',
-                                searchPlaceholder: 'Search...',
-                                sLengthMenu: 'Row Per Page _MENU_ Entries',
-                                info: '_START_ - _END_ of _TOTAL_ items',
-                                paginate: {
-                                    next: '<i class="isax isax-arrow-right-1"></i>',
-                                    previous: '<i class="isax isax-arrow-left"></i>'
-                                }
-                            }
-                        });
-                    }).fail(function() {
-                    Swal.fire('Error', 'Failed to load data', 'error');
-                    $('#purchaseSearchBody').html(
-                        '<tr><td colspan="6" class="text-center text-danger">Failed to load</td></tr>'
-                    );
-                });
+                        },
+                        onError: function () {
+                            Swal.fire('Error', 'Failed to load data', 'error');
+                        }
+                    });
+                }
+                window._grPurchaseSearchLazy.resetAndLoad();
             });
 
             $('#purchaseSearchModal').on('hidden.bs.modal', function() {
@@ -1037,9 +1037,10 @@
                     purchaseSearchDT = null;
                 }
                 $('#purchaseSearchBody').html(
-                    '<tr><td colspan="6" class="text-center text-muted">Use filters above to search</td></tr>'
+                    '<tr><td colspan="7" class="text-center text-muted">Use filters above to search</td></tr>'
                 );
                 $('#searchFromDate, #searchToDate').val('');
+                $('#searchBillNo').val('');
                 $('#searchPartyId').val('0').trigger('change');
             });
 
@@ -1069,7 +1070,6 @@
                      data-cgst="${cgst}"
                      data-sgst="${sgst}"
                      data-fmcg="${item.Is_Fmcg ?? 0}"
-                     data-margin="${item.Sale_Margin ?? 0}"
                      data-cateid="${item.Prd_CateId ?? 0}"
                      data-subcateid="${item.Prd_SubCateId ?? 0}">
                     <td>${i + 1}</td>
@@ -1106,18 +1106,6 @@
 
 
 
-        function calcSaleMrp() {
-            const rate = parseFloat($('#rate').val()) || 0;
-            const discPct = Math.min(Math.max(parseFloat($('#discountPercent').val()) || 0, 0), 100);
-            const margin = parseFloat($('#saleMargin').val()) || 0;
-            if (rate <= 0) {
-                $('#saleMrp').val('');
-                return;
-            }
-            const netRate = rate * (1 - discPct / 100);
-            $('#saleMrp').val((netRate * (1 + margin / 100)).toFixed(2));
-        }
-
         function calculateAmounts() {
             const qty = parseFloat($('#quantity').val()) || 0;
             const rate = parseFloat($('#rate').val()) || 0;
@@ -1143,10 +1131,14 @@
             $('#netAmount').val((taxableAmt + totalGst).toFixed(2));
         }
 
+        function showValidationError(message, selector) {
+            window.SIRequiredFieldFeedback.setNextField(selector);
+            Swal.fire('Error', message, 'error');
+        }
 
         function validateItemForm() {
             if (!$('#purchaseDate').val()) {
-                Swal.fire('Error', 'Purchase Date is required before adding items', 'error');
+                showValidationError('Purchase Date is required before adding items', '#purchaseDate');
                 return false;
             }
             const purchaseDate = new Date($('#purchaseDate').val());
@@ -1155,17 +1147,18 @@
             const yearEnd = new Date('{{ session('year_end') }}');
 
             if (purchaseDate > today) {
-                Swal.fire('Error', 'Purchase Date cannot be After Today', 'error');
+                showValidationError('Purchase Date cannot be After Today', '#purchaseDate');
                 return false;
             }
             if (purchaseDate < yearStart || purchaseDate > yearEnd) {
-                Swal.fire('Error',
-                    'Purchase Date must be between {{ session('year_start') }} and {{ session('year_end') }}', 'error'
+                showValidationError(
+                    'Purchase Date must be between {{ session('year_start') }} and {{ session('year_end') }}',
+                    '#purchaseDate'
                 );
                 return false;
             }
             if (!$('#selectedItemId').val()) {
-                Swal.fire('Error', 'Please select an item', 'error');
+                showValidationError('Please select an item', '#productCodeInput');
                 return false;
             }
 
@@ -1175,43 +1168,40 @@
             const totalAmt = parseFloat($('#totalAmount').val()) || 0;
 
             if (!$('#quantity').val() || qty <= 0) {
-                Swal.fire('Error', 'Quantity must be greater than 0', 'error');
-                return false;
-            }
-            if (qty > 99999999.99) {
-                Swal.fire('Error', 'Quantity cannot exceed 99999999.99', 'error');
+                showValidationError('Quantity must be greater than 0', '#quantity');
                 return false;
             }
             if (!$('#rate').val()) {
-                Swal.fire('Error', 'Rate is required', 'error');
+                showValidationError('Rate is required', '#rate');
                 return false;
             }
             if (discPct > 100) {
-                Swal.fire('Error', 'Discount % cannot be greater than 100', 'error');
+                showValidationError('Discount % cannot be greater than 100', '#discountPercent');
                 return false;
             }
             if (rate > 99999999.99) {
-                Swal.fire('Error', 'Rate cannot exceed 99999999.99', 'error');
+                showValidationError('Rate cannot exceed 99999999.99', '#rate');
                 return false;
             }
             const saleMrp = parseFloat($('#saleMrp').val());
             if (!$('#saleMrp').val() || isNaN(saleMrp) || saleMrp <= 0) {
-                Swal.fire('Error', 'Sale MRP is required', 'error');
-                $('#saleMrp').focus();
+                showValidationError('Sale MRP is required', '#saleMrp');
                 return false;
             }
             const netRate = rate * (1 - (Math.min(Math.max(discPct, 0), 100) / 100));
             if (saleMrp < netRate) {
-                Swal.fire('Error', `Sale MRP (${saleMrp}) cannot be less than discounted rate (${netRate.toFixed(2)})`, 'error');
-                $('#saleMrp').focus();
+                showValidationError(
+                    `Sale MRP (${saleMrp}) cannot be less than discounted rate (${netRate.toFixed(2)})`,
+                    '#saleMrp'
+                );
                 return false;
             }
             if (totalAmt > 99999999.99) {
-                Swal.fire('Error', 'Total Amount (Qty × Rate) cannot exceed 99999999.99', 'error');
+                showValidationError('Total Amount (Qty × Rate) cannot exceed 99999999.99', '#quantity');
                 return false;
             }
             if ($('#itemPurchaseDateDiv').is(':visible') && !$('#itemPurchaseDate').val()) {
-                Swal.fire('Error', 'Pack Date is required for this category', 'error');
+                showValidationError('Pack Date is required for this category', '#itemPurchaseDate');
                 return false;
             }
             return true;
@@ -1290,7 +1280,6 @@
             $('#itemSelected, #unitDisplay').val('');
             $('#cgstRate, #sgstRate').val('');
             $('#originalCgst, #originalSgst').val('');
-            $('#saleMargin').val(0);
             clearItemCalc();
         }
 
@@ -1317,8 +1306,8 @@
             $('#addItemBtn').text('+ Add Item').data('editing', false);
             $('#itemPurchaseDateDiv').hide();
             $('#itemPurchaseDate').val('');
-            $('#withGst').prop('checked', true);
-            $('.gst-col').show();
+            $('#withoutGst').prop('checked', true);
+            $('.gst-col').hide();
             clearItemSelection();
         }
     </script>
