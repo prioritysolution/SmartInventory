@@ -303,10 +303,12 @@
 @endsection
 
 @push('scripts')
+    @include('partials.item-picker-pagination')
     <script>
         let indentItems = [];
         let dataTable;
         let itemPickerDT = null;
+        let itemPickerFilters = null;
         let issueScanProduct = null;
         let currentMrpOptions = [];
         let currentTotalQty = 0;
@@ -520,22 +522,14 @@
                 const catId = parseInt($('#modalCateId').val()) || 0;
                 const subCatId = parseInt($('#modalSubCateId').val()) || 0;
                 const code = $('#modalSearchInput').val().trim();
-                $('#itemPickerLoader').show();
                 $('#itemPickerTableWrap').hide();
                 if (itemPickerDT) {
                     itemPickerDT.destroy();
                     itemPickerDT = null;
                 }
                 $('#itemPickerTable tbody').html('');
-                indentAjax({
-                    url: "{{ route('agent-indent.items') }}",
-                    data: { cat_id: catId, sub_cat_id: subCatId, code: code }
-                }).done(function(data) {
-                    renderItemPickerTable(data);
-                }).fail(function() {
-                    $('#itemPickerLoader').hide();
-                    Swal.fire('Error', 'Failed to load items', 'error');
-                });
+                itemPickerFilters = { cat_id: catId, sub_cat_id: subCatId, code: code };
+                loadItemPickerPage(1);
             });
 
             $('#modalSearchInput').on('keypress', function(e) {
@@ -546,6 +540,8 @@
                 $('#modalCateId').val('0');
                 $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
                 $('#modalSearchInput').val('');
+                $('#itemPickerPagination').hide().empty();
+                itemPickerFilters = null;
                 $('#itemPickerLoader').hide();
                 $('#itemPickerTableWrap').hide();
                 if (itemPickerDT) {
@@ -651,19 +647,31 @@
             $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
             $('#modalSearchInput').val(code || '');
             $('#itemPickerModal').modal('show');
-            if (data.length > 0) {
-                $('#itemPickerLoader').show();
-                renderItemPickerTable(data);
+            if (data.length > 0 || code) {
+                itemPickerFilters = { cat_id: 0, sub_cat_id: 0, code: code || '' };
+                loadItemPickerPage(1);
             }
         }
 
-        function renderItemPickerTable(data) {
+        function loadItemPickerPage(page) {
+            window.fetchItemPickerPage(
+                "{{ route('agent-indent.items') }}",
+                itemPickerFilters,
+                page,
+                function(response) {
+                    renderItemPickerTable(response.items || [], response);
+                }
+            );
+        }
+
+        function renderItemPickerTable(data, pagination) {
             setTimeout(function() {
                 $('#itemPickerLoader').hide();
                 if (!data.length) {
                     $('#itemPickerTable tbody').html(
                         '<tr><td colspan="5" class="text-center text-muted">No items found</td></tr>');
                     $('#itemPickerTableWrap').show();
+                    window.renderItemPickerPagination(pagination, loadItemPickerPage);
                     return;
                 }
                 $.each(data, function(i, item) {
@@ -688,22 +696,7 @@
                     itemPickerDT = null;
                 }
                 $('#itemPickerTableWrap').show();
-                itemPickerDT = $('#itemPickerTable').DataTable({
-                    pageLength: 10,
-                    lengthMenu: [10, 25, 50],
-                    ordering: true,
-                    sDom: 'fBtlpi',
-                    language: {
-                        search: '',
-                        searchPlaceholder: 'Search items...',
-                        sLengthMenu: 'Row Per Page _MENU_ Entries',
-                        info: '_START_ - _END_ of _TOTAL_ items',
-                        paginate: {
-                            next: '<i class="isax isax-arrow-right-1"></i>',
-                            previous: '<i class="isax isax-arrow-left"></i>'
-                        }
-                    }
-                });
+                window.renderItemPickerPagination(pagination, loadItemPickerPage);
             }, 0);
         }
 

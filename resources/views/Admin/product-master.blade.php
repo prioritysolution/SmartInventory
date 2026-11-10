@@ -96,7 +96,7 @@
                             <input type="number" class="form-control" id="reorder_qnty" autocomplete="off">
                         </div>
                         <div class="col-md-6 mb-3" id="prodLifeDiv" style="display:none;">
-                            <label class="form-label">Max Life</label>
+                            <label class="form-label">Max Life (Days)</label>
                             <input type="number" class="form-control" id="prod_life" min="0" max="200"
                                 autocomplete="off">
                         </div>
@@ -173,6 +173,7 @@
 
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    @include('partials.item-picker-pagination')
     <script>
         $(document).ready(function() {
             let itemPickerDT = null;
@@ -212,13 +213,15 @@
                 }
             }
 
-            function renderItemPickerTable(data) {
+            function renderItemPickerTable(response) {
+                const data = response.items || [];
                 setTimeout(function() {
                     $('#itemPickerLoader').hide();
                     if (!data.length) {
                         $('#itemPickerTable tbody').html(
                             '<tr><td colspan="4" class="text-center text-muted">No items found</td></tr>');
                         $('#itemPickerTableWrap').show();
+                        window.renderItemPickerPagination(response, loadItemPickerPage);
                         return;
                     }
                     $.each(data, function(i, item) {
@@ -234,23 +237,21 @@
                         itemPickerDT = null;
                     }
                     $('#itemPickerTableWrap').show();
-                    itemPickerDT = $('#itemPickerTable').DataTable({
-                        pageLength: 10,
-                        lengthMenu: [10, 25, 50],
-                        ordering: true,
-                        sDom: 'fBtlpi',
-                        language: {
-                            search: '',
-                            searchPlaceholder: 'Search items...',
-                            sLengthMenu: 'Row Per Page _MENU_ Entries',
-                            info: '_START_ - _END_ of _TOTAL_ items',
-                            paginate: {
-                                next: '<i class="isax isax-arrow-right-1"></i>',
-                                previous: '<i class="isax isax-arrow-left"></i>'
-                            }
-                        }
+                    window.renderItemPickerPagination(response, function(page) {
+                        loadItemPickerPage(page);
                     });
                 }, 0);
+            }
+
+            let itemPickerFilters = null;
+            function loadItemPickerPage(page) {
+                window.fetchItemPickerPage(
+                    "{{ route('product-master.search') }}",
+                    itemPickerFilters,
+                    page,
+                    renderItemPickerTable,
+                    function() { Swal.fire('Error', 'Failed to load items', 'error'); }
+                );
             }
 
             $('#searchBtn').on('click', function() {
@@ -288,16 +289,12 @@
                     itemPickerDT = null;
                 }
                 $('#itemPickerTable tbody').html('');
-                $.get("{{ route('product-master.search') }}", {
+                itemPickerFilters = {
                     cat_id: catId,
                     sub_cat_id: subCatId,
                     code: code
-                }, function(data) {
-                    renderItemPickerTable(data || []);
-                }).fail(function() {
-                    $('#itemPickerLoader').hide();
-                    Swal.fire('Error', 'Failed to load items', 'error');
-                });
+                };
+                loadItemPickerPage(1);
             });
 
             $('#modalSearchInput').on('keypress', function(e) {

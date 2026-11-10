@@ -253,6 +253,7 @@
 @endsection
 
 @push('scripts')
+@include('partials.item-picker-pagination')
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
@@ -267,6 +268,7 @@
     let reqSearchDT = null;
     let selectedRow = null;
     let itemPickerDT = null;
+    let itemPickerFilters = null;
     let barcodeScanner = null;
     let barcodeScannerRunning = false;
 
@@ -350,23 +352,17 @@
             const catId = parseInt($('#modalCateId').val()) || 0;
             const subCatId = parseInt($('#modalSubCateId').val()) || 0;
             const code = $('#modalSearchInput').val().trim();
-            $('#itemPickerLoader').show();
-            $('#itemPickerTableWrap').hide();
             if (itemPickerDT) {
                 itemPickerDT.destroy();
                 itemPickerDT = null;
             }
             $('#itemPickerTable tbody').html('');
-            $.get(baseUrl + '/agent/requisition/items', {
+            itemPickerFilters = {
                 cat_id: catId,
                 sub_cat_id: subCatId,
                 code: code
-            }, function (data) {
-                renderItemPickerTable(data);
-            }).fail(function () {
-                $('#itemPickerLoader').hide();
-                Swal.fire('Error', 'Failed to load items', 'error');
-            });
+            };
+            loadItemPickerPage(1);
         });
 
         $('#modalSearchInput').on('keypress', function (e) {
@@ -384,6 +380,8 @@
                 itemPickerDT = null;
             }
             $('#itemPickerTable tbody').html('');
+            $('#itemPickerPagination').hide().empty();
+            itemPickerFilters = null;
         });
 
         $(document).on('click', '#itemPickerTable tbody tr', function () {
@@ -598,19 +596,32 @@ $('#reqSearchModal').on('hidden.bs.modal', function () {
         $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
         $('#modalSearchInput').val(code || '');
         $('#itemPickerModal').modal('show');
-        if (data.length > 0) {
-            $('#itemPickerLoader').show();
-            renderItemPickerTable(data);
+        if (data.length > 0 || code) {
+            itemPickerFilters = { cat_id: 0, sub_cat_id: 0, code: code || '' };
+            loadItemPickerPage(1);
         }
     }
 
-    function renderItemPickerTable(data) {
+    function loadItemPickerPage(page) {
+        window.fetchItemPickerPage(
+            baseUrl + '/agent/requisition/items',
+            itemPickerFilters,
+            page,
+            function (response) {
+                renderItemPickerTable(response);
+            }
+        );
+    }
+
+    function renderItemPickerTable(response) {
+        const data = response.items || [];
         setTimeout(function () {
             $('#itemPickerLoader').hide();
             if (!data.length) {
                 $('#itemPickerTable tbody').html(
                     '<tr><td colspan="4" class="text-center text-muted">No items found</td></tr>');
                 $('#itemPickerTableWrap').show();
+                window.renderItemPickerPagination(response, loadItemPickerPage);
                 return;
             }
             $.each(data, function (i, item) {
@@ -632,19 +643,7 @@ $('#reqSearchModal').on('hidden.bs.modal', function () {
                 itemPickerDT = null;
             }
             $('#itemPickerTableWrap').show();
-            itemPickerDT = $('#itemPickerTable').DataTable({
-                pageLength: 10,
-                lengthMenu: [10, 25, 50],
-                ordering: true,
-                language: {
-                    search: '',
-                    searchPlaceholder: 'Search items...',
-                    paginate: {
-                        next: '<i class="fa fa-angle-right"></i>',
-                        previous: '<i class="fa fa-angle-left"></i>'
-                    }
-                }
-            });
+            window.renderItemPickerPagination(response, loadItemPickerPage);
         }, 0);
     }
 

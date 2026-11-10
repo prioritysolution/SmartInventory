@@ -15,6 +15,19 @@
 
     <div class="card">
         <div class="card-body">
+            <div class="d-flex justify-content-end align-items-center mb-3">
+                <form method="GET" action="{{ route('customer-master.list') }}" id="customerSearchForm"
+                    class="d-flex gap-2">
+                    <input type="text" class="form-control form-control-sm" id="customerSearch"
+                        placeholder="Search customer..." style="width:250px;">
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                    </button>
+                    <button type="button" id="clearCustomerSearch" class="btn btn-secondary btn-sm" hidden>
+                        Clear
+                    </button>
+                </form>
+            </div>
             <div class="table-responsive">
                 <table id="customerTable" class="table table-nowrap">
                     <thead class="thead-light">
@@ -138,6 +151,7 @@
     }
 
     let customerTable = null;
+    let customerSearch = '';
 
     $(document).ready(function () {
         function initCustomerTable() {
@@ -149,7 +163,7 @@
             customerTable = $table.DataTable({
                 processing: true,
                 serverSide: true,
-                searching: true,
+                searching: false,
                 pageLength: 25,
                 order: [],
                 destroy: true,
@@ -157,6 +171,9 @@
                 ajax: {
                     url: apiUrl('customer-master/list'),
                     type: 'GET',
+                    data: function (request) {
+                        request.q = customerSearch;
+                    },
                     error: function (xhr) {
                         const msg = xhr.responseJSON?.error || xhr.responseJSON?.message || 'Failed to load customers';
                         if (typeof Swal !== 'undefined') {
@@ -191,8 +208,6 @@
                     processing: 'Loading customers...',
                     emptyTable: 'No customers found',
                     zeroRecords: 'No matching customers',
-                    search: '',
-                    searchPlaceholder: 'Search...',
                     sLengthMenu: 'Row Per Page _MENU_ Entries',
                     info: '_START_ - _END_ of _TOTAL_ items',
                     paginate: {
@@ -205,6 +220,24 @@
 
         // Run after script.js's immediate `.datatable` init (footer loads before stacked scripts).
         setTimeout(initCustomerTable, 0);
+
+        $('#customerSearchForm').on('submit', function (event) {
+            event.preventDefault();
+            customerSearch = $('#customerSearch').val().trim();
+            $('#clearCustomerSearch').prop('hidden', customerSearch === '');
+            if (customerTable) {
+                customerTable.ajax.reload();
+            }
+        });
+
+        $('#clearCustomerSearch').on('click', function () {
+            $('#customerSearch').val('');
+            customerSearch = '';
+            $(this).prop('hidden', true);
+            if (customerTable) {
+                customerTable.ajax.reload();
+            }
+        });
 
         $(document).on('click', '.editRow', function () {
             const id = $(this).data('id');

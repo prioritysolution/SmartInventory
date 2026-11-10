@@ -444,6 +444,22 @@
 
     $(document).on('click.siDate', '.si-date-wrap .si-date-icon, .si-date-wrap .input-group-addon, .si-date-wrap .input-group-text', togglePickerFromEvent);
 
+    document.addEventListener('click', function (e) {
+        var target = e.target;
+        if (!target || !target.closest || !target.closest('.bootstrap-datetimepicker-widget [data-action="today"]')) {
+            return;
+        }
+
+        setTimeout(function () {
+            $('.si-date-wrap.si-picker-open').each(function () {
+                var picker = getPicker($(this));
+                if (picker && typeof picker.hide === 'function') {
+                    picker.hide();
+                }
+            });
+        }, 0);
+    }, true);
+
     $(document).on('mousedown.siDateHide', function (e) {
         var $t = $(e.target);
         if ($t.closest('.bootstrap-datetimepicker-widget, .si-date-wrap').length) {

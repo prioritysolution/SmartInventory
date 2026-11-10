@@ -675,6 +675,7 @@
 @endsection
 
 @push('scripts')
+    @include('partials.item-picker-pagination')
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
         const SESSION_YEAR_START = "{{ session('year_start') }}";
@@ -688,6 +689,7 @@
         const BRANCH_NAME = @json(session('branch_name', ''));
         let saleSearchDT = null;
         let itemPickerDT = null;
+        let itemPickerFilters = null;
         let allItemsData = [];
 
         let currentSaleBill = null;
@@ -1784,23 +1786,19 @@ body { width: 72mm; }
                 const catId = parseInt($('#modalCateId').val()) || 0;
                 const subCatId = parseInt($('#modalSubCateId').val()) || 0;
                 const code = $('#modalSearchInput').val().trim();
-                $('#itemPickerLoader').show();
                 $('#itemPickerTableWrap').hide();
                 if (itemPickerDT) {
                     itemPickerDT.destroy();
                     itemPickerDT = null;
                 }
                 $('#itemPickerTable tbody').html('');
-                $.get("{{ route('counter-sale.items') }}", {
+                $('#itemPickerPagination').hide().empty();
+                itemPickerFilters = {
                     cat_id: catId,
                     sub_cat_id: subCatId,
                     code: code
-                }, function(data) {
-                    renderItemPickerTable(data, false);
-                }).fail(function() {
-                    $('#itemPickerLoader').hide();
-                    Swal.fire('Error', 'Failed to load items', 'error');
-                });
+                };
+                loadItemPickerPage(1);
             });
 
             $('#modalSearchInput').on('keypress', function(e) {
@@ -1841,9 +1839,9 @@ body { width: 72mm; }
                 $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
                 $('#modalSearchInput').val(code || '');
                 $('#itemPickerModal').modal('show');
-                if (data.length > 0) {
-                    $('#itemPickerLoader').show();
-                    renderItemPickerTable(data, isCodeSearch);
+                if (data.length > 0 || code) {
+                    itemPickerFilters = { cat_id: 0, sub_cat_id: 0, code: code || '' };
+                    loadItemPickerPage(1);
                 }
             }
 
@@ -2088,13 +2086,25 @@ body { width: 72mm; }
 
         // ── Helper Functions ──────────────────────────────────────────────
 
-        function renderItemPickerTable(data, isCodeSearch) {
+        function loadItemPickerPage(page) {
+            window.fetchItemPickerPage(
+                "{{ route('counter-sale.items') }}",
+                itemPickerFilters,
+                page,
+                function(response) {
+                    renderItemPickerTable(response.items || [], false, response);
+                }
+            );
+        }
+
+        function renderItemPickerTable(data, isCodeSearch, pagination) {
             setTimeout(function() {
                 $('#itemPickerLoader').hide();
                 if (!data.length) {
                     $('#itemPickerTable tbody').html(
                         '<tr><td colspan="4" class="text-center text-muted">No items found</td></tr>');
                     $('#itemPickerTableWrap').show();
+                    window.renderItemPickerPagination(pagination, loadItemPickerPage);
                     return;
                 }
                 $.each(data, function(i, item) {
@@ -2119,22 +2129,7 @@ body { width: 72mm; }
                     itemPickerDT = null;
                 }
                 $('#itemPickerTableWrap').show();
-                itemPickerDT = $('#itemPickerTable').DataTable({
-                    pageLength: 10,
-                    lengthMenu: [10, 25, 50],
-                    ordering: true,
-                    sDom: 'fBtlpi',
-                    language: {
-                        search: '',
-                        searchPlaceholder: 'Search items...',
-                        sLengthMenu: 'Row Per Page _MENU_ Entries',
-                        info: '_START_ - _END_ of _TOTAL_ items',
-                        paginate: {
-                            next: '<i class="isax isax-arrow-right-1"></i>',
-                            previous: '<i class="isax isax-arrow-left"></i>'
-                        }
-                    }
-                });
+                window.renderItemPickerPagination(pagination, loadItemPickerPage);
             }, 0);
         }
 

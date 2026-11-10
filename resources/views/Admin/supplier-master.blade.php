@@ -15,64 +15,8 @@
 
     <div class="card">
         <div class="card-body">
-            <div class="table-responsive">
-                <table id="supplierTable" class="table table-nowrap datatable">
-                    <thead class="thead-light">
-                        <tr>
-                            <th>Sl</th>
-                            <th>Party Code</th>
-                            <th>Party Name</th>
-                            <th>Mobile No</th>
-                            <th>Address</th>
-                            <th>Status</th>
-                            <th class="text-center">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($suppliers as $key => $supplier)
-                        <tr>
-                            <td>{{ $key + 1 }}</td>
-                            <td>{{ $supplier->Party_Code }}</td>
-                            <td>{{ $supplier->Party_Name }}</td>
-                            <td>{{ $supplier->Contact_No }}</td>
-                            <td>{{ $supplier->Address_Line1 }}</td>
-                            <td>{{ $supplier->Status_Cd == 1 ? 'Active' : 'Inactive' }}</td>
-                            <td class="text-center">
-                                <button class="btn btn-primary btn-sm editRow me-1"
-                                    data-id="{{ $supplier->Party_Id }}"
-                                    data-code="{{ $supplier->Party_Code }}"
-                                    data-name="{{ $supplier->Party_Name }}"
-                                    data-mobile="{{ $supplier->Contact_No }}"
-                                    data-altmobile="{{ $supplier->AltContact_No }}"
-                                    data-email="{{ $supplier->EMail }}"
-                                    data-person="{{ $supplier->Contact_Person }}"
-                                    data-designation="{{ $supplier->Designation }}"
-                                    data-address1="{{ $supplier->Address_Line1 }}"
-                                    data-address2="{{ $supplier->Address_Line2 }}"
-                                    data-city="{{ $supplier->City }}"
-                                    data-state="{{ $supplier->State }}"
-                                    data-pin="{{ $supplier->Pin_Code ?? '' }}"
-                                    data-village="{{ $supplier->Village_Id ?? '' }}"
-                                    data-ps="{{ $supplier->Ps_Id ?? '' }}"
-                                    data-post="{{ $supplier->Post_Id ?? '' }}"
-                                    data-dist="{{ $supplier->Dist_Id ?? '' }}"
-                                    data-pan="{{ $supplier->Pan_No }}"
-                                    data-gst="{{ $supplier->GstIn }}"
-                                    data-statecode="{{ $supplier->State_Cd }}"
-                                    data-credit="{{ $supplier->Credit_Limit }}"
-                                    data-opening="{{ $supplier->Opening_Bal }}">
-                                    Edit
-                                </button>
-                                <button class="btn btn-danger btn-sm deleteRow"
-                                    data-id="{{ $supplier->Party_Id }}"
-                                    data-name="{{ $supplier->Party_Name }}">
-                                    Delete
-                                </button>
-                            </td>
-                        </tr>
-                        @endforeach
-                    </tbody>
-                </table>
+            <div id="supplierListContainer">
+                <div class="text-center text-muted py-4">Loading suppliers...</div>
             </div>
         </div>
     </div>
@@ -192,6 +136,56 @@
 <script src="{{ asset('template/assets/js/address-master-form.js') }}?v=5"></script>
 <script>
 $(document).ready(function () {
+    let supplierListRequest = null;
+
+    function fetchSupplierPage(page, search) {
+        if (supplierListRequest) {
+            supplierListRequest.abort();
+        }
+
+        supplierListRequest = $.ajax({
+            url: "{{ route('supplier-master') }}",
+            type: 'GET',
+            data: { page: page, search: search },
+            success: function (html) {
+                $('#supplierListContainer').html(html);
+            },
+            error: function (xhr, status) {
+                if (status !== 'abort') {
+                    Swal.fire('Error', 'Failed to load suppliers. Please try again.', 'error');
+                }
+            },
+            complete: function () {
+                supplierListRequest = null;
+            }
+        });
+    }
+
+    $('#supplierListContainer').on('click', '.supplier-page-link', function (event) {
+        event.preventDefault();
+        const page = Number($(this).data('page'));
+        if (!page || $(this).closest('.page-item').hasClass('disabled') ||
+            $(this).closest('.page-item').hasClass('active')) {
+            return;
+        }
+        fetchSupplierPage(page, $('#supplierSearch').val());
+    });
+
+    $('#supplierListContainer').on('submit', '#supplierSearchForm', function (event) {
+        event.preventDefault();
+        fetchSupplierPage(1, $('#supplierSearch').val());
+    });
+
+    $('#supplierListContainer').on('click', '#clearSupplierSearch', function () {
+        $('#supplierSearch').val('');
+        fetchSupplierPage(1, '');
+    });
+
+    const currentUrl = new URL(window.location.href);
+    const initialSearch = currentUrl.searchParams.get('search') || '';
+    currentUrl.searchParams.delete('page');
+    window.history.replaceState({}, '', currentUrl);
+    fetchSupplierPage(1, initialSearch);
 
     $(document).on('click', '.editRow', function () {
         $('#partyId').val($(this).data('id'));

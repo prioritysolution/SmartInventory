@@ -55,6 +55,7 @@ BEGIN
          OR p.Party_Name LIKE CONCAT('%', vSearch, '%')
          OR p.Party_Code LIKE CONCAT('%', vSearch, '%')
          OR IFNULL(p.Contact_No, '') LIKE CONCAT('%', vSearch, '%')
+         OR IFNULL(p.Address_Line1, '') LIKE CONCAT('%', vSearch, '%')
       )
     ORDER BY p.Party_Name, p.Party_Code
     LIMIT vLimit OFFSET vOffset;
@@ -98,61 +99,96 @@ END$$
 DELIMITER ;
 
 DROP PROCEDURE IF EXISTS USP_GET_PURCHASE_LINE_ITEMS;
+DROP PROCEDURE IF EXISTS USP_GET_PURCHASE_DTLS;
 DELIMITER $$
-CREATE PROCEDURE USP_GET_PURCHASE_LINE_ITEMS(
-    IN pTrading_Id INT
+CREATE PROCEDURE USP_GET_PURCHASE_DTLS(
+    IN pPur_Id INT
 )
 BEGIN
     SELECT
-        p.Prod_Id,
-        i.Cate_Id AS Cat_Id,
-        i.Prod_ShortNm AS Prod_Name,
-        p.Gst_Code AS hsn_code,
-        p.Item_Qty AS qnty,
-        p.Item_Rate,
-        p.Unit_Id,
-        UDF_GET_UNIT_NAME(p.Unit_Id) AS Unit_Name,
-        p.Item_Total,
-        p.MRP,
-        IFNULL(i.Sale_Margin, 0) AS Sale_Margin,
-        p.Disc_Prcnt,
-        p.Disc_Amt,
-        p.Taxable_Amt,
-        p.SGST_Prcnt,
-        p.CGST_Prcnt,
-        p.SGST_Amt,
-        p.CGST_Amt,
-        p.Net_Amt,
-        s.Pack_Date
-    FROM (
-        SELECT tp.*,
-               ROW_NUMBER() OVER (
-                   PARTITION BY tp.Prod_Id, tp.Item_Qty, ROUND(tp.Item_Rate, 2), ROUND(IFNULL(tp.MRP, 0), 2)
-                   ORDER BY tp.Sl
-               ) AS line_no
-        FROM trans_trading_products tp
-        WHERE tp.Trading_Id = pTrading_Id
-    ) p
-    JOIN mst_product i ON i.Prod_Id = p.Prod_Id
-    LEFT JOIN (
-        SELECT
-            st.Prod_Id,
-            st.Quantity,
-            ROUND(st.Rate, 2) AS Rate,
-            ROUND(IFNULL(st.MRP, 0), 2) AS MRP,
-            st.Pack_Date,
-            ROW_NUMBER() OVER (
-                PARTITION BY st.Prod_Id, st.Quantity, ROUND(st.Rate, 2), ROUND(IFNULL(st.MRP, 0), 2)
-                ORDER BY st.Stock_Id
-            ) AS line_no
-        FROM trns_stockinout st
-        WHERE st.Type_Id = pTrading_Id
-    ) s ON s.Prod_Id = p.Prod_Id
-       AND s.Quantity = p.Item_Qty
-       AND s.Rate = ROUND(p.Item_Rate, 2)
-       AND s.MRP = ROUND(IFNULL(p.MRP, 0), 2)
-       AND s.line_no = p.line_no
-    ORDER BY p.Sl;
+        m.Trading_Id AS Pur_Id,
+        m.Invoice_No,
+        m.Ref_No,
+        m.Invoice_Date,
+        m.Party_Id,
+        m.Invoice_Amt AS Tot_Amt,
+        m.Disc_Percent,
+        m.Disc_Amount,
+        m.Freight_Amt,
+        m.Taxable_Amt,
+        m.GST_Amt,
+        m.Round_Off,
+        m.Net_Amt,
+        v.Voucher_Id,
+        v.Vou_Mode AS Trans_Mode,
+        v.Instrument_No,
+        IFNULL((
+            SELECT d.GlHead_Id
+            FROM trans_voucher_details d
+            JOIN mst_acct_glhead g ON g.Account_Id = d.GlHead_Id
+            WHERE d.Voucher_Id = v.Voucher_Id
+              AND g.Account_For = 'B'
+            LIMIT 1
+        ), 0) AS Bank_Ledg,
+        (
+            SELECT JSON_ARRAYAGG(JSON_OBJECT(
+                'Prod_Id', p.Prod_Id,
+                'Cat_Id', i.Cate_Id,
+                'Prod_Name', i.Prod_ShortNm,
+                'hsn_code', p.Gst_Code,
+                'qnty', p.Item_Qty,
+                'Item_Rate', p.Item_Rate,
+                'Unit_Id', p.Unit_Id,
+                'Unit_Name', UDF_GET_UNIT_NAME(p.Unit_Id),
+                'Item_Total', p.Item_Total,
+                'MRP', p.MRP,
+                'Sale_Margin', IFNULL(i.Sale_Margin, 0),
+                'Disc_Prcnt', p.Disc_Prcnt,
+                'Disc_Amt', p.Disc_Amt,
+                'Taxable_Amt', p.Taxable_Amt,
+                'SGST_Prcnt', p.SGST_Prcnt,
+                'CGST_Prcnt', p.CGST_Prcnt,
+                'SGST_Amt', p.SGST_Amt,
+                'CGST_Amt', p.CGST_Amt,
+                'Net_Amt', p.Net_Amt,
+                'Pack_Date', s.Pack_Date,
+                'Barcode', IFNULL(s.Barcode, '')
+            ) ORDER BY p.Sl)
+            FROM (
+                SELECT tp.*,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY tp.Prod_Id, tp.Item_Qty,
+                                        ROUND(tp.Item_Rate, 2), ROUND(IFNULL(tp.MRP, 0), 2)
+                           ORDER BY tp.Sl
+                       ) AS line_no
+                FROM trans_trading_products tp
+                WHERE tp.Trading_Id = pPur_Id
+            ) p
+            JOIN mst_product i ON i.Prod_Id = p.Prod_Id
+            LEFT JOIN (
+                SELECT
+                    st.Prod_Id,
+                    st.Quantity,
+                    ROUND(st.Rate, 2) AS Rate,
+                    ROUND(IFNULL(st.MRP, 0), 2) AS MRP,
+                    st.Pack_Date,
+                    st.Barcode,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY st.Prod_Id, st.Quantity,
+                                     ROUND(st.Rate, 2), ROUND(IFNULL(st.MRP, 0), 2)
+                        ORDER BY st.Stock_Id
+                    ) AS line_no
+                FROM trns_stockinout st
+                WHERE st.Type_Id = pPur_Id
+            ) s ON s.Prod_Id = p.Prod_Id
+               AND s.Quantity = p.Item_Qty
+               AND s.Rate = ROUND(p.Item_Rate, 2)
+               AND s.MRP = ROUND(IFNULL(p.MRP, 0), 2)
+               AND s.line_no = p.line_no
+        ) AS Item_Details
+    FROM trans_trading m
+    LEFT JOIN trans_voucher_master v ON v.Voucher_Id = m.Voucher_Id
+    WHERE m.Trading_Id = pPur_Id;
 END$$
 DELIMITER ;
 

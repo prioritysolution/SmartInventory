@@ -21,9 +21,8 @@ class MasterSetup extends Controller
     public function index()
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $orgId = session('org_id');
-        $units = DB::connection('coops')->select('CALL USP_GET_ITEM_UNIT(?)', [$orgId]);
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [$orgId]);
+        $units = DB::connection('coops')->select('CALL USP_GET_ITEM_UNIT()');
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
         $hsn = DB::connection('coops')->select(' CALL USP_GET_GST_CODES()');
 
         return view('Admin.product-master', compact('units', 'categories', 'hsn'))->with('pageTitle', 'Product Master');
@@ -35,6 +34,15 @@ class MasterSetup extends Controller
         DB::purge('coops');
 
         $code = (string) ($request->input('code') ?? $request->input('search') ?? '');
+        if ($request->has('page')) {
+            return response()->json($this->searchItemsByCodePage(
+                (int) $request->input('cat_id', 0),
+                (int) $request->input('sub_cat_id', 0),
+                $code,
+                (int) $request->input('page', 1),
+                (int) $request->input('page_size', 25)
+            ));
+        }
         $items = $this->searchItemsByCode(
             (int) $request->input('cat_id', 0),
             (int) $request->input('sub_cat_id', 0),
@@ -57,9 +65,8 @@ class MasterSetup extends Controller
     public function getSubCategories($categoryId)
     {
          Config::set('database.connections.coops.database', session('org_schema'));
-        $orgId = session('org_id');
 
-        $subCategories = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?, ?)', [$orgId, $categoryId]);
+        $subCategories = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?)', [$categoryId]);
 
         return response()->json($subCategories);
     }
@@ -273,13 +280,51 @@ public function indexAgent(Request $request)
 
 
     // Supplier Master
-    public function indexSupplier()
+    public function indexSupplier(Request $request)
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $branchId = session('branch_id');
-        $suppliers = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [1, $branchId, 0]);
-        Log::channel('trading')->info('USP_GET_PARTY_LIST result', ['result' => $suppliers]);
-        return view('Admin.supplier-master', compact('suppliers'))->with('pageTitle', 'Supplier Master');
+        if (!$request->ajax()) {
+            return view('Admin.supplier-master')->with('pageTitle', 'Supplier Master');
+        }
+
+        $request->validate([
+            'page' => 'nullable|integer|min:1',
+            'search' => 'nullable|string|max:100',
+        ]);
+
+        $branchId = (int) session('branch_id');
+        $page = max(1, (int) $request->input('page', 1));
+        $pageSize = 25;
+        $search = trim((string) $request->input('search', ''));
+
+        DB::purge('coops');
+        $pdo = DB::connection('coops')->getPdo();
+        $stmt = $pdo->prepare('CALL USP_GET_PARTY_LIST(?, ?, ?, ?, ?, ?)');
+        try {
+            $stmt->execute([1, $branchId, 0, $page, $pageSize, $search]);
+            $suppliers = $stmt->fetchAll(\PDO::FETCH_OBJ);
+            if (!$stmt->nextRowset()) {
+                throw new \RuntimeException('USP_GET_PARTY_LIST did not return its total-count result set.');
+            }
+            $totalRow = $stmt->fetch(\PDO::FETCH_OBJ);
+            if (!$totalRow || !isset($totalRow->Total)) {
+                throw new \RuntimeException('USP_GET_PARTY_LIST did not return a total count.');
+            }
+            $total = (int) $totalRow->Total;
+        } finally {
+            $stmt->closeCursor();
+        }
+
+        $lastPage = max(1, (int) ceil($total / $pageSize));
+
+        return view('Admin.partials.supplier-list', compact(
+            'suppliers',
+            'total',
+            'page',
+            'pageSize',
+            'lastPage',
+            'search'
+        ));
     }
 
     public function storeSupplier(Request $request)
@@ -472,7 +517,7 @@ public function indexAgent(Request $request)
                 $length = 25;
             }
             $length = min(100, $length);
-            $q = trim((string) data_get($request->input('search'), 'value', $request->input('q', '')));
+            $q = trim((string) $request->input('q', data_get($request->input('search'), 'value', '')));
             $branchId = (int) session('branch_id');
 
             $rows = DB::connection('coops')->select('CALL USP_SEARCH_PARTY_LIST(?, ?, ?, ?, ?, ?, ?)', [
@@ -998,7 +1043,7 @@ public function indexAgent(Request $request)
    public function indexProdCategory()
 {
     Config::set('database.connections.coops.database', session('org_schema'));
-    $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+    $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
     $purchaseLedgers = DB::connection('coops')->select('CALL USP_GET_PRM_LEDGER(?)', [1]);
     $salesLedgers    = DB::connection('coops')->select('CALL USP_GET_PRM_LEDGER(?)', [2]);
     return view('Admin.prod-category', compact('categories', 'purchaseLedgers','salesLedgers'))->with('pageTitle', 'Product Category');
@@ -1045,9 +1090,8 @@ public function storeProdCategory(Request $request)
     public function indexProdSubCategory()
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $orgId = session('org_id');
-        $subCategories = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?,?)', [$orgId, 0]);
-        $categories    = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [$orgId]);
+        $subCategories = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?)', [0]);
+        $categories    = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
         return view('Admin.prod-subcategory', compact('subCategories', 'categories'))->with('pageTitle', 'Product Sub Category');
     }
 
@@ -1085,7 +1129,7 @@ public function storeProdCategory(Request $request)
     public function indexUnit()
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $units = DB::connection('coops')->select('CALL USP_GET_ITEM_UNIT(?)', [session('org_id')]);
+        $units = DB::connection('coops')->select('CALL USP_GET_ITEM_UNIT()');
         return view('Admin.unit-master', compact('units'))->with('pageTitle', 'Unit Master');
     }
 

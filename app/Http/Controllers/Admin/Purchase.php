@@ -13,28 +13,52 @@ class Purchase extends Controller
 {
     use SearchesItemsByCode;
 
+    private function getAllSuppliers(int $branchId): array
+    {
+        $stmt = DB::connection('coops')->getPdo()->prepare('CALL USP_GET_PARTY_LIST(?, ?, ?, ?, ?, ?)');
+        try {
+            $stmt->execute([1, $branchId, 0, 1, 0, '']);
+            $suppliers = $stmt->fetchAll(\PDO::FETCH_OBJ);
+            if (!$stmt->nextRowset()) {
+                throw new \RuntimeException('USP_GET_PARTY_LIST did not return its total-count result set.');
+            }
+            if (!$stmt->fetch(\PDO::FETCH_OBJ)) {
+                throw new \RuntimeException('USP_GET_PARTY_LIST did not return a total count.');
+            }
+
+            return $suppliers;
+        } finally {
+            $stmt->closeCursor();
+        }
+    }
+
     public function index()
     {
-        $branchId = session('branch_id');
-        $orgId    = session('org_id');
         Config::set('database.connections.coops.database', session('org_schema'));
-        $suppliers  = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [1, $branchId, 0]);
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [$orgId]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
         $banks      = DB::connection('coops')->select('CALL USP_GET_BANK_LEDGER()');
-        return view('Admin.good-received', compact('suppliers', 'categories', 'banks'))->with('pageTitle', 'Good Received Entry');
+        return view('Admin.good-received', compact('categories', 'banks'))->with('pageTitle', 'Good Received Entry');
     }
 
     public function getSubCategories($catId)
     {
-        $orgId = session('org_id');
         Config::set('database.connections.coops.database', session('org_schema'));
-        $subCategories = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?, ?)', [$orgId, $catId]);
+        $subCategories = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?)', [$catId]);
         return response()->json($subCategories);
     }
     public function getItems(Request $request)
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
+        if ($request->has('page')) {
+            return response()->json($this->searchItemsByCodePage(
+                (int) $request->input('cat_id', 0),
+                (int) $request->input('sub_cat_id', 0),
+                (string) ($request->input('code') ?? ''),
+                (int) $request->input('page', 1),
+                (int) $request->input('page_size', 25)
+            ));
+        }
         $items = $this->searchItemsByCode(
             (int) $request->input('cat_id', 0),
             (int) $request->input('sub_cat_id', 0),
@@ -57,6 +81,21 @@ class Purchase extends Controller
                         $items[$i]['quantity'] = (int) round($qty);
                     }
                 }
+                if (isset($item['item_purchase_date']) && is_string($item['item_purchase_date'])) {
+                    $date = $item['item_purchase_date'];
+                    foreach (['Y-m-d', 'd/m/Y'] as $format) {
+                        $parsedDate = \DateTimeImmutable::createFromFormat('!' . $format, $date);
+                        $dateErrors = \DateTimeImmutable::getLastErrors();
+                        if (
+                            $parsedDate &&
+                            ($dateErrors === false || ($dateErrors['warning_count'] === 0 && $dateErrors['error_count'] === 0)) &&
+                            $parsedDate->format($format) === $date
+                        ) {
+                            $items[$i]['item_purchase_date'] = $parsedDate->format('Y-m-d');
+                            break;
+                        }
+                    }
+                }
             }
             $request->merge(['items' => $items]);
         }
@@ -77,10 +116,12 @@ class Purchase extends Controller
             'items.*.quantity' => 'required|numeric|min:1',
             'items.*.rate'     => 'required|numeric|max:99999999.99|min:0',
             'items.*.sale_mrp' => 'required|numeric|min:0.01',
+            'items.*.item_purchase_date' => 'nullable|date_format:Y-m-d',
             'vouch_id' => 'nullable|integer',
         ], [
             'items.*.quantity.numeric' => 'Quantity must be a valid number.',
             'items.*.quantity.min' => 'Quantity must be at least 1.',
+            'items.*.item_purchase_date.date_format' => 'Pack Date must be a valid date in DD/MM/YYYY format.',
         ]);
         $yearStart = session('year_start');
         $yearEnd   = session('year_end');
@@ -206,8 +247,7 @@ class Purchase extends Controller
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         // amazonq-ignore-next-line
-        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?, ?)', [
-            session('org_id'),
+        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?)', [
             $request->input('cat_id', 0)
         ]);
         return response()->json($subs);
@@ -289,7 +329,7 @@ class Purchase extends Controller
         }
 
         $row = $result[0];
-        $row->Item_Details = $this->purchaseLineItems((int) $id);
+        $this->decodePurchaseItemDetails($row);
         Log::channel('trading')->info('Purchase Details', [
     'Voucher_Id' => $row->Voucher_Id ?? null,
     'Pur_Id'     => $row->Pur_Id ?? null,
@@ -299,19 +339,48 @@ class Purchase extends Controller
         return response()->json($row);
     }
 
-    /**
-     * One row per purchase line (via USP_GET_PURCHASE_LINE_ITEMS).
-     */
-    private function purchaseLineItems(int $tradingId): array
+    private function decodePurchaseItemDetails(object $row): void
     {
-        $rows = DB::connection('coops')->select('CALL USP_GET_PURCHASE_LINE_ITEMS(?)', [$tradingId]);
+        $items = json_decode($row->Item_Details ?? '[]', true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($items)) {
+            throw new \UnexpectedValueException('Purchase item details must be a JSON array.');
+        }
 
-        return array_map(static fn ($row) => (array) $row, $rows);
+        $row->Item_Details = array_values($items);
     }
 
     public function searchForReturn(Request $request)
     {
-        return $this->search($request);
+        $filters = $this->purchaseSearchFilters($request, false);
+        if ($filters instanceof \Illuminate\Http\JsonResponse) {
+            return $filters;
+        }
+
+        Config::set('database.connections.coops.database', session('org_schema'));
+        $limit = min(100, max(10, (int) $request->input('limit', 30)));
+        $offset = max(0, (int) $request->input('offset', 0));
+        $results = DB::connection('coops')->select(
+            'CALL USP_SEARCH_PURCHASE_PAGE(?, ?, ?, ?, ?, ?)',
+            [
+                $filters['from_date'],
+                $filters['to_date'],
+                $filters['party_id'],
+                $filters['bill_like'],
+                $limit,
+                $offset,
+            ]
+        );
+
+        foreach ($results as $row) {
+            $this->decodePurchaseItemDetails($row);
+        }
+        $total = (int) ($results[0]->Total_Count ?? count($results));
+
+        return response()->json([
+            'results' => $results,
+            'recordsTotal' => $total,
+            'has_more' => ($offset + count($results)) < $total,
+        ]);
     }
 
     public function returnableDetails($id)
@@ -367,11 +436,10 @@ class Purchase extends Controller
     //purchase return
     public function purchaseReturnIndex()
     {
-        $orgId    = session('org_id');
         $branchId = session('branch_id');
         Config::set('database.connections.coops.database', session('org_schema'));
-        $suppliers  = DB::connection('coops')->select('CALL USP_GET_PARTY_LIST(?, ?, ?)', [1, $branchId, 0]);
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [$orgId]);
+        $suppliers  = $this->getAllSuppliers((int) $branchId);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
         $banks      = DB::connection('coops')->select('CALL USP_GET_BANK_LEDGER()');
         return view('Admin.purchase-return', compact('suppliers', 'categories', 'banks'))
             ->with('pageTitle', 'Purchase Return ');
@@ -381,8 +449,7 @@ class Purchase extends Controller
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         // amazonq-ignore-next-line
-        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?, ?)', [
-            session('org_id'),
+        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?)', [
             $request->input('cat_id', 0)
         ]);
         return response()->json($subs);
@@ -419,6 +486,15 @@ class Purchase extends Controller
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
+        if ($request->has('page')) {
+            return response()->json($this->searchItemsByCodePage(
+                (int) $request->input('cat_id', 0),
+                (int) $request->input('sub_cat_id', 0),
+                (string) ($request->input('code') ?? ''),
+                (int) $request->input('page', 1),
+                (int) $request->input('page_size', 25)
+            ));
+        }
         $items = $this->searchItemsByCode(
             (int) $request->input('cat_id', 0),
             (int) $request->input('sub_cat_id', 0),
@@ -461,11 +537,13 @@ class Purchase extends Controller
             'instrument_no' => 'nullable|string|max:50',
             'ref_vouch_no'  => 'nullable|string|max:20',
             'disc_percent'  => 'nullable|numeric',
+            'disc_amt'      => 'nullable|numeric|min:0|max:99999999.99',
             'round_off'     => 'nullable|numeric',
             'net_amt'       => 'nullable|numeric',
+            'items.*.item_id' => 'required|integer|min:1',
             'items.*.quantity' => 'required|numeric|max:99999999.99|min:0.01',
             'items.*.rate'     => 'required|numeric|max:99999999.99|min:0',
-            'items.*.barcode'  => ['required', 'regex:/^[0-9]+$/'],
+            'items.*.barcode'  => 'nullable|string|max:50',
             'items.*.sale_mrp' => 'nullable|numeric|min:0',
             'vouch_id' => 'nullable|integer',
         ]);
@@ -487,52 +565,6 @@ class Purchase extends Controller
         // amazonq-ignore-next-line
         $conn = DB::connection('coops');
 
-        try {
-            $excludeId = intval($request->input('purchase_id', 0));
-            $usedQty   = [];
-            $usedBarcode = [];
-            foreach ($request->items as $item) {
-                $prodId = (int) ($item['item_id'] ?? 0);
-                $barcode = trim((string) ($item['barcode'] ?? ''));
-                if ($prodId <= 0) {
-                    return response()->json(['error' => 'Invalid item in return list'], 400);
-                }
-                if ($barcode === '' || !ctype_digit($barcode)) {
-                    return response()->json(['error' => 'Select a barcode for each return item'], 400);
-                }
-                $row      = $this->purchaseReturnableQty((int) $request->party_id, $prodId, $excludeId, (string) $request->purchase_date);
-                $remaining = (float) ($row->Remaining_Qty ?? 0);
-                $already   = $usedQty[$prodId] ?? 0;
-                $qty       = (float) $item['quantity'];
-                $allowed   = $remaining - $already;
-                if ($qty > $allowed + 0.0001) {
-                    $name = $item['item_name'] ?? ('Item ' . $prodId);
-                    return response()->json([
-                        'error' => "{$name}: only " . $this->qtyText(max(0, $allowed)) . " can be returned. That is the quantity still in office. Purchased: {$row->Purchased_Qty}, already returned: {$row->Returned_Qty}.",
-                    ], 400);
-                }
-                $barcodeRows = $this->purchaseBarcodesForReturn(
-                    (int) $request->party_id,
-                    (string) $request->purchase_date,
-                    $prodId,
-                    $barcode,
-                    $excludeId
-                );
-                $barcodeLeft = (float) (($barcodeRows[0]->Remaining_Qty ?? 0)) - ($usedBarcode[$barcode] ?? 0);
-                if ($barcodeRows === [] || $qty > $barcodeLeft + 0.0001) {
-                    $name = $item['item_name'] ?? ('Item ' . $prodId);
-                    return response()->json([
-                        'error' => "{$name}: only " . $this->qtyText(max(0, $barcodeLeft)) . " of barcode {$barcode} is still in office. Sold, issued, or damaged quantity cannot be returned.",
-                    ], 400);
-                }
-                $usedQty[$prodId] = $already + $qty;
-                $usedBarcode[$barcode] = ($usedBarcode[$barcode] ?? 0) + $qty;
-            }
-        } catch (\Exception $e) {
-            Log::channel('trading')->error('Purchase return qty check failed: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to validate returnable quantity'], 500);
-        }
-
         $conn->beginTransaction();
 
         try {
@@ -553,12 +585,16 @@ class Purchase extends Controller
                 cgst_perc NUMERIC(5,2),
                 cgst_amt  NUMERIC(10,2),
                 net_amt   NUMERIC(10,2),
-                Pack_Date DATE NULL
+                Pack_Date DATE NULL,
+                Barcode   VARCHAR(50) NULL
             )');
 
             // Insert each item into temp table
             foreach ($request->items as $item) {
-                $conn->insert('INSERT INTO temppurchase VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)', [
+                $conn->insert('INSERT INTO temppurchase (
+                    item_id, hsn_code, qnty, rate, unit, tot_amt, sale_mrp, disc_perc,
+                    disc_amt, tax_amt, sgst_perc, sgst_amt, cgst_perc, cgst_amt, net_amt, Pack_Date, Barcode
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
                     $item['item_id'],
                     $item['hsn_code'],
                     $item['quantity'],
@@ -575,20 +611,20 @@ class Purchase extends Controller
                     $item['cgst_amount'],
                     $item['net_amount'],               // net_amt
                     !empty($item['item_purchase_date']) ? $item['item_purchase_date'] : null,
-
+                    trim((string) ($item['barcode'] ?? '')) ?: null,
                 ]);
             }
 
 
             $totAmt     = collect($request->items)->sum(fn($i) => floatval($i['total_amount']));
-            $discAmt    = collect($request->items)->sum(fn($i) => floatval($i['discount_amount'] ?? 0));
-            $taxableAmt = collect($request->items)->sum(fn($i) => floatval($i['taxable_amount']));
+            $discAmt    = floatval($request->input('disc_amt', 0));
+            if ($discAmt > $totAmt) {
+                $conn->rollBack();
+                return response()->json(['error' => 'Discount amount cannot exceed total amount'], 422);
+            }
+            $taxableAmt = $totAmt - $discAmt;
             $totGst     = collect($request->items)->sum(fn($i) => floatval($i['total_gst']));
-            $hasItemDiscount = collect($request->items)->contains(fn($i) => floatval($i['discount_percent'] ?? 0) > 0);
-            $discPerc = $hasItemDiscount ? 0 : floatval($request->input('disc_percent', 0));
-            $discAmt = $hasItemDiscount
-                ? collect($request->items)->sum(fn($i) => floatval($i['discount_amount'] ?? 0))
-                : floatval($request->input('disc_amt', 0));
+            $discPerc = $discAmt > 0 && $totAmt > 0 ? ($discAmt / $totAmt) * 100 : 0;
             $roundOff   = floatval($request->input('round_off', 0));
             $netAmt = floatval($request->input('net_amt', 0));
 
@@ -623,8 +659,6 @@ class Purchase extends Controller
                 return response()->json(['error' => $result[0]->Message ?? 'Save failed'], 400);
             }
 
-            $this->assignPurchaseReturnBarcodes($conn, $request->items, (string) $request->input('purchase_date'));
-
             $conn->commit();
             return response()->json(['message' => $result[0]->Message ?? 'Purchase saved successfully']);
         } catch (\Exception $e) {
@@ -638,7 +672,7 @@ class Purchase extends Controller
 
     public function searchPurchaseReturn(Request $request)
     {
-        $filters = $this->purchaseSearchFilters($request, true);
+        $filters = $this->purchaseSearchFilters($request, false);
         if ($filters instanceof \Illuminate\Http\JsonResponse) {
             return $filters;
         }
@@ -676,7 +710,7 @@ class Purchase extends Controller
         }
 
         $row = $result[0];
-        $row->Item_Details = $this->purchaseLineItems((int) $id);
+        $this->decodePurchaseItemDetails($row);
 
         return response()->json($row);
     }
@@ -700,11 +734,6 @@ class Purchase extends Controller
         $row->Remaining_Qty = round(min($purchasedLeft, $row->Office_Qty), 2);
 
         return $row;
-    }
-
-    private function qtyText(float $qty): string
-    {
-        return (string) (int) round($qty);
     }
 
     /**
@@ -768,23 +797,4 @@ class Purchase extends Controller
         return $kept;
     }
 
-    /**
-     * The return procedure does not store a barcode. Write the barcode the user selected.
-     */
-    private function assignPurchaseReturnBarcodes($conn, array $items, string $date): void
-    {
-        foreach ($items as $item) {
-            $prodId = (int) ($item['item_id'] ?? 0);
-            $barcode = trim((string) ($item['barcode'] ?? ''));
-            if ($prodId <= 0 || $barcode === '' || !ctype_digit($barcode) || $date === '') {
-                continue;
-            }
-            $mrp = round((float) ($item['sale_mrp'] ?? 0), 2);
-            if ($mrp <= 0) {
-                $purchase = $conn->selectOne('CALL USP_GET_BARCODE_INWARD_MRP(?)', [$barcode]);
-                $mrp = round((float) ($purchase->MRP ?? 0), 2);
-            }
-            $conn->select('CALL USP_ASSIGN_PURCHASE_RETURN_BARCODE(?, ?, ?, ?)', [$barcode, $mrp, $prodId, $date]);
-        }
-    }
 }

@@ -13,7 +13,7 @@
 
 <script src="{{asset('template/assets/js/moment.js')}}"></script>
 <script src="{{asset('template/assets/js/bootstrap-datetimepicker.min.js')}}"></script>
-<script src="{{asset('template/assets/js/date-format.js')}}?v=18"></script>
+<script src="{{asset('template/assets/js/date-format.js')}}?v=22"></script>
 <script src="{{asset('template/assets/js/si-lazy-scroll.js')}}?v=2"></script>
 
 <script src="{{asset('agenttemplate/assets/plugins/apexchart/apexcharts.min.js')}}"></script>

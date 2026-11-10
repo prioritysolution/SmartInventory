@@ -35,7 +35,7 @@
 <!-- Custom JS -->
 <script src="{{asset('template/assets/js/script.js')}}"></script>
 <script src="{{asset('template/assets/js/global-loader.js')}}?v=2"></script>
-<script src="{{asset('template/assets/js/date-format.js')}}?v=18"></script>
+<script src="{{asset('template/assets/js/date-format.js')}}?v=22"></script>
 <script src="{{asset('template/assets/js/si-lazy-scroll.js')}}?v=2"></script>
 <script src="{{asset('template/assets/js/print-helper.js')}}?v=1"></script>
 <script src="{{asset('template/assets/js/report-download-helper.js')}}?v=1"></script>

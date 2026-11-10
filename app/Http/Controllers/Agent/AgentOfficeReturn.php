@@ -44,7 +44,7 @@ class AgentOfficeReturn extends Controller
     public function index()
     {
         $this->bindOrg();
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
         return view('Agent.office-return', [
             'categories' => $categories,
             'year_start' => session('year_start'),
@@ -55,8 +55,7 @@ class AgentOfficeReturn extends Controller
     public function getSubCats(Request $request)
     {
         $this->bindOrg();
-        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?, ?)', [
-            session('org_id'),
+        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?)', [
             $request->input('cat_id', 0),
         ]);
         return response()->json($subs);
@@ -65,6 +64,15 @@ class AgentOfficeReturn extends Controller
     public function getItems(Request $request)
     {
         $this->bindOrg();
+        if ($request->has('page')) {
+            return response()->json($this->searchItemsByCodePage(
+                (int) $request->input('cat_id', 0),
+                (int) $request->input('sub_cat_id', 0),
+                (string) ($request->input('code') ?? ''),
+                (int) $request->input('page', 1),
+                (int) $request->input('page_size', 25)
+            ));
+        }
         $items = $this->searchItemsByCode(
             (int) $request->input('cat_id', 0),
             (int) $request->input('sub_cat_id', 0),

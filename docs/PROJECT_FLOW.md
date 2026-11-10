@@ -104,7 +104,7 @@ A rate of 20 with no discount and a 10% margin stores Sale MRP 22. The same rate
 
 Save calls `USP_ADD_EDIT_PURCHASE`. That writes trading type **2**, stock type **2**, and the purchase voucher. Payment mode is cash (1), bank (2), or credit (3). Bank mode also stores the instrument number.
 
-**Purchase Return** (`/purchase-return`) returns quantity against an earlier purchase. The return quantity cannot exceed the remaining purchased quantity, and it cannot exceed the office barcode stock. Save calls `USP_ADD_EDIT_PURCHASE_RETURN` and writes trading type **4** and stock type **7**.
+**Purchase Return** (`/purchase-return`) returns quantity against an earlier purchase. Save calls `USP_ADD_EDIT_PURCHASE_RETURN`, which groups temporary return quantities by product and rejects quantities greater than `UDF_CAL_AVAIL_STOCK(product_id, return_date)` before writing trading type **4** and stock type **7**. The optional barcode is stored on the stock row but is not used for quantity validation. Deploy [usp_paged_search_helpers.sql](../database/sql/usp_paged_search_helpers.sql) before [usp_add_edit_purchase_return.sql](../database/sql/usp_add_edit_purchase_return.sql) in each organisation schema so the availability function exists.
 
 Production is a menu heading with no screen.
 

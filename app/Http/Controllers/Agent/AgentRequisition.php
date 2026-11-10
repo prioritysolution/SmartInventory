@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Agent;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\SearchesItemsByCode;
 use App\Support\AgentIndentType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -11,11 +12,13 @@ use Illuminate\Support\Facades\Log;
 
 class AgentRequisition extends Controller
 {
+    use SearchesItemsByCode;
+
     public function index()
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
         return view('Agent.requisition', [
             'year_start' => session('year_start'),
             'year_end'   => session('year_end'),
@@ -27,8 +30,7 @@ class AgentRequisition extends Controller
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
-        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?, ?)', [
-            session('org_id'),
+        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?)', [
             $request->input('cat_id', 0)
         ]);
         return response()->json($subs);
@@ -41,6 +43,16 @@ class AgentRequisition extends Controller
         $code = trim((string) ($request->input('code') ?? ''));
         $catId = (int) $request->input('cat_id', 0);
         $subCatId = (int) $request->input('sub_cat_id', 0);
+
+        if ($request->has('page')) {
+            return response()->json($this->searchItemsByCodePage(
+                $catId,
+                $subCatId,
+                $code,
+                (int) $request->input('page', 1),
+                (int) $request->input('page_size', 25)
+            ));
+        }
 
         $items = $this->searchItems($catId, $subCatId, $code);
 
@@ -113,11 +125,7 @@ class AgentRequisition extends Controller
             Log::error('Requisition item search error: ' . $e->getMessage());
             try {
                 DB::purge('coops');
-                $rows = DB::connection('coops')->select('CALL USP_GET_ITEM_LIST(?, ?, ?)', [
-                    $catId,
-                    $subCatId,
-                    $code,
-                ]);
+                $rows = $this->searchItemsByCodePage($catId, $subCatId, $code, 1, 1000)['items'];
                 return $rows ?: [];
             } catch (\Exception $fallback) {
                 Log::error('Requisition item list fallback error: ' . $fallback->getMessage());

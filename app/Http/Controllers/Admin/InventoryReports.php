@@ -15,7 +15,7 @@ class InventoryReports extends Controller
     public function stockSummary()
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
 
         return view('Admin.stock-summary', [
             'categories'  => $categories,
@@ -137,8 +137,7 @@ Config::set('database.connections.coops.database', session('org_schema'));
     public function stockSummarySubCats(Request $request)
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?, ?)', [
-            session('org_id'),
+        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?)', [
             (int) $request->input('cat_id', 0),
         ]);
 
@@ -182,7 +181,7 @@ Config::set('database.connections.coops.database', session('org_schema'));
     public function itemwisePurchase()
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
 
         return view('Admin.itemwise-purchase', [
             'parties'     => [],
@@ -221,7 +220,7 @@ Config::set('database.connections.coops.database', session('org_schema'));
     public function salesRegister()
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
         return view('Admin.sales-register', [
             'categories'  => $categories,
             'year_start'  => session('year_start'),
@@ -531,7 +530,7 @@ Config::set('database.connections.coops.database', session('org_schema'));
     public function stockStatement()
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
 
         return view('Admin.stock-statement', [
             'categories'  => $categories,
@@ -690,7 +689,7 @@ Config::set('database.connections.coops.database', session('org_schema'));
     public function expiryReport()
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
 
         return view('Admin.expiry-report', [
             'categories'  => $categories,
@@ -742,7 +741,7 @@ Config::set('database.connections.coops.database', session('org_schema'));
     public function movementReport()
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
 
         return view('Admin.movement-report', [
             'categories'  => $categories,

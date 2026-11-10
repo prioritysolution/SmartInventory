@@ -100,11 +100,8 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Select Party<span class="text-danger">*</span></label>
-                            <select class="form-select" id="partyId">
+                            <select class="form-select" id="partyId" data-si-ajax="parties" data-party-type="1">
                                 <option value="">-- Select Party --</option>
-                                @foreach ($suppliers as $supplier)
-                                    <option value="{{ $supplier->Party_Id }}">{{ $supplier->Party_Name }}</option>
-                                @endforeach
                             </select>
                         </div>
                         <div class="mb-3">
@@ -434,11 +431,8 @@
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">Select Party</label>
-                            <select class="form-select" id="searchPartyId">
+                            <select class="form-select" id="searchPartyId" data-si-ajax="parties" data-party-type="1">
                                 <option value="0">-- All Parties --</option>
-                                @foreach ($suppliers as $supplier)
-                                    <option value="{{ $supplier->Party_Id }}">{{ $supplier->Party_Name }}</option>
-                                @endforeach
                             </select>
                         </div>
                         <div class="col-md-3">
@@ -476,13 +470,16 @@
 @endsection
 
 @push('scripts')
+    @include('partials.item-picker-pagination')
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
         let itemsArray = [];
         let itemPickerDT = null;
+        let itemPickerFilters = null;
         let allItemsData = [];
         let currentPurchaseId = 0;
         let currentVouchId = 0;
+        let isEditingItem = false;
 
         function showPackDateField(show) {
             if (show) {
@@ -500,18 +497,9 @@
 
         $(document).ready(function() {
 
-            $('#partyId').select2({
-                placeholder: '-- Select Party --',
-                allowClear: true
-            });
             $('#bankAccountId').select2({
                 placeholder: '-- Select Bank --',
                 allowClear: true
-            });
-            $('#searchPartyId').select2({
-                placeholder: '-- All Parties --',
-                allowClear: true,
-                dropdownParent: $('#purchaseSearchModal')
             });
             $('input[name="gstMode"]').on('change', function() {
                 const isWithGst = $(this).val() === '1';
@@ -620,7 +608,6 @@
                 const subCatId = parseInt($('#modalSubCateId').val()) || 0;
                 const code = $('#modalSearchInput').val().trim();
 
-                $('#itemPickerLoader').show();
                 $('#itemPickerTableWrap').hide();
                 if (itemPickerDT) {
                     itemPickerDT.destroy();
@@ -628,16 +615,12 @@
                 }
                 $('#itemPickerTable tbody').html('');
 
-                $.get("{{ url('good-received/items') }}", {
+                itemPickerFilters = {
                     cat_id: catId,
                     sub_cat_id: subCatId,
                     code: code
-                }, function(data) {
-                    renderItemPickerTable(data, false);
-                }).fail(function() {
-                    $('#itemPickerLoader').hide();
-                    Swal.fire('Error', 'Failed to load items', 'error');
-                });
+                };
+                loadItemPickerPage(1);
             });
 
             // ── Modal search input Enter key ──
@@ -657,6 +640,7 @@
                     itemPickerDT = null;
                 }
                 $('#itemPickerTable tbody').html('');
+                $('#itemPickerPagination').hide().empty();
             });
 
             function openItemPickerModal(data, isCodeSearch, code) {
@@ -680,9 +664,9 @@
                 $('#modalSearchInput').val(code || '');
 
                 $('#itemPickerModal').modal('show');
-                if (data.length > 0) {
-                    $('#itemPickerLoader').show();
-                    renderItemPickerTable(data, isCodeSearch);
+                if (data.length > 0 || code) {
+                    itemPickerFilters = { cat_id: 0, sub_cat_id: 0, code: code || '' };
+                    loadItemPickerPage(1);
                 }
             }
 
@@ -784,6 +768,7 @@
                     sale_mrp: $('#saleMrp').val() || 0,
                     item_purchase_date: $('#itemPurchaseDate').val() || '',
                 });
+                isEditingItem = false;
                 renderItemsTable();
                 clearItemSelection();
                 $('#productCodeInput').val('');
@@ -793,11 +778,13 @@
             });
 
             $(document).on('click', '.removeItem', function() {
+                if (isEditingItem) return;
                 itemsArray.splice($(this).data('index'), 1);
                 renderItemsTable();
             });
 
             $(document).on('click', '.editItem', function() {
+                if (isEditingItem) return;
                 const index = $(this).data('index');
                 const item = itemsArray[index];
 
@@ -825,6 +812,7 @@
                     showPackDateField(true);
                 }
 
+                isEditingItem = true;
                 itemsArray.splice(index, 1);
                 renderItemsTable();
                 $('#addItemBtn').text('Update Item').data('editing', true);
@@ -914,7 +902,11 @@
                     $('.gst-col').toggle(purchaseHasGst);
                     $('#purchaseDate').val(data.Invoice_Date ? data.Invoice_Date.substring(0, 10) :
                         '');
-                    $('#partyId').val(data.Party_Id).trigger('change');
+                    if (typeof siSetAjaxSelect2Value === 'function') {
+                        siSetAjaxSelect2Value('#partyId', data.Party_Id, data.Party_Name);
+                    } else {
+                        $('#partyId').val(data.Party_Id).trigger('change');
+                    }
                     $('#purchaseNo').val(data.Ref_No);
                     const mode = String(data.Trans_Mode || '1');
                     $('input[name="transMode"][value="' + mode + '"]').prop('checked', true).trigger('change');
@@ -1046,7 +1038,18 @@
 
         });
 
-        function renderItemPickerTable(data, isCodeSearch) {
+        function loadItemPickerPage(page) {
+            window.fetchItemPickerPage(
+                "{{ url('good-received/items') }}",
+                itemPickerFilters,
+                page,
+                function(response) {
+                    renderItemPickerTable(response.items || [], false, response);
+                }
+            );
+        }
+
+        function renderItemPickerTable(data, isCodeSearch, pagination) {
             setTimeout(function() {
                 $('#itemPickerLoader').hide();
 
@@ -1054,6 +1057,7 @@
                     $('#itemPickerTable tbody').html(
                         '<tr><td colspan="4" class="text-center text-muted">No items found</td></tr>');
                     $('#itemPickerTableWrap').show();
+                    window.renderItemPickerPagination(pagination, loadItemPickerPage);
                     return;
                 }
 
@@ -1085,22 +1089,7 @@
                     itemPickerDT = null;
                 }
                 $('#itemPickerTableWrap').show();
-                itemPickerDT = $('#itemPickerTable').DataTable({
-                    pageLength: 10,
-                    lengthMenu: [10, 25, 50],
-                    ordering: true,
-                    sDom: 'fBtlpi',
-                    language: {
-                        search: '',
-                        searchPlaceholder: 'Search items...',
-                        sLengthMenu: 'Row Per Page _MENU_ Entries',
-                        info: '_START_ - _END_ of _TOTAL_ items',
-                        paginate: {
-                            next: '<i class="isax isax-arrow-right-1"></i>',
-                            previous: '<i class="isax isax-arrow-left"></i>'
-                        }
-                    }
-                });
+                window.renderItemPickerPagination(pagination, loadItemPickerPage);
             }, 0);
         }
 
@@ -1183,6 +1172,17 @@
                 showValidationError('Rate cannot exceed 99999999.99', '#rate');
                 return false;
             }
+            const duplicateItem = itemsArray.some(item =>
+                String(item.item_id) === String($('#selectedItemId').val()) &&
+                Number(item.rate) === rate
+            );
+            if (duplicateItem) {
+                showValidationError(
+                    'This item with the same rate is already in the list. Edit the existing item instead.',
+                    '#productCodeInput'
+                );
+                return false;
+            }
             const saleMrp = parseFloat($('#saleMrp').val());
             if (!$('#saleMrp').val() || isNaN(saleMrp) || saleMrp <= 0) {
                 showValidationError('Sale MRP is required', '#saleMrp');
@@ -1204,7 +1204,20 @@
                 showValidationError('Pack Date is required for this category', '#itemPurchaseDate');
                 return false;
             }
+            if ($('#itemPurchaseDateDiv').is(':visible') && !isValidIsoDate($('#itemPurchaseDate').val())) {
+                showValidationError('Enter a valid Pack Date in DD/MM/YYYY format', '#itemPurchaseDate');
+                return false;
+            }
             return true;
+        }
+
+        function isValidIsoDate(value) {
+            const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+            if (!match) return false;
+            const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+            return date.getUTCFullYear() === Number(match[1]) &&
+                date.getUTCMonth() === Number(match[2]) - 1 &&
+                date.getUTCDate() === Number(match[3]);
         }
 
         function renderItemsTable() {
@@ -1234,8 +1247,8 @@
                 <td class="gst-col">${item.sgst_rate}</td><td class="gst-col">${item.sgst_amount}</td>
                 <td class="gst-col">${item.total_gst}</td><td>${item.net_amount}</td><td>${item.sale_mrp}</td>
                 <td style="white-space:nowrap; min-width:130px;">
-                    <button class="btn btn-primary btn-sm editItem me-1" data-index="${index}">Edit</button>
-                    <button class="btn btn-danger btn-sm removeItem" data-index="${index}">Delete</button>
+                    <button class="btn btn-primary btn-sm editItem me-1" data-index="${index}" ${isEditingItem ? 'disabled' : ''}>Edit</button>
+                    <button class="btn btn-danger btn-sm removeItem" data-index="${index}" ${isEditingItem ? 'disabled' : ''}>Delete</button>
                 </td>
             </tr>`;
             });
@@ -1286,6 +1299,7 @@
         function resetForm() {
             currentPurchaseId = 0;
             currentVouchId = 0; 
+            isEditingItem = false;
             itemsArray = [];
             allItemsData = [];
             if (itemPickerDT) {

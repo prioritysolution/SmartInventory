@@ -7,6 +7,41 @@ use Illuminate\Support\Facades\Log;
 
 trait SearchesItemsByCode
 {
+    protected function searchItemsByCodePage(
+        int $catId,
+        int $subCatId,
+        string $code,
+        int $page,
+        int $pageSize
+    ): array {
+        $page = max(1, $page);
+        $pageSize = min(1000, max(1, $pageSize));
+        $pdo = DB::connection('coops')->getPdo();
+        $stmt = $pdo->prepare('CALL USP_GET_ITEM_LIST(?, ?, ?, ?, ?)');
+        try {
+            $stmt->execute([$catId, $subCatId, trim($code), $page, $pageSize]);
+            $items = $stmt->fetchAll(\PDO::FETCH_OBJ);
+            if (!$stmt->nextRowset()) {
+                throw new \RuntimeException('USP_GET_ITEM_LIST did not return its total-count result set.');
+            }
+            $totalRow = $stmt->fetch(\PDO::FETCH_OBJ);
+            if (!$totalRow || !isset($totalRow->Total)) {
+                throw new \RuntimeException('USP_GET_ITEM_LIST did not return a total count.');
+            }
+            $total = (int) $totalRow->Total;
+        } finally {
+            $stmt->closeCursor();
+        }
+
+        return [
+            'items' => $items,
+            'total' => $total,
+            'page' => $page,
+            'pageSize' => $pageSize,
+            'lastPage' => max(1, (int) ceil($total / $pageSize)),
+        ];
+    }
+
     protected function searchItemsByCode(int $catId, int $subCatId, string $code): array
     {
         $code = trim($code);
@@ -21,11 +56,7 @@ trait SearchesItemsByCode
             Log::error('Item search by code error: ' . $e->getMessage());
             try {
                 DB::purge('coops');
-                $rows = DB::connection('coops')->select('CALL USP_GET_ITEM_LIST(?, ?, ?)', [
-                    $catId,
-                    $subCatId,
-                    $code,
-                ]);
+                $rows = $this->searchItemsByCodePage($catId, $subCatId, $code, 1, 1000)['items'];
                 return $rows ?: [];
             } catch (\Exception $fallback) {
                 Log::error('Item list fallback error: ' . $fallback->getMessage());

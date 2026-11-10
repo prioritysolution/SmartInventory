@@ -23,7 +23,7 @@ class Sales extends Controller
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::connection('coops')->reconnect();
         $agents = [];
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
         return view('Admin.agent-indent', compact('agents', 'categories'))
             ->with('pageTitle', 'Agent Indent');
     }
@@ -264,7 +264,7 @@ class Sales extends Controller
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::connection('coops')->reconnect();
         $agents = [];
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
         return view('Admin.agent-return', compact('agents', 'categories'))
             ->with('pageTitle', 'Agent Return');
     }
@@ -515,7 +515,7 @@ class Sales extends Controller
         // Customers load via AJAX Select2 (parties.search) — list is too large to embed.
         $customers  = [];
         $banks      = DB::connection('coops')->select('CALL USP_GET_BANK_LEDGER()');
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
         $this->organisationAddress();
         return view('Admin.counter-sale', compact('customers', 'banks', 'categories'))
             ->with('pageTitle', 'Counter Sale');
@@ -524,8 +524,7 @@ class Sales extends Controller
     public function getSaleSubCats(Request $request)
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?, ?)', [
-            session('org_id'),
+        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?)', [
             $request->input('cat_id', 0)
         ]);
         return response()->json($subs);
@@ -535,6 +534,15 @@ class Sales extends Controller
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
+        if ($request->has('page')) {
+            return response()->json($this->searchItemsByCodePage(
+                (int) $request->input('cat_id', 0),
+                (int) $request->input('sub_cat_id', 0),
+                (string) ($request->input('code') ?? ''),
+                (int) $request->input('page', 1),
+                (int) $request->input('page_size', 25)
+            ));
+        }
         $items = $this->searchItemsByCode(
             (int) $request->input('cat_id', 0),
             (int) $request->input('sub_cat_id', 0),
@@ -1168,7 +1176,7 @@ class Sales extends Controller
         // Customers load via AJAX Select2 (parties.search) — list is too large to embed.
         $customers  = [];
         $banks      = DB::connection('coops')->select('CALL USP_GET_BANK_LEDGER()');
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
         return view('Admin.sale-return', compact('customers', 'banks', 'categories'))
             ->with('pageTitle', ' Counter Sale Return');
     }

@@ -368,6 +368,7 @@
 <script src="{{ asset('agenttemplate/assets/plugins/select2/js/select2.min.js') }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+@include('partials.item-picker-pagination')
 <script>
     const baseUrl   = "{{ url('/') }}";
     const csrfToken = "{{ csrf_token() }}";
@@ -383,6 +384,7 @@
     let itemsArray    = [];
     let currentSaleId = 0;
     let itemPickerDT  = null;
+    let itemPickerFilters = null;
     let returnableReady = false;
     let barcodeScanner = null;
     let barcodeScannerRunning = false;
@@ -523,23 +525,18 @@
             const catId = parseInt($('#modalCateId').val()) || 0;
             const subCatId = parseInt($('#modalSubCateId').val()) || 0;
             const code = $('#modalSearchInput').val().trim();
-            $('#itemPickerLoader').show();
             $('#itemPickerTableWrap').hide();
             if (itemPickerDT) {
                 itemPickerDT.destroy();
                 itemPickerDT = null;
             }
             $('#itemPickerTable tbody').html('');
-            $.get(baseUrl + '/agent/customer-return/items', {
+            itemPickerFilters = {
                 cat_id: catId,
                 sub_cat_id: subCatId,
                 code: code
-            }, function (data) {
-                renderReturnItemPickerTable(data);
-            }).fail(function () {
-                $('#itemPickerLoader').hide();
-                Swal.fire('Error', 'Failed to load items', 'error');
-            });
+            };
+            loadReturnItemPickerPage(1);
         });
 
         $('#modalSearchInput').on('keypress', function (e) {
@@ -834,8 +831,11 @@
         $('#modalSearchInput').val(code || '');
         $('#itemPickerModal').modal('show');
         if (data && data.length > 0) {
-            $('#itemPickerLoader').show();
-            renderReturnItemPickerTable(data);
+            itemPickerFilters = { cat_id: 0, sub_cat_id: 0, code: code || '' };
+            loadReturnItemPickerPage(1);
+        } else if (code) {
+            itemPickerFilters = { cat_id: 0, sub_cat_id: 0, code: code };
+            loadReturnItemPickerPage(1);
         }
     }
 
@@ -847,15 +847,27 @@
             itemPickerDT = null;
         }
         $('#itemPickerTable tbody').html('');
+        $('#itemPickerPagination').hide().empty();
     }
 
-    function renderReturnItemPickerTable(data) {
+    function loadReturnItemPickerPage(page) {
+        window.fetchItemPickerPage(
+            baseUrl + '/agent/customer-return/items',
+            itemPickerFilters,
+            page,
+            renderReturnItemPickerTable
+        );
+    }
+
+    function renderReturnItemPickerTable(response) {
+        const data = response.items || [];
         setTimeout(function () {
             $('#itemPickerLoader').hide();
             if (!data.length) {
                 $('#itemPickerTable tbody').html(
                     '<tr><td colspan="4" class="text-center text-muted">No items found</td></tr>');
                 $('#itemPickerTableWrap').show();
+                window.renderItemPickerPagination(response, loadReturnItemPickerPage);
                 return;
             }
             $.each(data, function (i, item) {
@@ -877,19 +889,7 @@
                 itemPickerDT = null;
             }
             $('#itemPickerTableWrap').show();
-            itemPickerDT = $('#itemPickerTable').DataTable({
-                pageLength: 10,
-                lengthMenu: [10, 25, 50],
-                ordering: true,
-                language: {
-                    search: '',
-                    searchPlaceholder: 'Search items...',
-                    paginate: {
-                        next: '<i class="fa fa-angle-right"></i>',
-                        previous: '<i class="fa fa-angle-left"></i>'
-                    }
-                }
-            });
+            window.renderItemPickerPagination(response, loadReturnItemPickerPage);
         }, 0);
     }
 

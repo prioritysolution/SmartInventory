@@ -22,7 +22,7 @@ class AgentCustomer extends Controller
 
         // Customers via AJAX Select2 (agent.parties.search)
         $customers = [];
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
         $this->organisationAddress();
         return view('Agent.agent-custmer', [
             'customers'  => $customers,
@@ -108,8 +108,7 @@ class AgentCustomer extends Controller
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
-        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?, ?)', [
-            session('org_id'),
+        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?)', [
             $request->input('cat_id', 0)
         ]);
         return response()->json($subs);
@@ -119,6 +118,15 @@ class AgentCustomer extends Controller
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
+        if ($request->has('page')) {
+            return response()->json($this->searchItemsByCodePage(
+                (int) $request->input('cat_id', 0),
+                (int) $request->input('sub_cat_id', 0),
+                (string) ($request->input('code') ?? ''),
+                (int) $request->input('page', 1),
+                (int) $request->input('page_size', 25)
+            ));
+        }
         $items = $this->searchItemsByCode(
             (int) $request->input('cat_id', 0),
             (int) $request->input('sub_cat_id', 0),

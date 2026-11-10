@@ -18,15 +18,14 @@ class Wastage extends Controller
     public function index()
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT(?)', [session('org_id')]);
+        $categories = DB::connection('coops')->select('CALL USP_GET_ITEM_CAT()');
         return view('Admin.wastage-damage', compact('categories'))->with('pageTitle', 'Wastage / Damage Entry');
     }
 
     public function getSubCats(Request $request)
     {
         Config::set('database.connections.coops.database', session('org_schema'));
-        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?, ?)', [
-            session('org_id'),
+        $subs = DB::connection('coops')->select('CALL USP_GET_ITEM_SUB_CAT(?)', [
             $request->input('cat_id', 0),
         ]);
         return response()->json($subs);
@@ -36,6 +35,15 @@ class Wastage extends Controller
     {
         Config::set('database.connections.coops.database', session('org_schema'));
         DB::purge('coops');
+        if ($request->has('page')) {
+            return response()->json($this->searchItemsByCodePage(
+                (int) $request->input('cat_id', 0),
+                (int) $request->input('sub_cat_id', 0),
+                (string) ($request->input('code') ?? ''),
+                (int) $request->input('page', 1),
+                (int) $request->input('page_size', 25)
+            ));
+        }
         $items = $this->searchItemsByCode(
             (int) $request->input('cat_id', 0),
             (int) $request->input('sub_cat_id', 0),

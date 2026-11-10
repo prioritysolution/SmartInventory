@@ -111,7 +111,8 @@
             $(document).on('click', '.editRow', function() {
                 $('#cateId').val($(this).data('id'));
                 $('#cateNm').val($(this).data('name'));
-                $('#isFmcg').val(String($(this).data('fmcg')));
+                const isFmcg = Number($(this).attr('data-fmcg')) === 1 ? '1' : '0';
+                $('#isFmcg').val(isFmcg).trigger('change');
                 $('#agentComm').val($(this).data('comm'));
                 $('#purLedg').val($(this).data('purledg')).trigger('change');
                 $('#saleLedg').val($(this).data('saledg')).trigger('change');

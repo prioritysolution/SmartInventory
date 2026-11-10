@@ -95,7 +95,7 @@
 
             <div class="row mb-3 top-entry-row">
                 {{-- LEFT BOX: Purchase Info --}}
-                <div class="col-md-6">
+                <div class="col-md-12">
                     <div class="section-card h-100">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h6 class="mb-0">Purchase Return Info</h6>
@@ -114,48 +114,58 @@
                         </div>
 
 
-                        <div class="mb-3">
-                            <label class="form-label">Purchase Return Date<span class="text-danger">*</span></label>
-                            <input type="date" class="form-control" id="purchaseDate" min="{{ session('year_start') }}"
-                                max="{{ min(date('Y-m-d'), session('year_end')) }}" value="{{ date('Y-m-d') }}">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Select Party<span class="text-danger">*</span></label>
-                            <select class="form-select" id="partyId">
-                                <option value="">-- Select Party --</option>
-                                @foreach ($suppliers as $supplier)
-                                    <option value="{{ $supplier->Party_Id }}">{{ $supplier->Party_Name }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Invoice No</label>
-                            <input type="text" class="form-control" id="purchaseNo" maxlength="20" autocomplete="off">
-                        </div>
-                        <div class="mb-3">
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" name="transMode" id="transCash"
-                                    value="1" checked>
-                                <label class="form-check-label" for="transCash">Cash</label>
+                        <div class="row g-2 align-items-end">
+                            <div class="col-xl-2 col-md-3 mb-2">
+                                <label class="form-label">Purchase Return Date<span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="purchaseDate" min="{{ session('year_start') }}"
+                                    max="{{ min(date('Y-m-d'), session('year_end')) }}" value="{{ date('Y-m-d') }}">
                             </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" name="transMode" id="transBank"
-                                    value="2">
-                                <label class="form-check-label" for="transBank">Bank</label>
+                            <div class="col-xl-3 col-md-3 mb-2">
+                                <label class="form-label">Select Party<span class="text-danger">*</span></label>
+                                <select class="form-select" id="partyId">
+                                    <option value="">-- Select Party --</option>
+                                    @foreach ($suppliers as $supplier)
+                                        <option value="{{ $supplier->Party_Id }}">{{ $supplier->Party_Name }}</option>
+                                    @endforeach
+                                </select>
                             </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" name="transMode" id="transCredit"
-                                    value="3">
-                                <label class="form-check-label" for="transCredit">Credit</label>
+                            <div class="col-xl-3 col-md-3 mb-2">
+                                <label class="form-label">Invoice No / Ref Bill No</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="purchaseNo" maxlength="120" autocomplete="off">
+                                    <button type="button" class="btn btn-primary" id="findPurchaseBtn" title="Find purchase">
+                                        <i class="fa-solid fa-magnifying-glass"></i>
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-4 mb-3">
+                            <div class="col-xl-2 col-md-3 mb-2">
                                 <label class="form-label">Ref Voucher No</label>
                                 <input type="text" class="form-control" id="refVoucherNo" maxlength="20"
                                     autocomplete="off">
                             </div>
-                            <div class="col-md-4 mb-3" id="bankSelectDiv" style="display:none;">
+                            <div class="col-xl-2 col-md-3 mb-2">
+                                <label class="form-label d-block">Payment Mode</label>
+                                <div class="d-flex align-items-center flex-nowrap">
+                                    <div class="form-check form-check-inline mb-0">
+                                        <input class="form-check-input" type="radio" name="transMode" id="transCash"
+                                            value="1" checked>
+                                        <label class="form-check-label" for="transCash">Cash</label>
+                                    </div>
+                                    <div class="form-check form-check-inline mb-0">
+                                        <input class="form-check-input" type="radio" name="transMode" id="transBank"
+                                            value="2">
+                                        <label class="form-check-label" for="transBank">Bank</label>
+                                    </div>
+                                    <div class="form-check form-check-inline mb-0">
+                                        <input class="form-check-input" type="radio" name="transMode" id="transCredit"
+                                            value="3">
+                                        <label class="form-check-label" for="transCredit">Credit</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row g-2" id="bankFieldsRow" style="display:none;">
+                            <div class="col-md-4 mb-2" id="bankSelectDiv">
                                 <label class="form-label">Select Bank<span class="text-danger">*</span></label>
                                 <select class="form-select" id="bankAccountId">
                                     <option value="">-- Select Bank --</option>
@@ -164,7 +174,7 @@
                                     @endforeach
                                 </select>
                             </div>
-                            <div class="col-md-4 mb-3" id="instrumentNoDiv" style="display:none;">
+                            <div class="col-md-4 mb-2" id="instrumentNoDiv">
                                 <label class="form-label">Instrument No<span class="text-danger">*</span></label>
                                 <input type="text" class="form-control" id="instrumentNo" maxlength="50"
                                     autocomplete="off" placeholder="Cheque / UTR / Instrument No">
@@ -173,17 +183,14 @@
                     </div>
                 </div>
 
-                {{-- RIGHT BOX: Item Section --}}
-                <div class="col-md-6">
+                {{-- Return items are entered after selecting a purchase line. --}}
+                <div class="d-none" id="returnItemEntrySource">
                     <div class="section-card item-entry h-100">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="mb-0">Item Section</h6>
-                            <button type="button" class="btn btn-outline-primary btn-sm" id="findPurchaseBtn">
-                                <i class="fa-solid fa-file-invoice me-1"></i> Find Purchase
-                            </button>
+                            <h6 class="mb-0">Add Return Item</h6>
                         </div>
                         <div class="row">
-                            <div class="col-md-4 mb-3">
+                            <div class="col-md-4 mb-3" id="productCodeField">
                                 <label class="form-label">Product Code<span class="text-danger">*</span></label>
                                 <div class="input-group">
                                     <input type="text" class="form-control" id="productCodeInput"
@@ -295,7 +302,6 @@
                                     <tr>
                                         <th>Sl</th>
                                         <th>Item Name</th>
-                                        <th>Barcode</th>
                                         <th>Qty</th>
                                         <th>Unit</th>
                                         <th>Rate</th>
@@ -330,13 +336,13 @@
                             </tr>
                             <tr>
                                 <th>Discount (%)</th>
-                                <td><input type="number" step="0.01" min="0" max="100"
-                                        class="form-control" id="summaryDiscPercent" placeholder="0.00"></td>
+                                <td><input type="text" class="form-control calc-label" id="summaryDiscPercent"
+                                        placeholder="0.00" readonly></td>
                             </tr>
                             <tr>
                                 <th>Total Discount Amount (B)</th>
-                                <td><input type="text" class="form-control calc-label" id="totalDiscountAmount"
-                                        readonly></td>
+                                <td><input type="number" step="0.01" min="0" class="form-control"
+                                        id="totalDiscountAmount" placeholder="0.00"></td>
                             </tr>
                             <tr>
                                 <th>Total Taxable Amount (C)</th>
@@ -366,6 +372,18 @@
                 </div>
             </div>
 
+        </div>
+    </div>
+
+    <div class="modal fade" id="returnItemEntryModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg modal-xl-custom">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Return Item</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="returnItemEntryModalBody"></div>
+            </div>
         </div>
     </div>
 
@@ -538,7 +556,7 @@
                                     <th>Party Name</th>
                                     <th>Invoice Date</th>
                                     <th>Net Amount</th>
-                                    <th>Action</th>
+                                    <th>Items</th>
                                 </tr>
                             </thead>
                             <tbody id="findPurchaseBody">
@@ -553,60 +571,21 @@
         </div>
     </div>
 
-    {{-- Purchase product details --}}
-    <div class="modal fade" id="purchaseItemsModal" tabindex="-1" data-bs-backdrop="static">
-        <div class="modal-dialog modal-xl modal-xl-custom">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="purchaseItemsTitle">Purchase Items</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="table-responsive">
-                        <table id="purchaseItemsTable" class="table table-bordered table-sm w-100">
-                            <thead class="thead-light">
-                                <tr>
-                                    <th>Sl</th>
-                                    <th>Item Name</th>
-                                    <th>Purchased</th>
-                                    <th>Returned</th>
-                                    <th>Remaining</th>
-                                    <th>Unit</th>
-                                    <th>Rate</th>
-                                    <th>Disc %</th>
-                                    <th>Taxable</th>
-                                    <th>GST</th>
-                                    <th>Net Amt</th>
-                                    <th>Action</th>
-                                </tr>
-                            </thead>
-                            <tbody id="purchaseItemsBody">
-                                <tr>
-                                    <td colspan="12" class="text-center text-muted">No items</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 @endsection
 
 @push('scripts')
+    @include('partials.item-picker-pagination')
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
         let itemsArray = [];
+        let summaryDiscountEdited = false;
         let itemPickerDT = null;
+        let itemPickerFilters = null;
         let allItemsData = [];
         let currentPurchaseId = 0;
         let currentVouchId = 0;
         let purchaseSourceSearchLazy = null;
-        let purchaseItemsDT = null;
-        let skipFindPurchaseReset = false;
-        let reopenFindPurchase = true;
-        let findPurchaseHeader = null;
-        let findPurchaseItems = [];
+        let purchaseSourceRows = {};
         let returnableReady = false;
         let skipPartyReturnableRefresh = false;
 
@@ -681,15 +660,35 @@
                     }
                     return;
                 }
+                const requestedQty = parseFloat(options.requestedQty);
+                if (!isNaN(requestedQty) && requestedQty > remaining) {
+                    returnableReady = false;
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Quantity exceeds returnable stock',
+                        text: 'The requested quantity is greater than the quantity currently available for return (' +
+                            remaining + ').'
+                    });
+                    clearItemSelection();
+                    return;
+                }
                 returnableReady = true;
                 const currentQty = parseFloat($('#quantity').val());
-                if (!currentQty || currentQty <= 0) {
+                if (!isNaN(requestedQty) && requestedQty > 0) {
+                    $('#quantity').val(requestedQty);
+                } else if (!currentQty || currentQty <= 0) {
                     $('#quantity').val(remaining);
                 } else if (currentQty > remaining) {
                     $('#quantity').val(remaining);
                 }
                 calculateAmounts();
-                if (options.focusQty) {
+                if (options.autoAdd) {
+                    $('#returnItemEntryModal').one('shown.bs.modal', function() {
+                        $('#addItemBtn').trigger('click');
+                    });
+                    $('#returnItemEntryModal').modal('show');
+                } else if (options.focusQty) {
+                    $('#returnItemEntryModal').modal('show');
                     $('#quantity').focus();
                 }
             }).fail(function(xhr) {
@@ -717,6 +716,8 @@
         }
 
         $(document).ready(function() {
+            $('#returnItemEntryModalBody').append($('#returnItemEntrySource .item-entry'));
+            $('#returnItemEntrySource').remove();
 
             $('#partyId').select2({
                 placeholder: '-- Select Party --',
@@ -839,6 +840,37 @@
                     Swal.fire('Error', 'Purchase Date is required before choosing an item', 'error');
                     return;
                 }
+                if (pendingPurchaseLine) {
+                    const purchaseLine = pendingPurchaseLine;
+                    pendingPurchaseLine = null;
+                    applyPurchaseReturnItem({
+                        Prod_Id: purchaseLine.Prod_Id,
+                        Prod_Code: purchaseLine.Prod_Code || '',
+                        Prod_ShortNm: purchaseLine.Prod_Name,
+                        Gst_Id: purchaseLine.Gst_Id || purchaseLine.hsn_code,
+                        Unit_Id: purchaseLine.Unit_Id,
+                        Unit_Name: purchaseLine.Unit_Name,
+                        GST_Data: purchaseLine.GST_Data,
+                        Is_Fmcg: purchaseLine.Is_Fmcg
+                    });
+                    $('#returnBarcode').val(purchaseLine.Barcode || '');
+                    $('#returnMrp').val(purchaseLine.MRP || 0);
+                    $('#productCodeInput').val(purchaseLine.Barcode || purchaseLine.Prod_Code || '');
+                    $('#rate').val((parseFloat(purchaseLine.Item_Rate) || 0).toFixed(2));
+                    $('#discountPercent').val(purchaseLine.Disc_Prcnt || 0);
+                    if (purchaseLine.Pack_Date) {
+                        showPackDateField(true);
+                        $('#itemPurchaseDate').val(String(purchaseLine.Pack_Date).substring(0, 10));
+                    }
+                    applyReturnableLimit({
+                        billCap: purchaseLine.Remaining_Qty,
+                        requestedQty: purchaseLine.Requested_Qty,
+                        autoAdd: true,
+                        keepItem: true,
+                        focusQty: true
+                    });
+                    return;
+                }
                 $.get("{{ route('purchase-return.barcodes') }}", {
                     party_id: $('#partyId').val(),
                     prod_id: prodId,
@@ -858,6 +890,7 @@
                     pendingBarcodePick = null;
                     openBarcodePicker(payload.rows, payload.title);
                 }).fail(function(xhr) {
+                    pendingPurchaseLine = null;
                     Swal.fire('Error', xhr.responseJSON?.error || 'Failed to load barcodes', 'error');
                 });
             }
@@ -886,6 +919,17 @@
                     return;
                 }
                 const purchaseLine = pendingPurchaseLine;
+                const requestedQty = purchaseLine ? parseFloat(purchaseLine.Requested_Qty) : NaN;
+                if (!isNaN(requestedQty) && requestedQty > remaining) {
+                    pendingPurchaseLine = null;
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Quantity exceeds available stock',
+                        text: 'The requested quantity is greater than the quantity available for this barcode (' +
+                            remaining + ').'
+                    });
+                    return;
+                }
                 pendingPurchaseLine = null;
                 applyPurchaseReturnItem({
                     Prod_Id: row.Prod_Id,
@@ -912,6 +956,8 @@
                 }
                 applyReturnableLimit({
                     billCap: remaining,
+                    requestedQty: requestedQty,
+                    autoAdd: !!purchaseLine,
                     keepItem: true,
                     focusQty: true
                 });
@@ -1013,23 +1059,18 @@
                 const catId = parseInt($('#modalCateId').val()) || 0;
                 const subCatId = parseInt($('#modalSubCateId').val()) || 0;
                 const code = $('#modalSearchInput').val().trim();
-                $('#itemPickerLoader').show();
                 $('#itemPickerTableWrap').hide();
                 if (itemPickerDT) {
                     itemPickerDT.destroy();
                     itemPickerDT = null;
                 }
                 $('#itemPickerTable tbody').html('');
-                $.get("{{ url('purchase-return/items') }}", {
+                itemPickerFilters = {
                     cat_id: catId,
                     sub_cat_id: subCatId,
                     code: code
-                }, function(data) {
-                    renderItemPickerTable(data, false);
-                }).fail(function() {
-                    $('#itemPickerLoader').hide();
-                    Swal.fire('Error', 'Failed to load items', 'error');
-                });
+                };
+                loadItemPickerPage(1);
             });
 
             $('#modalSearchInput').on('keypress', function(e) {
@@ -1054,6 +1095,7 @@
                     itemPickerDT = null;
                 }
                 $('#itemPickerTable tbody').html('');
+                $('#itemPickerPagination').hide().empty();
             });
 
             function openItemPickerModal(data, isCodeSearch, code) {
@@ -1072,9 +1114,9 @@
                 $('#modalSubCateId').html('<option value="0">-- All Sub Categories --</option>');
                 $('#modalSearchInput').val(code || '');
                 $('#itemPickerModal').modal('show');
-                if (data.length > 0) {
-                    $('#itemPickerLoader').show();
-                    renderItemPickerTable(data, isCodeSearch);
+                if (data.length > 0 || code) {
+                    itemPickerFilters = { cat_id: 0, sub_cat_id: 0, code: code || '' };
+                    loadItemPickerPage(1);
                 }
             }
 
@@ -1091,11 +1133,40 @@
                 applyReturnBarcode(row);
             });
 
+            $('#barcodePickerModal').on('hidden.bs.modal', function() {
+                pendingPurchaseLine = null;
+            });
+
             $('#partyId').on('change', function() {
                 if (skipPartyReturnableRefresh) return;
                 if ($('#selectedItemId').val()) {
                     applyReturnableLimit({ keepItem: true, focusQty: false });
                 }
+            });
+
+            $('#purchaseNo').on('focus', function() {
+                if ($('#partyId').val()) return;
+                $(this).blur();
+                Swal.fire('Party required', 'Select party first before entering a bill number.', 'warning');
+            });
+
+            $('#findPurchaseBtn').on('click', function() {
+                if ($('#findPurchaseModal').hasClass('show')) return;
+                const partyId = $('#partyId').val();
+                const billNo = $('#purchaseNo').val().trim();
+                if (!partyId) {
+                    Swal.fire('Party required', 'Select party first before searching by bill number.', 'warning');
+                    return;
+                }
+                $('#findPartyId').val(partyId || '0').prop('disabled', !!partyId).trigger('change');
+                $('#findBillNo').val(billNo);
+                $('#findFromDate, #findToDate').val('');
+                if (partyId && billNo) {
+                    $('#findPurchaseModal').one('shown.bs.modal', function() {
+                        $('#findPurchaseGo').trigger('click');
+                    });
+                }
+                $('#findPurchaseModal').modal('show');
             });
 
             $('#quantity, #rate, #discountPercent').on('input', function() {
@@ -1112,28 +1183,33 @@
                 calculateAmounts();
             });
 
-            $('#summaryDiscPercent').on('input', function() {
-                if ($(this).prop('readonly')) return;
-                const discPct = parseFloat($(this).val()) || 0;
-                if (discPct > 100) {
-                    $(this).val(100);
-                    Swal.fire('Error', 'Discount % cannot be greater than 100', 'error');
+            $('#totalDiscountAmount').on('input change', function(event) {
+                summaryDiscountEdited = true;
+                const totalAmt = itemsArray.reduce((sum, item) => sum + (parseFloat(item.total_amount) || 0), 0);
+                const rawAmount = $(this).val();
+                let discAmt = parseFloat(rawAmount);
+                if (rawAmount === '') {
+                    updateSummaryDiscount(0, totalAmt,
+                        itemsArray.reduce((sum, item) => sum + (parseFloat(item.total_gst) || 0), 0), false);
                     return;
                 }
-                const totalAmt = itemsArray.reduce((s, i) => s + (parseFloat(i.total_amount) || 0), 0);
-                const totalGST = itemsArray.reduce((s, i) => s + (parseFloat(i.total_gst) || 0), 0);
-                const discAmt = totalAmt * (discPct / 100);
-                const taxable = totalAmt - discAmt;
-                $('#totalDiscountAmount').val(discAmt.toFixed(2));
-                $('#totalTaxableAmount').val(taxable.toFixed(2));
-                recalcSummaryTotals(taxable, totalGST);
+                if (!Number.isFinite(discAmt) || discAmt < 0) discAmt = 0;
+                if (discAmt > totalAmt) {
+                    discAmt = totalAmt;
+                    if (event.type === 'change') {
+                        Swal.fire('Invalid discount', 'Discount amount cannot exceed total amount.', 'warning');
+                    }
+                }
+                updateSummaryDiscount(discAmt, totalAmt,
+                    itemsArray.reduce((sum, item) => sum + (parseFloat(item.total_gst) || 0), 0),
+                    event.type === 'change' || discAmt !== parseFloat(rawAmount));
             });
 
             $('input[name="transMode"]').on('change', function() {
                 if ($(this).val() === '2') {
-                    $('#bankSelectDiv, #instrumentNoDiv').show();
+                    $('#bankFieldsRow').show();
                 } else {
-                    $('#bankSelectDiv, #instrumentNoDiv').hide();
+                    $('#bankFieldsRow').hide();
                     $('#bankAccountId').val('').trigger('change');
                     $('#instrumentNo').val('');
                 }
@@ -1170,6 +1246,8 @@
                 $('#itemPurchaseDateDiv').hide();
                 $('#itemPurchaseDate').val('');
                 $('#addItemBtn').text('+ Add Item').data('editing', false);
+                $('#productCodeField').show();
+                $('#returnItemEntryModal').modal('hide');
             });
 
             $(document).on('click', '.removeItem', function() {
@@ -1201,8 +1279,14 @@
                 $('#itemPurchaseDate').val(item.item_purchase_date);
                 $('#returnBarcode').val(item.barcode || '');
                 $('#returnMrp').val(item.sale_mrp || 0);
-                $('#productCodeInput').val(item.barcode || '');
-                if (item.item_purchase_date) showPackDateField(true);
+                $('#productCodeInput').val('');
+                $('#productCodeField').hide();
+                $('#itemPurchaseDateDiv').hide();
+                const itemHasGst = (parseFloat(item.cgst_rate) || 0) > 0 ||
+                    (parseFloat(item.sgst_rate) || 0) > 0;
+                $('input[name="gstMode"][value="' + (itemHasGst ? '1' : '0') + '"]')
+                    .prop('checked', true).trigger('change');
+                calculateAmounts();
                 itemsArray.splice(index, 1);
                 renderItemsTable();
                 $('#addItemBtn').text('Update Item').data('editing', true);
@@ -1220,10 +1304,6 @@
                 }
                 if (itemsArray.length === 0) {
                     Swal.fire('Error', 'Please add at least one item', 'error');
-                    return;
-                }
-                if (itemsArray.some(function(row) { return !/^\d+$/.test(String(row.barcode || '')); })) {
-                    Swal.fire('Error', 'Select a barcode for each return item', 'error');
                     return;
                 }
                 if ($('input[name="transMode"]:checked').val() === '2') {
@@ -1251,8 +1331,9 @@
                         ref_vouch_no: $('#refVoucherNo').val(),
                         bank_id: $('#bankAccountId').val(),
                         instrument_no: $('#instrumentNo').val().trim(),
-                        disc_percent: $('#summaryDiscPercent').prop('readonly') ? 0 : (parseFloat($(
-                            '#summaryDiscPercent').val()) || 0),
+                        disc_percent: (parseFloat($('#totalDiscountAmount').val()) || 0) > 0
+                            ? (parseFloat($('#summaryDiscPercent').val()) || 0)
+                            : 0,
                         disc_amt: $('#totalDiscountAmount').val() || 0,
                         round_off: $('#roundOff').val() || 0,
                         net_amt: $('#finalNetAmount').val() || 0,
@@ -1282,7 +1363,9 @@
                     currentVouchId = data.Voucher_Id;
                     $('#purchaseDate').val(data.Invoice_Date ? data.Invoice_Date.substring(0, 10) :
                         '');
+                    skipPartyReturnableRefresh = true;
                     $('#partyId').val(data.Party_Id).trigger('change');
+                    skipPartyReturnableRefresh = false;
                     $('#purchaseNo').val(data.Ref_No);
                     const mode = String(data.Trans_Mode || '1');
                     $('input[name="transMode"][value="' + mode + '"]').prop('checked', true).trigger('change');
@@ -1314,10 +1397,18 @@
                         item_purchase_date: item.Pack_Date ? item.Pack_Date.substring(0,
                             10) : '',
                     }));
+                    const hasGst = itemsArray.some(item =>
+                        (parseFloat(item.cgst_rate) || 0) > 0 || (parseFloat(item.sgst_rate) || 0) > 0
+                    );
+                    $('input[name="gstMode"][value="' + (hasGst ? '1' : '0') + '"]')
+                        .prop('checked', true).trigger('change');
                     renderItemsTable();
                     $('#savePurchase').text('Update');
-                    $('#summaryDiscPercent').val(data.Disc_Percent);
-                    $('#totalDiscountAmount').val(data.Disc_Amount);
+                    const itemDiscountTotal = itemsArray.reduce((sum, item) => sum + (parseFloat(item.discount_amount) || 0), 0);
+                    summaryDiscountEdited = Math.abs((parseFloat(data.Disc_Amount) || 0) - itemDiscountTotal) > 0.005;
+                    updateSummaryDiscount(parseFloat(data.Disc_Amount) || 0,
+                        itemsArray.reduce((sum, item) => sum + (parseFloat(item.total_amount) || 0), 0),
+                        itemsArray.reduce((sum, item) => sum + (parseFloat(item.total_gst) || 0), 0));
                     $('#totalGSTAmount').val(data.GST_Amt);
                     $('#roundOff').val(data.Round_Off);
                     $('#finalNetAmount').val(data.Net_Amt);
@@ -1337,8 +1428,8 @@
                 const toDate = $('#searchToDate').val();
                 const partyId = $('#searchPartyId').val() || 0;
                 const billNo = $('#searchBillNo').val().trim();
-                if (!partyId || partyId == '0') {
-                    Swal.fire('Error', 'Please select a Party', 'error');
+                if (billNo && (!partyId || partyId == '0')) {
+                    Swal.fire('Error', 'Please select a specific party when searching by Bill No or Ref Bill No', 'error');
                     return;
                 }
                 if ((!fromDate || !toDate) && !billNo) {
@@ -1404,14 +1495,6 @@
                 $('#searchPartyId').val('0').trigger('change');
             });
 
-            $('#findPurchaseBtn').on('click', function() {
-                const party = $('#partyId').val();
-                if (party) {
-                    $('#findPartyId').val(party).trigger('change');
-                }
-                $('#findPurchaseModal').modal('show');
-            });
-
             $('#findPurchaseGo').on('click', function() {
                 const fromDate = $('#findFromDate').val();
                 const toDate = $('#findToDate').val();
@@ -1419,7 +1502,7 @@
                 const billNo = $('#findBillNo').val().trim();
 
                 if (billNo && (!partyId || partyId === '0')) {
-                    Swal.fire('Error', 'Please select a Party when searching by Bill No or Ref Bill No', 'error');
+                    Swal.fire('Party required', 'Select party first before searching by bill number.', 'warning');
                     return;
                 }
                 if ((!fromDate || !toDate) && !billNo) {
@@ -1451,14 +1534,20 @@
                             };
                         },
                         renderRow: function(row, i) {
+                            purchaseSourceRows[String(row.Pur_Id)] = row;
                             return `<tr>
                                 <td>${i + 1}</td>
-                                <td>${row.Invoice_No ?? ''}</td>
-                                <td>${row.Ref_No ?? ''}</td>
-                                <td>${row.Party_Name ?? ''}</td>
+                                <td>${escapeHtml(row.Invoice_No)}</td>
+                                <td>${escapeHtml(row.Ref_No)}</td>
+                                <td>${escapeHtml(row.Party_Name)}</td>
                                 <td>${siDate.toDisplay(row.Invoice_Date)}</td>
-                                <td>${row.Net_Amt ?? ''}</td>
-                                <td><button type="button" class="btn btn-sm btn-primary viewPurchaseItems" data-id="${row.Pur_Id}">Details</button></td>
+                                <td>${escapeHtml(row.Net_Amt)}</td>
+                                <td><button type="button" class="btn btn-sm btn-outline-primary togglePurchaseItems"
+                                    data-id="${row.Pur_Id}" aria-label="Show purchase items" title="Show purchase items"
+                                    aria-expanded="false"><i class="fa-solid fa-plus"></i></button></td>
+                            </tr>
+                            <tr id="purchaseItems-${Number(row.Pur_Id)}" class="purchase-items-row d-none">
+                                <td colspan="7">${renderPurchaseSourceItems(row)}</td>
                             </tr>`;
                         },
                         onError: function() {
@@ -1466,43 +1555,113 @@
                         }
                     });
                 }
+                purchaseSourceRows = {};
                 purchaseSourceSearchLazy.resetAndLoad();
             });
 
-            $(document).on('click', '.viewPurchaseItems', function() {
-                const purId = $(this).data('id');
-                reopenFindPurchase = true;
-                $.get("{{ url('purchase-return/find-purchase-details') }}/" + purId, function(data) {
-                    findPurchaseHeader = {
-                        Pur_Id: data.Pur_Id,
-                        Party_Id: data.Party_Id,
-                        Invoice_No: data.Invoice_No,
-                        Ref_No: data.Ref_No,
-                        Invoice_Date: data.Invoice_Date
-                    };
-                    findPurchaseItems = data.Item_Details || [];
-                    if (typeof findPurchaseItems === 'string') {
-                        findPurchaseItems = JSON.parse(findPurchaseItems || '[]');
-                    }
-                    if (!Array.isArray(findPurchaseItems)) {
-                        findPurchaseItems = [];
-                    }
-                    $('#purchaseItemsTitle').text('Purchase Items' + (data.Invoice_No ? ' - ' + data.Invoice_No : ''));
-                    renderPurchaseItemsTable(findPurchaseItems);
-                    skipFindPurchaseReset = true;
-                    $('#findPurchaseModal').one('hidden.bs.modal', function() {
-                        $('#purchaseItemsModal').modal('show');
-                    });
-                    $('#findPurchaseModal').modal('hide');
-                }).fail(function() {
-                    Swal.fire('Error', 'Failed to load purchase items', 'error');
+            $(document).on('click', '.togglePurchaseItems', function() {
+                const id = String($(this).data('id'));
+                const $details = $('#purchaseItems-' + id);
+                const isExpanded = !$details.hasClass('d-none');
+                $details.toggleClass('d-none', isExpanded);
+                const label = isExpanded ? 'Show purchase items' : 'Hide purchase items';
+                $(this).attr('aria-expanded', String(!isExpanded))
+                    .attr('aria-label', label)
+                    .attr('title', label)
+                    .html(isExpanded ? '<i class="fa-solid fa-plus"></i>' : '<i class="fa-solid fa-minus"></i>');
+            });
+
+            $(document).on('click', '.addReturnItemFromPurchase', function() {
+                const id = String($(this).data('purchase-id'));
+                const purchase = purchaseSourceRows[id];
+                if (!purchase) {
+                    Swal.fire('Error', 'Unable to find this purchase. Search again and retry.', 'error');
+                    return;
+                }
+                const itemIndex = parseInt($(this).data('item-index'), 10);
+                const item = (Array.isArray(purchase.Item_Details) ? purchase.Item_Details : [])[itemIndex];
+                if (!item) {
+                    Swal.fire('Error', 'Unable to find this purchase item. Search again and retry.', 'error');
+                    return;
+                }
+                const purchaseQty = Math.max(0, parseFloat(item.qnty) || 0);
+                const availableQty = Math.max(0, parseFloat(item.Available_Qty) || 0);
+                const requestedQtyValue = $('#purchase-return-qty-' + id + '-' + itemIndex).val();
+                if (requestedQtyValue === '') {
+                    Swal.fire('Quantity required', 'Enter the return quantity before adding this item.', 'warning');
+                    return;
+                }
+                const requestedQty = parseFloat(requestedQtyValue);
+                if (!Number.isFinite(requestedQty) || requestedQty <= 0) {
+                    Swal.fire('Invalid quantity', 'Return quantity must be greater than zero.', 'warning');
+                    return;
+                }
+                const sameProductQty = itemsArray.reduce(function(total, line) {
+                    return String(line.item_id) === String(item.Prod_Id)
+                        ? total + (parseFloat(line.quantity) || 0)
+                        : total;
+                }, 0);
+                const samePurchaseLineQty = itemsArray.reduce(function(total, line) {
+                    const sameProduct = String(line.item_id) === String(item.Prod_Id);
+                    const sameRate = Math.abs((parseFloat(line.rate) || 0) - (parseFloat(item.Item_Rate) || 0)) < 0.001;
+                    return sameProduct && sameRate ? total + (parseFloat(line.quantity) || 0) : total;
+                }, 0);
+                const purchaseRemaining = Math.max(0, purchaseQty - samePurchaseLineQty);
+                const availableRemaining = Math.max(0, availableQty - sameProductQty);
+                if (requestedQty > purchaseRemaining) {
+                    Swal.fire('Quantity exceeds purchase quantity',
+                        'Return quantity cannot exceed the remaining purchase quantity (' + purchaseRemaining + ').',
+                        'warning');
+                    return;
+                }
+                if (requestedQty > availableRemaining) {
+                    Swal.fire('Quantity exceeds available quantity',
+                        'Return quantity cannot exceed the currently available quantity (' + availableRemaining + ').',
+                        'warning');
+                    return;
+                }
+                const purchaseLine = Object.assign({}, item, {
+                    Remaining_Qty: availableRemaining,
+                    Requested_Qty: requestedQty
                 });
+                if (!populateReturnFromPurchase(purchaseLine, purchase)) return;
+                applyPurchaseReturnItem({
+                    Prod_Id: item.Prod_Id,
+                    Prod_Code: item.Prod_Code || '',
+                    Prod_ShortNm: item.Prod_Name,
+                    Gst_Id: item.Gst_Id || item.hsn_code,
+                    Unit_Id: item.Unit_Id,
+                    Unit_Name: item.Unit_Name,
+                    GST_Data: item.GST_Data,
+                    Is_Fmcg: item.Is_Fmcg
+                });
+                $('#returnBarcode').val(item.Barcode || '');
+                $('#returnMrp').val(item.MRP || 0);
+                $('#productCodeInput').val(item.Barcode || item.Prod_Code || '');
+                $('#rate').val((parseFloat(item.Item_Rate) || 0).toFixed(2));
+                $('#discountPercent').val(item.Disc_Prcnt || 0);
+                $('#maxReturnQty').val(availableRemaining);
+                $('#quantity').val(requestedQty);
+                $('#itemPurchaseDate').val('');
+                if (item.Pack_Date) {
+                    showPackDateField(true);
+                    $('#itemPurchaseDate').val(String(item.Pack_Date).substring(0, 10));
+                }
+                returnableReady = true;
+                calculateAmounts();
+                const itemsBeforeAdd = itemsArray.length;
+                $('#addItemBtn').data('purchase-return-add', true);
+                $('#addItemBtn').trigger('click');
+                $('#addItemBtn').removeData('purchase-return-add');
+                if (itemsArray.length > itemsBeforeAdd) {
+                    $('#findPurchaseModal').modal('hide');
+                }
             });
 
             function populateReturnFromPurchase(item, header) {
                 const remaining = parseFloat(item.Remaining_Qty ?? item.qnty) || 0;
                 if (remaining <= 0) {
-                    Swal.fire('Already Returned', 'No remaining quantity for this item', 'warning');
+                    Swal.fire('No available stock', 'No current stock is available for this purchase item.', 'warning');
                     return false;
                 }
                 if (header && header.Party_Id) {
@@ -1510,30 +1669,13 @@
                     $('#partyId').val(header.Party_Id).trigger('change');
                     skipPartyReturnableRefresh = false;
                 }
-                if (header && !$('#purchaseNo').val()) {
+                if (header) {
                     $('#purchaseNo').val(header.Ref_No || header.Invoice_No || '');
                 }
-                pendingPurchaseLine = item;
                 return true;
             }
 
-            $(document).on('click', '.addReturnItem', function() {
-                const idx = $(this).data('index');
-                const item = findPurchaseItems[idx];
-                if (!item) return;
-                if (!populateReturnFromPurchase(item, findPurchaseHeader)) return;
-                reopenFindPurchase = false;
-                $('#purchaseItemsModal').one('hidden.bs.modal', function() {
-                    selectProductForReturn(item.Prod_Id, 'Select Barcode — ' + (item.Prod_Name || ''));
-                });
-                $('#purchaseItemsModal').modal('hide');
-            });
-
             $('#findPurchaseModal').on('hidden.bs.modal', function() {
-                if (skipFindPurchaseReset) {
-                    skipFindPurchaseReset = false;
-                    return;
-                }
                 if (purchaseSourceSearchLazy) {
                     purchaseSourceSearchLazy.destroy();
                     purchaseSourceSearchLazy = null;
@@ -1543,21 +1685,8 @@
                 );
                 $('#findFromDate, #findToDate').val('');
                 $('#findBillNo').val('');
-                $('#findPartyId').val('0').trigger('change');
-            });
-
-            $('#purchaseItemsModal').on('hidden.bs.modal', function() {
-                if (purchaseItemsDT) {
-                    purchaseItemsDT.destroy();
-                    purchaseItemsDT = null;
-                }
-                $('#purchaseItemsBody').html(
-                    '<tr><td colspan="12" class="text-center text-muted">No items</td></tr>'
-                );
-                if (reopenFindPurchase) {
-                    $('#findPurchaseModal').modal('show');
-                }
-                reopenFindPurchase = true;
+                $('#findPartyId').prop('disabled', false).val('0').trigger('change');
+                purchaseSourceRows = {};
             });
 
         });
@@ -1566,66 +1695,62 @@
             return $('<div>').text(str == null ? '' : String(str)).html();
         }
 
-        function renderPurchaseItemsTable(items) {
-            if (purchaseItemsDT) {
-                purchaseItemsDT.destroy();
-                purchaseItemsDT = null;
-            }
+        function renderPurchaseSourceItems(purchase) {
+            const items = Array.isArray(purchase.Item_Details) ? purchase.Item_Details : [];
             if (!items.length) {
-                $('#purchaseItemsBody').html(
-                    '<tr><td colspan="12" class="text-center text-muted">No items found</td></tr>'
-                );
-                return;
+                return '<div class="text-muted py-2">No items found for this purchase.</div>';
             }
-            let html = '';
-            items.forEach((item, i) => {
-                const gst = (parseFloat(item.CGST_Amt) || 0) + (parseFloat(item.SGST_Amt) || 0);
-                const purchased = item.Purchased_Qty ?? item.qnty ?? '';
-                const returned = item.Returned_Qty ?? 0;
-                const remaining = item.Remaining_Qty ?? item.qnty ?? '';
-                const canReturn = parseFloat(remaining) > 0;
-                html += `<tr>
-                    <td>${i + 1}</td>
+            const purchaseId = Number(purchase.Pur_Id);
+            const rows = items.map(function(item, index) {
+                const purchasedQty = Math.max(0, parseFloat(item.qnty) || 0);
+                const availableQty = Math.max(0, parseFloat(item.Available_Qty) || 0);
+                const maxQty = availableQty;
+                return `<tr>
                     <td>${escapeHtml(item.Prod_Name)}</td>
-                    <td>${purchased}</td>
-                    <td>${returned}</td>
-                    <td>${remaining}</td>
-                    <td>${escapeHtml(item.Unit_Name)}</td>
-                    <td>${item.Item_Rate ?? ''}</td>
-                    <td>${item.Disc_Prcnt ?? 0}</td>
-                    <td>${item.Taxable_Amt ?? ''}</td>
-                    <td>${gst.toFixed(2)}</td>
-                    <td>${item.Net_Amt ?? ''}</td>
-                    <td>${canReturn
-                        ? `<button type="button" class="btn btn-sm btn-success addReturnItem" data-index="${i}">Add Return</button>`
-                        : '<span class="text-muted">Returned</span>'}</td>
+                    <td class="text-end">${escapeHtml(item.Item_Rate)}</td>
+                    <td class="text-end">${escapeHtml(item.MRP)}</td>
+                    <td class="text-end">${purchasedQty}</td>
+                    <td class="text-end">${availableQty}</td>
+                    <td><input type="number" class="form-control form-control-sm"
+                        id="purchase-return-qty-${purchaseId}-${index}" min="0.01" step="0.01"
+                        value="" ${maxQty <= 0 ? 'disabled' : ''}></td>
+                    <td>${maxQty > 0
+                        ? `<button type="button" class="btn btn-sm btn-success addReturnItemFromPurchase"
+                            data-purchase-id="${purchaseId}" data-item-index="${index}">Add Return</button>`
+                        : '<span class="text-muted">No stock</span>'}</td>
                 </tr>`;
-            });
-            $('#purchaseItemsBody').html(html);
-            purchaseItemsDT = $('#purchaseItemsTable').DataTable({
-                pageLength: 10,
-                ordering: true,
-                sDom: 'fBtlpi',
-                language: {
-                    search: '',
-                    searchPlaceholder: 'Search items...',
-                    sLengthMenu: 'Row Per Page _MENU_ Entries',
-                    info: '_START_ - _END_ of _TOTAL_ items',
-                    paginate: {
-                        next: '<i class="isax isax-arrow-right-1"></i>',
-                        previous: '<i class="isax isax-arrow-left"></i>'
-                    }
-                }
-            });
+            }).join('');
+            return `<div class="table-responsive">
+                <table class="table table-sm table-bordered mb-0">
+                    <thead><tr>
+                        <th>Item Name</th><th class="text-end">Rate</th><th class="text-end">MRP</th>
+                        <th class="text-end">Purchase Qty</th><th class="text-end">Available Qty</th>
+                        <th>Return Qty</th><th>Action</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
         }
 
-        function renderItemPickerTable(data, isCodeSearch) {
+        function loadItemPickerPage(page) {
+            window.fetchItemPickerPage(
+                "{{ url('purchase-return/items') }}",
+                itemPickerFilters,
+                page,
+                function(response) {
+                    renderItemPickerTable(response.items || [], false, response);
+                }
+            );
+        }
+
+        function renderItemPickerTable(data, isCodeSearch, pagination) {
             setTimeout(function() {
                 $('#itemPickerLoader').hide();
                 if (!data.length) {
                     $('#itemPickerTable tbody').html(
                         '<tr><td colspan="4" class="text-center text-muted">No items found</td></tr>');
                     $('#itemPickerTableWrap').show();
+                    window.renderItemPickerPagination(pagination, loadItemPickerPage);
                     return;
                 }
                 $.each(data, function(i, item) {
@@ -1655,22 +1780,7 @@
                     itemPickerDT = null;
                 }
                 $('#itemPickerTableWrap').show();
-                itemPickerDT = $('#itemPickerTable').DataTable({
-                    pageLength: 10,
-                    lengthMenu: [10, 25, 50],
-                    ordering: true,
-                    sDom: 'fBtlpi',
-                    language: {
-                        search: '',
-                        searchPlaceholder: 'Search items...',
-                        sLengthMenu: 'Row Per Page _MENU_ Entries',
-                        info: '_START_ - _END_ of _TOTAL_ items',
-                        paginate: {
-                            next: '<i class="isax isax-arrow-right-1"></i>',
-                            previous: '<i class="isax isax-arrow-left"></i>'
-                        }
-                    }
-                });
+                window.renderItemPickerPagination(pagination, loadItemPickerPage);
             }, 0);
         }
 
@@ -1720,14 +1830,14 @@
                 return false;
             }
             const returnBarcode = String($('#returnBarcode').val() || '').trim();
-            if (!/^\d+$/.test(returnBarcode)) {
+            if (returnBarcode && !/^\d+$/.test(returnBarcode)) {
                 Swal.fire('Error', 'Select a barcode', 'error');
                 return false;
             }
-            const duplicateBarcode = itemsArray.some(function(row) {
+            const duplicateBarcode = returnBarcode && itemsArray.some(function(row) {
                 return String(row.barcode || '') === returnBarcode;
             });
-            if (duplicateBarcode && !$('#addItemBtn').data('editing')) {
+            if (duplicateBarcode && !$('#addItemBtn').data('editing') && !$('#addItemBtn').data('purchase-return-add')) {
                 Swal.fire('Error', 'This barcode is already in the return list', 'error');
                 return false;
             }
@@ -1803,7 +1913,6 @@
                 html += `<tr>
                     <td>${index + 1}</td>
                     <td style="white-space:nowrap; min-width:100px;">${item.item_name}</td>
-                    <td>${item.barcode || ''}</td>
                     <td>${item.quantity}</td><td>${item.unit_name}</td><td>${item.rate}</td>
                     <td>${item.total_amount}</td><td>${item.discount_percent}</td>
                     <td>${item.discount_amount}</td><td>${item.taxable_amount}</td>
@@ -1820,19 +1929,24 @@
             $('.gst-col').toggle($('input[name="gstMode"]:checked').val() === '1');
             $('#summaryTotalAmount').val(totalAmt.toFixed(2));
             $('#totalGSTAmount').val(totalGST.toFixed(2));
-            if (hasItemDiscount || hasGST) {
-                $('#summaryDiscPercent').val('').prop('readonly', true).addClass('calc-label');
-                $('#totalDiscountAmount').val(totalDiscount.toFixed(2));
-                $('#totalTaxableAmount').val(totalTaxable.toFixed(2));
-                recalcSummaryTotals(totalTaxable, totalGST);
+            if ((hasItemDiscount || hasGST) && !summaryDiscountEdited) {
+                updateSummaryDiscount(totalDiscount, totalAmt, totalGST);
             } else {
-                const currentDiscPct = parseFloat($('#summaryDiscPercent').val()) || 0;
-                const discAmt = totalAmt * (currentDiscPct / 100);
-                $('#summaryDiscPercent').prop('readonly', false).removeClass('calc-label');
-                $('#totalDiscountAmount').val(discAmt.toFixed(2));
-                $('#totalTaxableAmount').val((totalAmt - discAmt).toFixed(2));
-                recalcSummaryTotals(totalAmt - discAmt, totalGST);
+                const currentDiscount = parseFloat($('#totalDiscountAmount').val());
+                updateSummaryDiscount(Number.isFinite(currentDiscount) ? currentDiscount : 0, totalAmt, totalGST);
             }
+        }
+
+        function updateSummaryDiscount(discountAmount, totalAmount, totalGST, formatAmount = true) {
+            const discAmt = Math.min(Math.max(discountAmount || 0, 0), Math.max(totalAmount, 0));
+            const taxable = Math.max(totalAmount - discAmt, 0);
+            const discPercent = totalAmount > 0 ? (discAmt / totalAmount) * 100 : 0;
+            if (formatAmount) {
+                $('#totalDiscountAmount').val(discAmt.toFixed(2));
+            }
+            $('#summaryDiscPercent').val(discPercent.toFixed(2));
+            $('#totalTaxableAmount').val(taxable.toFixed(2));
+            recalcSummaryTotals(taxable, totalGST);
         }
 
         function recalcSummaryTotals(taxableAmt, totalGST) {
@@ -1861,6 +1975,7 @@
         function resetForm() {
             currentPurchaseId = 0;
             currentVouchId = 0;
+            summaryDiscountEdited = false;
             itemsArray = [];
             allItemsData = [];
             if (itemPickerDT) {
@@ -1871,7 +1986,7 @@
             $('#purchaseDate').val('{{ date('Y-m-d') }}');
             $('#partyId, #bankAccountId').val('').trigger('change');
             $('#productCodeInput').val('');
-            $('#bankSelectDiv, #instrumentNoDiv').hide();
+            $('#bankFieldsRow').hide();
             $('#transCash').prop('checked', true);
             $('#itemsTableBody').html('');
             $('#summaryTotalAmount, #totalTaxableAmount, #totalDiscountAmount, #totalGSTAmount, #roundOff, #finalNetAmount')
@@ -1881,6 +1996,7 @@
             $('#addItemBtn').text('+ Add Item').data('editing', false);
             $('#itemPurchaseDateDiv').hide();
             $('#itemPurchaseDate').val('');
+            $('#productCodeField').show();
             $('#withoutGst').prop('checked', true);
             $('.gst-col').hide();
             clearItemSelection();
